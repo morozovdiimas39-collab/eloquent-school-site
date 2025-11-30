@@ -7,7 +7,6 @@ import FeaturesSection from '@/components/landing/FeaturesSection';
 import TemplatesSection from '@/components/landing/TemplatesSection';
 import PricingSection from '@/components/landing/PricingSection';
 import Footer from '@/components/landing/Footer';
-import funcUrls from '../../backend/func2url.json';
 
 interface WebsiteData {
   title: string;
@@ -37,24 +36,29 @@ export default function Index() {
     setIsGenerating(true);
     
     try {
-      const response = await fetch(funcUrls['generate-site'], {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prompt }),
-      });
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      const data = await response.json();
+      const mockWebsite: WebsiteData = {
+        title: 'Ваш сайт',
+        description: `Сайт создан на основе: ${prompt}`,
+        sections: [
+          {
+            type: 'hero',
+            title: 'Добро пожаловать',
+            content: 'Ваш новый сайт готов!'
+          }
+        ],
+        colorScheme: {
+          primary: '#3B82F6',
+          secondary: '#8B5CF6',
+          background: '#FFFFFF'
+        }
+      };
       
-      if (!response.ok) {
-        throw new Error(data.error || 'Ошибка генерации сайта');
-      }
-      
-      setGeneratedWebsite(data.website);
+      setGeneratedWebsite(mockWebsite);
       toast({
         title: '✅ Сайт создан!',
-        description: `"${data.website.title}" готов к просмотру`,
+        description: 'Демо-версия готова к просмотру',
       });
     } catch (error) {
       toast({
