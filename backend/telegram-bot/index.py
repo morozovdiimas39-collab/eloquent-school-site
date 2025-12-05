@@ -6,17 +6,16 @@ from typing import Dict, Any, List
 
 def get_db_connection():
     """Создает подключение к БД"""
-    return psycopg2.connect(os.environ['DATABASE_URL'])
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    conn.autocommit = True
+    return conn
 
 def get_user(telegram_id: int):
     """Получает пользователя из БД"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(
-        "SELECT telegram_id, username, first_name, last_name, role FROM users WHERE telegram_id = %s",
-        (telegram_id,)
-    )
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role FROM users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -37,11 +36,14 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     conn = get_db_connection()
     cur = conn.cursor()
     
+    username = username.replace("'", "''") if username else ''
+    first_name = first_name.replace("'", "''") if first_name else ''
+    last_name = last_name.replace("'", "''") if last_name else ''
+    
     cur.execute(
-        "INSERT INTO users (telegram_id, username, first_name, last_name, role) VALUES (%s, %s, %s, %s, %s)",
-        (telegram_id, username, first_name, last_name, role)
+        f"INSERT INTO users (telegram_id, username, first_name, last_name, role) "
+        f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}')"
     )
-    conn.commit()
     
     cur.close()
     conn.close()
@@ -51,10 +53,7 @@ def get_conversation_history(user_id: int) -> List[Dict[str, str]]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(
-        "SELECT id FROM conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
-        (user_id,)
-    )
+    cur.execute(f"SELECT id FROM conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
     row = cur.fetchone()
     
     if not row:
@@ -64,10 +63,7 @@ def get_conversation_history(user_id: int) -> List[Dict[str, str]]:
     
     conversation_id = row[0]
     
-    cur.execute(
-        "SELECT role, content FROM messages WHERE conversation_id = %s ORDER BY created_at ASC LIMIT 20",
-        (conversation_id,)
-    )
+    cur.execute(f"SELECT role, content FROM messages WHERE conversation_id = {conversation_id} ORDER BY created_at ASC LIMIT 20")
     
     history = [{'role': row[0], 'content': row[1]} for row in cur.fetchall()]
     
@@ -80,31 +76,19 @@ def save_message(user_id: int, role: str, content: str):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(
-        "SELECT id FROM conversations WHERE user_id = %s ORDER BY updated_at DESC LIMIT 1",
-        (user_id,)
-    )
+    cur.execute(f"SELECT id FROM conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
     row = cur.fetchone()
     
     if row:
         conversation_id = row[0]
-        cur.execute(
-            "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = %s",
-            (conversation_id,)
-        )
+        cur.execute(f"UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = {conversation_id}")
     else:
-        cur.execute(
-            "INSERT INTO conversations (user_id, title) VALUES (%s, %s) RETURNING id",
-            (user_id, 'Новый диалог')
-        )
+        cur.execute(f"INSERT INTO conversations (user_id, title) VALUES ({user_id}, 'Новый диалог') RETURNING id")
         conversation_id = cur.fetchone()[0]
     
-    cur.execute(
-        "INSERT INTO messages (conversation_id, role, content) VALUES (%s, %s, %s)",
-        (conversation_id, role, content)
-    )
+    content = content.replace("'", "''")
+    cur.execute(f"INSERT INTO messages (conversation_id, role, content) VALUES ({conversation_id}, '{role}', '{content}')")
     
-    conn.commit()
     cur.close()
     conn.close()
 
@@ -161,7 +145,7 @@ def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     }
     
     if reply_markup:
-        data['reply_markup'] = json.dumps(reply_markup)
+        data['reply_markup'] = reply_markup
     
     req = urllib.request.Request(
         url,
