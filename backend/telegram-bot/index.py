@@ -273,6 +273,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         [{'text': '👨‍🏫 Я преподаватель', 'callback_data': 'role_teacher'}]
                     ]
                 }
+                print(f"[DEBUG] Calling send_telegram_message with keyboard...")
                 result = send_telegram_message(
                     chat_id,
                     '👋 Привет! Я AnyaGPT - AI-помощник на базе YandexGPT.\n\n'
