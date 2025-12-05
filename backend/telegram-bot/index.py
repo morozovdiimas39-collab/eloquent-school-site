@@ -154,8 +154,14 @@ def send_telegram_message(chat_id: int, text: str, reply_markup=None):
         method='POST'
     )
     
-    with urllib.request.urlopen(req) as response:
-        return json.loads(response.read().decode('utf-8'))
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG] Telegram API response: {result}")
+            return result
+    except Exception as e:
+        print(f"[ERROR] Failed to send message: {e}")
+        raise
 
 def edit_telegram_message(chat_id: int, message_id: int, text: str):
     """Редактирует сообщение в Telegram"""
