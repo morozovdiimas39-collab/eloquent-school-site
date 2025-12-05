@@ -49,10 +49,21 @@ declare global {
 
 const API_URL = funcUrls['webapp-api'];
 
+interface Student {
+  telegram_id: number;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  created_at?: string;
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState<TelegramUser | null>(null);
   const [role, setRole] = useState<'student' | 'teacher' | null>(null);
   const [promocode, setPromocode] = useState<string | null>(null);
+  const [teacherId, setTeacherId] = useState<number | null>(null);
+  const [promocodeInput, setPromocodeInput] = useState('');
+  const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +104,12 @@ export default function Dashboard() {
         if (data.user.promocode) {
           setPromocode(data.user.promocode);
         }
+        if (data.user.teacher_id) {
+          setTeacherId(data.user.teacher_id);
+        }
+        if (data.user.role === 'teacher') {
+          loadStudents(telegramId);
+        }
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -122,6 +139,12 @@ export default function Dashboard() {
         if (data.user.promocode) {
           setPromocode(data.user.promocode);
         }
+        if (data.user.teacher_id) {
+          setTeacherId(data.user.teacher_id);
+        }
+        if (data.user.role === 'teacher' && user) {
+          loadStudents(user.id);
+        }
       }
     } catch (error) {
       console.error('Error selecting role:', error);
@@ -137,6 +160,68 @@ export default function Dashboard() {
       if (tg) {
         tg.showAlert('Промокод скопирован в буфер обмена!');
       }
+    }
+  };
+
+  const loadStudents = async (teacherId: number) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_students',
+          telegram_id: teacherId
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.students) {
+        setStudents(data.students);
+      }
+    } catch (error) {
+      console.error('Error loading students:', error);
+    }
+  };
+
+  const bindTeacher = async () => {
+    if (!user || !promocodeInput.trim()) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'bind_teacher',
+          telegram_id: user.id,
+          promocode: promocodeInput.trim().toUpperCase()
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.user) {
+        setTeacherId(data.user.teacher_id);
+        setPromocodeInput('');
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.showAlert('Преподаватель успешно привязан!');
+        }
+      } else {
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.showAlert(data.error || 'Ошибка при привязке преподавателя');
+        }
+      }
+    } catch (error) {
+      console.error('Error binding teacher:', error);
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.showAlert('Ошибка сети');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -240,6 +325,52 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {role === 'student' && !teacherId && (
+          <Card className="border-2 border-blue-300 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                <Icon name="UserPlus" size={24} />
+                Привязать преподавателя
+              </CardTitle>
+              <CardDescription className="text-base text-gray-600">
+                Введи промокод от своего преподавателя
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <input
+                type="text"
+                value={promocodeInput}
+                onChange={(e) => setPromocodeInput(e.target.value.toUpperCase())}
+                placeholder="Например: ABC12345"
+                className="w-full h-12 px-4 text-lg font-mono border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
+                maxLength={8}
+              />
+              <Button
+                onClick={bindTeacher}
+                disabled={loading || !promocodeInput.trim()}
+                className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all"
+              >
+                <Icon name="Link" size={20} className="mr-2" />
+                Привязать
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {role === 'student' && teacherId && (
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                <Icon name="CheckCircle" size={24} className="text-green-600" />
+                Преподаватель привязан
+              </CardTitle>
+              <CardDescription className="text-base text-gray-700">
+                Ты успешно привязан к преподавателю
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        )}
+
         {role && (
           <Card className="border-2 border-gray-200 shadow-lg">
             <CardHeader className="pb-4">
@@ -253,6 +384,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setRole(null);
                   setPromocode(null);
+                  setTeacherId(null);
                 }}
                 variant="outline"
                 className="w-full h-12 text-base font-semibold border-2 hover:bg-gray-50 transition-all"
@@ -311,36 +443,88 @@ export default function Dashboard() {
         )}
 
         {role === 'teacher' && (
-          <Card className="bg-white border border-gray-200 shadow-lg">
-            <CardContent className="pt-5 pb-5">
-              <div className="flex items-start gap-4">
-                <div className="bg-blue-100 p-2.5 rounded-full">
-                  <Icon name="Info" size={24} className="text-blue-600" />
+          <>
+            <Card className="border-2 border-indigo-300 shadow-lg">
+              <CardHeader className="pb-4">
+                <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                  <Icon name="Users" size={24} />
+                  Мои ученики
+                  <Badge className="ml-auto bg-indigo-100 text-indigo-700">
+                    {students.length}
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-base text-gray-600">
+                  Ученики, которые привязали твой промокод
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {students.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Icon name="UserX" size={48} className="mx-auto mb-3 opacity-50" />
+                    <p className="text-base">Пока нет учеников</p>
+                    <p className="text-sm mt-1">Поделись промокодом с учениками</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {students.map((student) => {
+                      const studentName = student.first_name || student.username || 'Ученик';
+                      const studentUsername = student.username ? `@${student.username}` : null;
+                      
+                      return (
+                        <div
+                          key={student.telegram_id}
+                          className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 hover:shadow-md transition-shadow"
+                        >
+                          <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-500 to-indigo-600 ring-2 ring-blue-200">
+                            <AvatarFallback className="text-white text-lg font-bold">
+                              {studentName.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900 text-base">{studentName}</p>
+                            {studentUsername && (
+                              <p className="text-sm text-gray-600">{studentUsername}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border border-gray-200 shadow-lg">
+              <CardContent className="pt-5 pb-5">
+                <div className="flex items-start gap-4">
+                  <div className="bg-blue-100 p-2.5 rounded-full">
+                    <Icon name="Info" size={24} className="text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg text-gray-900 mb-3">Как пользоваться:</p>
+                    <ul className="space-y-2 text-base text-gray-700">
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">•</span>
+                        <span>Скопируй свой промокод выше</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">•</span>
+                        <span>Отправь его своим ученикам</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">•</span>
+                        <span>Они смогут использовать бота с твоим промокодом</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-blue-600 font-bold">•</span>
+                        <span>Задавай вопросы боту в Telegram</span>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-bold text-lg text-gray-900 mb-3">Как пользоваться:</p>
-                  <ul className="space-y-2 text-base text-gray-700">
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 font-bold">•</span>
-                      <span>Скопируй свой промокод выше</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 font-bold">•</span>
-                      <span>Отправь его своим ученикам</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 font-bold">•</span>
-                      <span>Они смогут использовать бота с твоим промокодом</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-blue-600 font-bold">•</span>
-                      <span>Задавай вопросы боту в Telegram</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {role === null && (

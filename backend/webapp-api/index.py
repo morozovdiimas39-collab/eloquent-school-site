@@ -22,7 +22,7 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode, teacher_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -35,7 +35,8 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
             'first_name': row[2],
             'last_name': row[3],
             'role': row[4],
-            'promocode': row[5]
+            'promocode': row[5],
+            'teacher_id': row[6]
         }
     return None
 
@@ -53,6 +54,55 @@ def change_user_role(telegram_id: int, new_role: str) -> bool:
     cur.close()
     conn.close()
     return True
+
+def bind_teacher(telegram_id: int, promocode: str) -> Dict[str, Any]:
+    """Привязывает ученика к учителю по промокоду"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Находим учителя по промокоду
+    cur.execute(f"SELECT telegram_id FROM {SCHEMA}.users WHERE promocode = '{promocode}' AND role = 'teacher'")
+    teacher_row = cur.fetchone()
+    
+    if not teacher_row:
+        cur.close()
+        conn.close()
+        return {'success': False, 'error': 'Промокод не найден или недействителен'}
+    
+    teacher_id = teacher_row[0]
+    
+    # Привязываем ученика к учителю
+    cur.execute(f"UPDATE {SCHEMA}.users SET teacher_id = {teacher_id}, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+    
+    cur.close()
+    conn.close()
+    return {'success': True, 'teacher_id': teacher_id}
+
+def get_students(teacher_id: int) -> List[Dict[str, Any]]:
+    """Получает список всех учеников преподавателя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT telegram_id, username, first_name, last_name, created_at "
+        f"FROM {SCHEMA}.users "
+        f"WHERE teacher_id = {teacher_id} AND role = 'student' "
+        f"ORDER BY created_at DESC"
+    )
+    
+    students = []
+    for row in cur.fetchall():
+        students.append({
+            'telegram_id': row[0],
+            'username': row[1],
+            'first_name': row[2],
+            'last_name': row[3],
+            'created_at': row[4].isoformat() if row[4] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return students
 
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
@@ -100,7 +150,7 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
-    Действия: get_user, change_role, get_history
+    Действия: get_user, change_role, get_history, bind_teacher, get_students
     """
     method = event.get('httpMethod', 'POST')
     
@@ -181,6 +231,56 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'conversations': history}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'bind_teacher':
+            promocode = body.get('promocode')
+            if not promocode:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'Промокод обязателен'}),
+                    'isBase64Encoded': False
+                }
+            
+            result = bind_teacher(telegram_id, promocode)
+            
+            if result['success']:
+                updated_user = get_user_info(telegram_id)
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'success': True, 'user': updated_user}),
+                    'isBase64Encoded': False
+                }
+            else:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps(result),
+                    'isBase64Encoded': False
+                }
+        
+        elif action == 'get_students':
+            students = get_students(telegram_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'students': students}),
                 'isBase64Encoded': False
             }
         
