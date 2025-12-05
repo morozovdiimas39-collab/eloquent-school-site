@@ -1,20 +1,22 @@
 {
   "tests": [
     {
-      "name": "Test OPTIONS request",
+      "name": "Test OPTIONS",
       "method": "OPTIONS",
       "path": "/",
       "expectedStatus": 200
     },
     {
-      "name": "Test get_user action",
+      "name": "Test empty update",
       "method": "POST",
       "path": "/",
       "body": {
-        "action": "get_user",
-        "telegram_id": 123456
+        "update_id": 123456
       },
       "expectedStatus": 200,
+      "expectedBody": {
+        "ok": true
+      },
       "bodyMatcher": "partial"
     }
   ]
