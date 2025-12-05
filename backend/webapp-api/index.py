@@ -104,6 +104,66 @@ def get_students(teacher_id: int) -> List[Dict[str, Any]]:
     conn.close()
     return students
 
+def get_all_teachers() -> List[Dict[str, Any]]:
+    """Получает список всех преподавателей с количеством учеников"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT u.telegram_id, u.username, u.first_name, u.last_name, u.promocode, u.created_at, "
+        f"COUNT(s.telegram_id) as students_count "
+        f"FROM {SCHEMA}.users u "
+        f"LEFT JOIN {SCHEMA}.users s ON s.teacher_id = u.telegram_id AND s.role = 'student' "
+        f"WHERE u.role = 'teacher' "
+        f"GROUP BY u.telegram_id, u.username, u.first_name, u.last_name, u.promocode, u.created_at "
+        f"ORDER BY u.created_at DESC"
+    )
+    
+    teachers = []
+    for row in cur.fetchall():
+        teachers.append({
+            'telegram_id': row[0],
+            'username': row[1],
+            'first_name': row[2],
+            'last_name': row[3],
+            'role': 'teacher',
+            'promocode': row[4],
+            'created_at': row[5].isoformat() if row[5] else None,
+            'students_count': row[6]
+        })
+    
+    cur.close()
+    conn.close()
+    return teachers
+
+def get_all_students() -> List[Dict[str, Any]]:
+    """Получает список всех учеников"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT telegram_id, username, first_name, last_name, teacher_id, created_at "
+        f"FROM {SCHEMA}.users "
+        f"WHERE role = 'student' "
+        f"ORDER BY created_at DESC"
+    )
+    
+    students = []
+    for row in cur.fetchall():
+        students.append({
+            'telegram_id': row[0],
+            'username': row[1],
+            'first_name': row[2],
+            'last_name': row[3],
+            'role': 'student',
+            'teacher_id': row[4],
+            'created_at': row[5].isoformat() if row[5] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return students
+
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
     conn = get_db_connection()
@@ -150,7 +210,7 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
-    Действия: get_user, change_role, get_history, bind_teacher, get_students
+    Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students
     """
     method = event.get('httpMethod', 'POST')
     
@@ -172,7 +232,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         action = body.get('action')
         telegram_id = body.get('telegram_id')
         
-        if not telegram_id:
+        if not telegram_id and action not in ['get_all_teachers', 'get_all_students']:
             return {
                 'statusCode': 400,
                 'headers': {
@@ -273,6 +333,32 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         elif action == 'get_students':
             students = get_students(telegram_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'students': students}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_all_teachers':
+            teachers = get_all_teachers()
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'teachers': teachers}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_all_students':
+            students = get_all_students()
             
             return {
                 'statusCode': 200,
