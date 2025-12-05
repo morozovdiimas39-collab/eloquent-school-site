@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
@@ -42,6 +41,7 @@ declare global {
           button_color?: string;
           button_text_color?: string;
         };
+        showAlert: (message: string) => void;
       };
     };
   }
@@ -52,7 +52,7 @@ const API_URL = funcUrls['webapp-api'];
 export default function Dashboard() {
   const [user, setUser] = useState<TelegramUser | null>(null);
   const [role, setRole] = useState<'student' | 'teacher' | null>(null);
-  const [conversations, setConversations] = useState<any[]>([]);
+  const [promocode, setPromocode] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,7 +90,9 @@ export default function Dashboard() {
       
       if (data.user) {
         setRole(data.user.role);
-        loadHistory(telegramId);
+        if (data.user.role === 'teacher' && data.user.promocode) {
+          setPromocode(data.user.promocode);
+        }
       }
     } catch (error) {
       console.error('Error checking user:', error);
@@ -98,29 +100,8 @@ export default function Dashboard() {
     }
   };
 
-  const loadHistory = async (telegramId: number) => {
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'get_history',
-          telegram_id: telegramId
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.conversations) {
-        setConversations(data.conversations);
-      }
-    } catch (error) {
-      console.error('Error loading history:', error);
-    }
-  };
-
-  const changeRole = async (newRole: 'student' | 'teacher') => {
-    if (!user) return;
+  const selectRole = async (newRole: 'student' | 'teacher') => {
+    if (!user || role !== null) return;
     
     setLoading(true);
     try {
@@ -138,11 +119,24 @@ export default function Dashboard() {
       
       if (data.success) {
         setRole(newRole);
+        if (newRole === 'teacher' && data.user?.promocode) {
+          setPromocode(data.user.promocode);
+        }
       }
     } catch (error) {
-      console.error('Error changing role:', error);
+      console.error('Error selecting role:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const copyPromocode = () => {
+    if (promocode) {
+      navigator.clipboard.writeText(promocode);
+      const tg = window.Telegram?.WebApp;
+      if (tg) {
+        tg.showAlert('Промокод скопирован в буфер обмена!');
+      }
     }
   };
 
@@ -167,7 +161,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!user || role === null) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -188,167 +182,145 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--tg-theme-bg-color,#ffffff)]">
-      {/* Header */}
       <div className="bg-[var(--tg-theme-secondary-bg-color,#f4f4f5)] border-b sticky top-0 z-10">
         <div className="px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12 bg-gradient-to-br from-purple-500 to-blue-500">
-                <AvatarFallback className="text-white text-lg">
-                  {userName.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h1 className="font-bold text-xl text-[var(--tg-theme-text-color,#000000)]">
-                  {userName}
-                </h1>
-                {role && (
-                  <Badge 
-                    variant="secondary" 
-                    className="flex items-center gap-1 w-fit mt-1"
-                  >
-                    <Icon name={roleIcon} size={14} />
-                    <span className="text-sm">{roleText}</span>
-                  </Badge>
-                )}
-              </div>
+          <div className="flex items-center gap-3">
+            <Avatar className="h-12 w-12 bg-gradient-to-br from-purple-500 to-blue-500">
+              <AvatarFallback className="text-white text-lg">
+                {userName.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="font-bold text-xl text-[var(--tg-theme-text-color,#000000)]">
+                {userName}
+              </h1>
+              {role && (
+                <Badge 
+                  variant="secondary" 
+                  className="flex items-center gap-1 w-fit mt-1"
+                >
+                  <Icon name={roleIcon} size={14} />
+                  <span className="text-sm">{roleText}</span>
+                </Badge>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="px-4 py-4 space-y-4">
-        {/* Role Selector */}
-        <Card className="border-2 border-[var(--tg-theme-button-color,#3390ec)]">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Icon name="UserCog" size={20} />
-              Выбор роли
-            </CardTitle>
-            <CardDescription className="text-sm">
-              Измени роль в системе
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex gap-2">
-            <Button
-              onClick={() => changeRole('student')}
-              disabled={loading}
-              variant={role === 'student' ? 'default' : 'outline'}
-              className={`flex-1 h-14 text-base ${
-                role === 'student'
-                  ? 'bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#ffffff)] hover:opacity-90'
-                  : ''
-              }`}
-            >
-              <Icon name="BookOpen" size={18} className="mr-2" />
-              Ученик
-            </Button>
-            <Button
-              onClick={() => changeRole('teacher')}
-              disabled={loading}
-              variant={role === 'teacher' ? 'default' : 'outline'}
-              className={`flex-1 h-14 text-base ${
-                role === 'teacher'
-                  ? 'bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#ffffff)] hover:opacity-90'
-                  : ''
-              }`}
-            >
-              <Icon name="GraduationCap" size={18} className="mr-2" />
-              Учитель
-            </Button>
-          </CardContent>
-        </Card>
+        {role === null && (
+          <Card className="border-2 border-[var(--tg-theme-button-color,#3390ec)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Icon name="UserCog" size={20} />
+                Выбери свою роль
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Выбери один раз — изменить потом нельзя
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Button
+                onClick={() => selectRole('student')}
+                disabled={loading}
+                variant="outline"
+                className="flex-1 h-16 text-base hover:bg-[var(--tg-theme-button-color,#3390ec)] hover:text-white transition-colors"
+              >
+                <Icon name="BookOpen" size={20} className="mr-2" />
+                Ученик
+              </Button>
+              <Button
+                onClick={() => selectRole('teacher')}
+                disabled={loading}
+                variant="outline"
+                className="flex-1 h-16 text-base hover:bg-[var(--tg-theme-button-color,#3390ec)] hover:text-white transition-colors"
+              >
+                <Icon name="GraduationCap" size={20} className="mr-2" />
+                Учитель
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
-        {/* History */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Icon name="History" size={20} />
-              История диалогов
-            </CardTitle>
-            <CardDescription className="text-sm">
-              Все твои разговоры с AI
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {conversations.length === 0 ? (
-              <div className="text-center py-8 text-[var(--tg-theme-hint-color,#999999)]">
-                <Icon name="MessageCircle" size={40} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">У тебя пока нет диалогов</p>
-                <p className="text-xs mt-1">Начни общаться с ботом в Telegram</p>
+        {role === 'teacher' && promocode && (
+          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Icon name="Tag" size={20} />
+                Твой промокод
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Делись им с учениками для доступа к курсу
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="bg-white rounded-lg p-4 border-2 border-purple-300">
+                <p className="text-2xl font-bold text-center text-purple-700 tracking-wider">
+                  {promocode}
+                </p>
               </div>
-            ) : (
-              <ScrollArea className="h-[400px]">
-                <div className="space-y-3 pr-4">
-                  {conversations.map((conv) => (
-                    <Card 
-                      key={conv.id} 
-                      className="border border-gray-200 shadow-sm"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                            <Icon name="MessageSquare" size={14} />
-                            {conv.title}
-                          </CardTitle>
-                          <Badge variant="outline" className="text-xs">
-                            {conv.messages.length} сообщ.
-                          </Badge>
-                        </div>
-                        <CardDescription className="text-xs">
-                          {new Date(conv.updated_at).toLocaleString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="space-y-1.5">
-                          {conv.messages.slice(-2).map((msg: any, idx: number) => (
-                            <div
-                              key={idx}
-                              className={`text-xs p-2 rounded ${
-                                msg.role === 'user'
-                                  ? 'bg-blue-50 text-blue-900 border border-blue-200'
-                                  : 'bg-gray-50 text-gray-900 border border-gray-200'
-                              }`}
-                            >
-                              <span className="font-semibold">
-                                {msg.role === 'user' ? '👤 Вы' : '🤖 AI'}:
-                              </span>{' '}
-                              {msg.content.substring(0, 80)}
-                              {msg.content.length > 80 && '...'}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+              <Button
+                onClick={copyPromocode}
+                className="w-full h-12 text-base bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#ffffff)] hover:opacity-90"
+              >
+                <Icon name="Copy" size={18} className="mr-2" />
+                Скопировать промокод
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {role === 'student' && (
+          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-start gap-3">
+                <Icon name="Check" size={20} className="text-green-600 mt-0.5" />
+                <div className="text-sm text-gray-700">
+                  <p className="font-semibold mb-1">Твоя роль: Ученик</p>
+                  <p className="text-xs text-gray-600">
+                    Задавай вопросы боту прямо в чате Telegram. Если у тебя есть промокод от учителя, отправь его боту для доступа к курсу.
+                  </p>
                 </div>
-              </ScrollArea>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Info Card */}
-        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-start gap-3">
-              <Icon name="Info" size={20} className="text-purple-600 mt-0.5" />
-              <div className="text-sm text-gray-700">
-                <p className="font-semibold mb-1">Как пользоваться:</p>
-                <ul className="space-y-1 text-xs text-gray-600">
-                  <li>• Задавай вопросы боту прямо в чате Telegram</li>
-                  <li>• Здесь ты можешь изменить свою роль</li>
-                  <li>• Вся история диалогов сохраняется автоматически</li>
-                </ul>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {role === 'teacher' && (
+          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-start gap-3">
+                <Icon name="Info" size={20} className="text-purple-600 mt-0.5" />
+                <div className="text-sm text-gray-700">
+                  <p className="font-semibold mb-1">Как пользоваться:</p>
+                  <ul className="space-y-1 text-xs text-gray-600">
+                    <li>• Скопируй свой промокод выше</li>
+                    <li>• Отправь его своим ученикам</li>
+                    <li>• Они смогут использовать бота с твоим промокодом</li>
+                    <li>• Задавай вопросы боту в Telegram</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {role === null && (
+          <Card>
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-start gap-3">
+                <Icon name="Sparkles" size={20} className="text-blue-600 mt-0.5" />
+                <div className="text-sm text-gray-700">
+                  <p className="font-semibold mb-1">Добро пожаловать!</p>
+                  <p className="text-xs text-gray-600">
+                    Выбери свою роль выше, чтобы начать пользоваться ботом. После выбора роли ты сможешь задавать вопросы прямо в чате.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
