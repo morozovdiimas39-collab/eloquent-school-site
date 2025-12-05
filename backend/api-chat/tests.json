@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Test OPTIONS request",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Test get_user action",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "get_user",
+        "telegram_id": 123456
+      },
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}
