@@ -57,9 +57,23 @@ export default function Dashboard() {
       const telegramUser = tg.initDataUnsafe.user;
       if (telegramUser) {
         setUser(telegramUser);
-        // Здесь можно загрузить роль и историю из API
         fetchUserData(telegramUser.id);
       }
+    } else {
+      // Демо-режим для разработки
+      setUser({
+        id: 123456,
+        first_name: 'Демо',
+        username: 'demo_user'
+      });
+      setRole('student');
+      setMessages([
+        {
+          role: 'assistant',
+          content: 'Привет! Чем могу помочь?',
+          timestamp: new Date().toISOString()
+        }
+      ]);
     }
   }, []);
 
