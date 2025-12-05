@@ -1,7 +1,11 @@
 import json
 import os
 import psycopg2
+import random
+import string
 from typing import Dict, Any, List
+
+SCHEMA = 't_p86463701_eloquent_school_site'
 
 def get_db_connection():
     """Создает подключение к БД"""
@@ -9,12 +13,16 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def generate_promocode() -> str:
+    """Генерирует уникальный промокод"""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+
 def get_user_info(telegram_id: int) -> Dict[str, Any]:
     """Получает информацию о пользователе"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode FROM users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -32,11 +40,15 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
     return None
 
 def change_user_role(telegram_id: int, new_role: str) -> bool:
-    """Изменяет роль пользователя"""
+    """Изменяет роль пользователя и генерирует промокод для учителя"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"UPDATE users SET role = '{new_role}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+    if new_role == 'teacher':
+        promocode = generate_promocode()
+        cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', promocode = '{promocode}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+    else:
+        cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
     
     cur.close()
     conn.close()
@@ -49,7 +61,7 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     
     cur.execute(
         f"SELECT c.id, c.title, c.created_at, c.updated_at "
-        f"FROM conversations c "
+        f"FROM {SCHEMA}.conversations c "
         f"WHERE c.user_id = {telegram_id} "
         f"ORDER BY c.updated_at DESC"
     )
@@ -59,7 +71,7 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
         conv_id = row[0]
         
         cur.execute(
-            f"SELECT role, content, created_at FROM messages "
+            f"SELECT role, content, created_at FROM {SCHEMA}.messages "
             f"WHERE conversation_id = {conv_id} "
             f"ORDER BY created_at ASC"
         )
