@@ -14,7 +14,7 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role FROM users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode FROM users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -26,7 +26,8 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
             'username': row[1],
             'first_name': row[2],
             'last_name': row[3],
-            'role': row[4]
+            'role': row[4],
+            'promocode': row[5]
         }
     return None
 
@@ -146,6 +147,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
             
             change_user_role(telegram_id, new_role)
+            updated_user = get_user_info(telegram_id)
             
             return {
                 'statusCode': 200,
@@ -153,7 +155,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 },
-                'body': json.dumps({'success': True, 'role': new_role}),
+                'body': json.dumps({'success': True, 'user': updated_user}),
                 'isBase64Encoded': False
             }
         

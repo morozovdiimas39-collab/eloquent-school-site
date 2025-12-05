@@ -90,7 +90,7 @@ export default function Dashboard() {
       
       if (data.user) {
         setRole(data.user.role);
-        if (data.user.role === 'teacher' && data.user.promocode) {
+        if (data.user.promocode) {
           setPromocode(data.user.promocode);
         }
       }
@@ -117,9 +117,9 @@ export default function Dashboard() {
       
       const data = await response.json();
       
-      if (data.success) {
-        setRole(newRole);
-        if (newRole === 'teacher' && data.user?.promocode) {
+      if (data.success && data.user) {
+        setRole(data.user.role);
+        if (data.user.promocode) {
           setPromocode(data.user.promocode);
         }
       }
@@ -142,17 +142,17 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-5 font-sans">
+        <Card className="w-full max-w-md shadow-xl">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <Icon name="AlertCircle" size={24} />
+            <CardTitle className="flex items-center gap-3 text-red-600 text-xl">
+              <Icon name="AlertCircle" size={28} />
               Ошибка
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-700">{error}</p>
-            <p className="text-sm text-gray-500 mt-4">
+            <p className="text-gray-800 text-base leading-relaxed">{error}</p>
+            <p className="text-sm text-gray-600 mt-4 leading-relaxed">
               Откройте это приложение через бота в Telegram
             </p>
           </CardContent>
@@ -163,12 +163,12 @@ export default function Dashboard() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-600">Загрузка...</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-5 font-sans">
+        <Card className="w-full max-w-md shadow-xl">
+          <CardContent className="pt-8">
+            <div className="flex flex-col items-center gap-5">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-700 text-lg font-medium">Загрузка...</p>
             </div>
           </CardContent>
         </Card>
@@ -181,26 +181,25 @@ export default function Dashboard() {
   const roleText = role === 'teacher' ? 'Преподаватель' : 'Ученик';
 
   return (
-    <div className="min-h-screen bg-[var(--tg-theme-bg-color,#ffffff)]">
-      <div className="bg-[var(--tg-theme-secondary-bg-color,#f4f4f5)] border-b sticky top-0 z-10">
-        <div className="px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-12 w-12 bg-gradient-to-br from-purple-500 to-blue-500">
-              <AvatarFallback className="text-white text-lg">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 font-sans">
+      <div className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
+        <div className="px-5 py-5">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-14 w-14 bg-gradient-to-br from-blue-500 to-indigo-600 ring-2 ring-blue-200">
+              <AvatarFallback className="text-white text-xl font-bold">
                 {userName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h1 className="font-bold text-xl text-[var(--tg-theme-text-color,#000000)]">
+              <h1 className="font-bold text-2xl text-gray-900">
                 {userName}
               </h1>
               {role && (
                 <Badge 
-                  variant="secondary" 
-                  className="flex items-center gap-1 w-fit mt-1"
+                  className="flex items-center gap-1.5 w-fit mt-1.5 bg-blue-100 text-blue-700 border-blue-300"
                 >
                   <Icon name={roleIcon} size={14} />
-                  <span className="text-sm">{roleText}</span>
+                  <span className="text-sm font-medium">{roleText}</span>
                 </Badge>
               )}
             </div>
@@ -208,63 +207,61 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-5 py-6 space-y-5">
         {role === null && (
-          <Card className="border-2 border-[var(--tg-theme-button-color,#3390ec)]">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Icon name="UserCog" size={20} />
+          <Card className="border-2 border-blue-300 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                <Icon name="UserCog" size={24} />
                 Выбери свою роль
               </CardTitle>
-              <CardDescription className="text-sm">
+              <CardDescription className="text-base text-gray-600">
                 Выбери один раз — изменить потом нельзя
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex gap-2">
+            <CardContent className="flex flex-col gap-3">
               <Button
                 onClick={() => selectRole('student')}
                 disabled={loading}
-                variant="outline"
-                className="flex-1 h-16 text-base hover:bg-[var(--tg-theme-button-color,#3390ec)] hover:text-white transition-colors"
+                className="h-16 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all"
               >
-                <Icon name="BookOpen" size={20} className="mr-2" />
-                Ученик
+                <Icon name="BookOpen" size={22} className="mr-2" />
+                Я ученик
               </Button>
               <Button
                 onClick={() => selectRole('teacher')}
                 disabled={loading}
-                variant="outline"
-                className="flex-1 h-16 text-base hover:bg-[var(--tg-theme-button-color,#3390ec)] hover:text-white transition-colors"
+                className="h-16 text-lg font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all"
               >
-                <Icon name="GraduationCap" size={20} className="mr-2" />
-                Учитель
+                <Icon name="GraduationCap" size={22} className="mr-2" />
+                Я преподаватель
               </Button>
             </CardContent>
           </Card>
         )}
 
         {role === 'teacher' && promocode && (
-          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Icon name="Tag" size={20} />
+          <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-300 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                <Icon name="Tag" size={24} />
                 Твой промокод
               </CardTitle>
-              <CardDescription className="text-sm">
+              <CardDescription className="text-base text-gray-700">
                 Делись им с учениками для доступа к курсу
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="bg-white rounded-lg p-4 border-2 border-purple-300">
-                <p className="text-2xl font-bold text-center text-purple-700 tracking-wider">
+            <CardContent className="space-y-4">
+              <div className="bg-white rounded-xl p-6 border-2 border-indigo-400 shadow-inner">
+                <p className="text-3xl font-bold text-center text-indigo-700 tracking-widest">
                   {promocode}
                 </p>
               </div>
               <Button
                 onClick={copyPromocode}
-                className="w-full h-12 text-base bg-[var(--tg-theme-button-color,#3390ec)] text-[var(--tg-theme-button-text-color,#ffffff)] hover:opacity-90"
+                className="w-full h-14 text-lg font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all"
               >
-                <Icon name="Copy" size={18} className="mr-2" />
+                <Icon name="Copy" size={20} className="mr-2" />
                 Скопировать промокод
               </Button>
             </CardContent>
@@ -272,13 +269,15 @@ export default function Dashboard() {
         )}
 
         {role === 'student' && (
-          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start gap-3">
-                <Icon name="Check" size={20} className="text-green-600 mt-0.5" />
-                <div className="text-sm text-gray-700">
-                  <p className="font-semibold mb-1">Твоя роль: Ученик</p>
-                  <p className="text-xs text-gray-600">
+          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 shadow-lg">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex items-start gap-4">
+                <div className="bg-green-100 p-2.5 rounded-full">
+                  <Icon name="Check" size={24} className="text-green-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg text-gray-900 mb-2">Твоя роль: Ученик</p>
+                  <p className="text-base text-gray-700 leading-relaxed">
                     Задавай вопросы боту прямо в чате Telegram. Если у тебя есть промокод от учителя, отправь его боту для доступа к курсу.
                   </p>
                 </div>
@@ -288,17 +287,31 @@ export default function Dashboard() {
         )}
 
         {role === 'teacher' && (
-          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start gap-3">
-                <Icon name="Info" size={20} className="text-purple-600 mt-0.5" />
-                <div className="text-sm text-gray-700">
-                  <p className="font-semibold mb-1">Как пользоваться:</p>
-                  <ul className="space-y-1 text-xs text-gray-600">
-                    <li>• Скопируй свой промокод выше</li>
-                    <li>• Отправь его своим ученикам</li>
-                    <li>• Они смогут использовать бота с твоим промокодом</li>
-                    <li>• Задавай вопросы боту в Telegram</li>
+          <Card className="bg-white border border-gray-200 shadow-lg">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex items-start gap-4">
+                <div className="bg-blue-100 p-2.5 rounded-full">
+                  <Icon name="Info" size={24} className="text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg text-gray-900 mb-3">Как пользоваться:</p>
+                  <ul className="space-y-2 text-base text-gray-700">
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 font-bold">•</span>
+                      <span>Скопируй свой промокод выше</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 font-bold">•</span>
+                      <span>Отправь его своим ученикам</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 font-bold">•</span>
+                      <span>Они смогут использовать бота с твоим промокодом</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 font-bold">•</span>
+                      <span>Задавай вопросы боту в Telegram</span>
+                    </li>
                   </ul>
                 </div>
               </div>
@@ -307,13 +320,15 @@ export default function Dashboard() {
         )}
 
         {role === null && (
-          <Card>
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-start gap-3">
-                <Icon name="Sparkles" size={20} className="text-blue-600 mt-0.5" />
-                <div className="text-sm text-gray-700">
-                  <p className="font-semibold mb-1">Добро пожаловать!</p>
-                  <p className="text-xs text-gray-600">
+          <Card className="bg-white border border-gray-200 shadow-lg">
+            <CardContent className="pt-5 pb-5">
+              <div className="flex items-start gap-4">
+                <div className="bg-yellow-100 p-2.5 rounded-full">
+                  <Icon name="Sparkles" size={24} className="text-yellow-600" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg text-gray-900 mb-2">Добро пожаловать!</p>
+                  <p className="text-base text-gray-700 leading-relaxed">
                     Выбери свою роль выше, чтобы начать пользоваться ботом. После выбора роли ты сможешь задавать вопросы прямо в чате.
                   </p>
                 </div>
