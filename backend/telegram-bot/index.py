@@ -256,55 +256,59 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Команда /start
         if text == '/start':
-            print(f"[DEBUG] /start command from user {user['id']}")
-            existing_user = get_user(user['id'])
-            print(f"[DEBUG] Existing user: {existing_user}")
-            
-            if existing_user:
-                result = send_telegram_message(
-                    chat_id,
-                    f'С возвращением! Задавайте любые вопросы, я отвечу прямо здесь 😊'
-                )
-                print(f"[DEBUG] Message sent: {result}")
-            else:
-                keyboard = {
-                    'inline_keyboard': [
-                        [{'text': '👨‍🎓 Я ученик', 'callback_data': 'role_student'}],
-                        [{'text': '👨‍🏫 Я преподаватель', 'callback_data': 'role_teacher'}]
-                    ]
-                }
-                print(f"[DEBUG] Calling send_telegram_message with keyboard...")
-                result = send_telegram_message(
-                    chat_id,
-                    '👋 Привет! Я AnyaGPT - AI-помощник на базе YandexGPT.\n\n'
-                    'Выберите свою роль:',
-                    keyboard
-                )
-                print(f"[DEBUG] Message with keyboard sent: {result}")
-        else:
-            # Проверяем регистрацию
             existing_user = get_user(user['id'])
             
             if not existing_user:
-                send_telegram_message(
-                    chat_id,
-                    'Пожалуйста, начните с команды /start для регистрации'
+                # Регистрируем нового пользователя как ученика по умолчанию
+                create_user(
+                    user['id'],
+                    user.get('username', ''),
+                    user.get('first_name', ''),
+                    user.get('last_name', ''),
+                    'student'
                 )
-            else:
-                # Получаем ответ от YandexGPT
-                history = get_conversation_history(user['id'])
-                
-                # Сохраняем вопрос пользователя
-                save_message(user['id'], 'user', text)
-                
-                # Получаем ответ AI
-                ai_response = call_yandex_gpt(text, history)
-                
-                # Сохраняем ответ AI
-                save_message(user['id'], 'assistant', ai_response)
-                
-                # Отправляем ответ
-                send_telegram_message(chat_id, ai_response)
+            
+            # Отправляем приветствие с кнопкой открытия WebApp
+            keyboard = {
+                'inline_keyboard': [
+                    [{'text': '📱 Открыть личный кабинет', 'web_app': {'url': 'https://anyagpt.poehali.dev'}}]
+                ]
+            }
+            send_telegram_message(
+                chat_id,
+                '👋 Привет! Я AnyaGPT - AI-помощник на базе YandexGPT.\n\n'
+                'Задавай мне любые вопросы прямо здесь в чате, и я отвечу!\n\n'
+                'Чтобы изменить роль или посмотреть историю - открой личный кабинет 👇',
+                keyboard
+            )
+        else:
+            # Любое другое сообщение - обрабатываем через YandexGPT
+            existing_user = get_user(user['id'])
+            
+            if not existing_user:
+                # Автоматически регистрируем если пользователь начал писать без /start
+                create_user(
+                    user['id'],
+                    user.get('username', ''),
+                    user.get('first_name', ''),
+                    user.get('last_name', ''),
+                    'student'
+                )
+            
+            # Получаем ответ от YandexGPT
+            history = get_conversation_history(user['id'])
+            
+            # Сохраняем вопрос пользователя
+            save_message(user['id'], 'user', text)
+            
+            # Получаем ответ AI
+            ai_response = call_yandex_gpt(text, history)
+            
+            # Сохраняем ответ AI
+            save_message(user['id'], 'assistant', ai_response)
+            
+            # Отправляем ответ
+            send_telegram_message(chat_id, ai_response)
         
         return {
             'statusCode': 200,
