@@ -242,6 +242,55 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         body = json.loads(event.get('body', '{}'))
         
+        # Обработка callback_query (выбор роли)
+        if 'callback_query' in body:
+            callback = body['callback_query']
+            data = callback.get('data', '')
+            chat_id = callback['message']['chat']['id']
+            message_id = callback['message']['message_id']
+            telegram_user = callback['from']
+            
+            if data.startswith('role_'):
+                role = data.replace('role_', '')
+                create_user(telegram_user, role)
+                
+                webapp_url = f"https://{os.environ.get('POEHALI_DOMAIN', 'localhost')}"
+                
+                import urllib.request
+                token = os.environ['TELEGRAM_BOT_TOKEN']
+                url = f'https://api.telegram.org/bot{token}/editMessageText'
+                
+                role_text = '👨‍🎓 Ученик' if role == 'student' else '👨‍🏫 Преподаватель'
+                edit_data = {
+                    'chat_id': chat_id,
+                    'message_id': message_id,
+                    'text': f'✅ Отлично! Ты зарегистрирован как <b>{role_text}</b>\n\n'
+                            f'Теперь можешь задавать мне вопросы или открыть личный кабинет.',
+                    'parse_mode': 'HTML',
+                    'reply_markup': json.dumps({
+                        'inline_keyboard': [
+                            [{'text': '📱 Открыть личный кабинет', 'web_app': {'url': webapp_url}}]
+                        ]
+                    })
+                }
+                
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(edit_data).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'}
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    response.read()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True}),
+                'isBase64Encoded': False
+            }
+        
+        # Обработка обычных сообщений
         if 'message' not in body:
             return {
                 'statusCode': 200,
