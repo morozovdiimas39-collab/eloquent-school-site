@@ -1,0 +1,37 @@
+{
+  "tests": [
+    {
+      "name": "Test OPTIONS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Test get_user action",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "get_user",
+        "telegram_id": 123456
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "user": null
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Test missing telegram_id",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "get_user"
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "telegram_id is required"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
