@@ -2,6 +2,7 @@ import json
 import os
 import psycopg2
 import urllib.request
+import urllib.parse
 from typing import Dict, Any, List
 
 def get_db_connection():
@@ -138,19 +139,19 @@ def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     token = os.environ['TELEGRAM_BOT_TOKEN']
     url = f'https://api.telegram.org/bot{token}/sendMessage'
     
-    data = {
+    payload = {
         'chat_id': chat_id,
-        'text': text,
-        'parse_mode': 'HTML'
+        'text': text
     }
     
     if reply_markup:
-        data['reply_markup'] = reply_markup
+        payload['reply_markup'] = reply_markup
     
     req = urllib.request.Request(
         url,
-        data=json.dumps(data).encode('utf-8'),
-        headers={'Content-Type': 'application/json'}
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
     )
     
     with urllib.request.urlopen(req) as response:
