@@ -199,6 +199,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     try:
         body = json.loads(event.get('body', '{}'))
+        print(f"[DEBUG] Received update: {json.dumps(body)}")
         
         # Обработка callback_query (выбор роли)
         if 'callback_query' in body:
@@ -249,13 +250,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Команда /start
         if text == '/start':
+            print(f"[DEBUG] /start command from user {user['id']}")
             existing_user = get_user(user['id'])
+            print(f"[DEBUG] Existing user: {existing_user}")
             
             if existing_user:
-                send_telegram_message(
+                result = send_telegram_message(
                     chat_id,
                     f'С возвращением! Задавайте любые вопросы, я отвечу прямо здесь 😊'
                 )
+                print(f"[DEBUG] Message sent: {result}")
             else:
                 keyboard = {
                     'inline_keyboard': [
@@ -263,12 +267,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         [{'text': '👨‍🏫 Я преподаватель', 'callback_data': 'role_teacher'}]
                     ]
                 }
-                send_telegram_message(
+                result = send_telegram_message(
                     chat_id,
                     '👋 Привет! Я AnyaGPT - AI-помощник на базе YandexGPT.\n\n'
                     'Выберите свою роль:',
                     keyboard
                 )
+                print(f"[DEBUG] Message with keyboard sent: {result}")
         else:
             # Проверяем регистрацию
             existing_user = get_user(user['id'])
