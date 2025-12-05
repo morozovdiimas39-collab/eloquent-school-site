@@ -62,7 +62,7 @@ export default function Dashboard() {
         username: 'demo_user'
       };
       setUser(demoUser);
-      setShowRegistration(true);
+      checkUser(demoUser.id);
     }
   }, []);
 
