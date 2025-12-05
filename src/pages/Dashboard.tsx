@@ -101,7 +101,7 @@ export default function Dashboard() {
   };
 
   const selectRole = async (newRole: 'student' | 'teacher') => {
-    if (!user || role !== null) return;
+    if (!user) return;
     
     setLoading(true);
     try {
@@ -216,7 +216,7 @@ export default function Dashboard() {
                 Выбери свою роль
               </CardTitle>
               <CardDescription className="text-base text-gray-600">
-                Выбери один раз — изменить потом нельзя
+                Это всегда можно изменить в любой момент
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -235,6 +235,30 @@ export default function Dashboard() {
               >
                 <Icon name="GraduationCap" size={22} className="mr-2" />
                 Я преподаватель
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {role && (
+          <Card className="border-2 border-gray-200 shadow-lg">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-gray-900">
+                <Icon name="Settings" size={24} />
+                Настройки
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={() => {
+                  setRole(null);
+                  setPromocode(null);
+                }}
+                variant="outline"
+                className="w-full h-12 text-base font-semibold border-2 hover:bg-gray-50 transition-all"
+              >
+                <Icon name="RefreshCw" size={20} className="mr-2" />
+                Сменить роль
               </Button>
             </CardContent>
           </Card>
