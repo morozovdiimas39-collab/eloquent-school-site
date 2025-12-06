@@ -403,15 +403,20 @@ def assign_category_to_student(teacher_id: int, student_id: int, category_id: in
     return {'success': True, 'assigned_count': assigned_count}
 
 def get_student_words(student_id: int) -> List[Dict[str, Any]]:
-    """Получает все назначенные слова для ученика"""
+    """Получает все назначенные слова для ученика с прогрессом"""
     conn = get_db_connection()
     cur = conn.cursor()
     
     cur.execute(
         f"SELECT sw.id, sw.word_id, w.english_text, w.russian_translation, "
-        f"w.category_id, sw.assigned_at, sw.status "
+        f"w.category_id, sw.assigned_at, sw.status, "
+        f"COALESCE(wp.mastery_score, 0) as mastery_score, "
+        f"COALESCE(wp.attempts, 0) as attempts, "
+        f"COALESCE(wp.correct_uses, 0) as correct_uses, "
+        f"COALESCE(wp.status, 'new') as progress_status "
         f"FROM {SCHEMA}.student_words sw "
         f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+        f"LEFT JOIN {SCHEMA}.word_progress wp ON wp.student_id = sw.student_id AND wp.word_id = sw.word_id "
         f"WHERE sw.student_id = {student_id} "
         f"ORDER BY sw.assigned_at DESC"
     )
@@ -425,12 +430,204 @@ def get_student_words(student_id: int) -> List[Dict[str, Any]]:
             'russian_translation': row[3],
             'category_id': row[4],
             'assigned_at': row[5].isoformat() if row[5] else None,
-            'status': row[6]
+            'status': row[6],
+            'mastery_score': float(row[7]),
+            'attempts': row[8],
+            'correct_uses': row[9],
+            'progress_status': row[10]
         })
     
     cur.close()
     conn.close()
     return words
+
+def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Формирует пул слов для практики в сессии по алгоритму интервального повторения
+    40% новые, 40% на повторение, 20% освоенные
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Инициализируем прогресс для слов, которые еще не были в практике
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+        f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+        f"WHERE sw.student_id = {student_id} "
+        f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+    )
+    
+    # Новые слова (40%)
+    new_limit = max(1, int(limit * 0.4))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation, w.category_id, wp.status, wp.mastery_score "
+        f"FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+        f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
+    )
+    new_words = cur.fetchall()
+    
+    # Слова на повторение (40%)
+    review_limit = max(1, int(limit * 0.4))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation, w.category_id, wp.status, wp.mastery_score "
+        f"FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} "
+        f"AND wp.status IN ('learning', 'learned') "
+        f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+        f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
+    )
+    review_words = cur.fetchall()
+    
+    # Освоенные слова для поддержания (20%)
+    mastered_limit = max(1, limit - len(new_words) - len(review_words))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation, w.category_id, wp.status, wp.mastery_score "
+        f"FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'mastered' "
+        f"ORDER BY wp.last_practiced ASC NULLS FIRST LIMIT {mastered_limit}"
+    )
+    mastered_words = cur.fetchall()
+    
+    all_words = list(new_words) + list(review_words) + list(mastered_words)
+    
+    words = []
+    for row in all_words:
+        words.append({
+            'id': row[0],
+            'english_text': row[1],
+            'russian_translation': row[2],
+            'category_id': row[3],
+            'status': row[4],
+            'mastery_score': float(row[5])
+        })
+    
+    cur.close()
+    conn.close()
+    return words
+
+def record_word_usage(student_id: int, word_id: int, is_correct: bool, context: str = None) -> Dict[str, Any]:
+    """
+    Записывает использование слова учеником и обновляет прогресс
+    """
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Инициализируем запись если её нет
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+        f"VALUES ({student_id}, {word_id}) "
+        f"ON CONFLICT (student_id, word_id) DO NOTHING"
+    )
+    
+    # Обновляем статистику
+    if is_correct:
+        cur.execute(
+            f"UPDATE {SCHEMA}.word_progress SET "
+            f"attempts = attempts + 1, "
+            f"correct_uses = correct_uses + 1, "
+            f"last_practiced = CURRENT_TIMESTAMP, "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+    else:
+        cur.execute(
+            f"UPDATE {SCHEMA}.word_progress SET "
+            f"attempts = attempts + 1, "
+            f"last_practiced = CURRENT_TIMESTAMP, "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+    
+    # Получаем текущие данные для пересчета
+    cur.execute(
+        f"SELECT attempts, correct_uses, status FROM {SCHEMA}.word_progress "
+        f"WHERE student_id = {student_id} AND word_id = {word_id}"
+    )
+    row = cur.fetchone()
+    attempts, correct_uses, current_status = row[0], row[1], row[2]
+    
+    # Рассчитываем mastery_score
+    if attempts > 0:
+        mastery_score = min(100, (correct_uses / attempts) * 100)
+    else:
+        mastery_score = 0
+    
+    # Определяем новый статус
+    new_status = current_status
+    if mastery_score >= 75 and correct_uses >= 5:
+        new_status = 'mastered'
+    elif mastery_score >= 50:
+        new_status = 'learned'
+    elif attempts > 0:
+        new_status = 'learning'
+    
+    # Рассчитываем интервал до следующего повторения (spaced repetition)
+    if new_status == 'mastered':
+        interval_days = 30
+    elif new_status == 'learned':
+        interval_days = 7
+    elif new_status == 'learning':
+        interval_days = 3 if is_correct else 1
+    else:
+        interval_days = 1
+    
+    # Обновляем прогресс
+    cur.execute(
+        f"UPDATE {SCHEMA}.word_progress SET "
+        f"mastery_score = {mastery_score}, "
+        f"status = '{new_status}', "
+        f"next_review_date = CURRENT_TIMESTAMP + INTERVAL '{interval_days} days', "
+        f"updated_at = CURRENT_TIMESTAMP "
+        f"WHERE student_id = {student_id} AND word_id = {word_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        'success': True,
+        'mastery_score': mastery_score,
+        'status': new_status,
+        'next_review_days': interval_days
+    }
+
+def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
+    """Получает общую статистику прогресса ученика"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Общее количество назначенных слов
+    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {student_id}")
+    total_words = cur.fetchone()[0]
+    
+    # Статистика по статусам
+    cur.execute(
+        f"SELECT status, COUNT(*) FROM {SCHEMA}.word_progress "
+        f"WHERE student_id = {student_id} GROUP BY status"
+    )
+    status_counts = {row[0]: row[1] for row in cur.fetchall()}
+    
+    # Средний mastery_score
+    cur.execute(
+        f"SELECT AVG(mastery_score) FROM {SCHEMA}.word_progress WHERE student_id = {student_id}"
+    )
+    avg_mastery = cur.fetchone()[0] or 0
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        'total_words': total_words,
+        'new': status_counts.get('new', 0),
+        'learning': status_counts.get('learning', 0),
+        'learned': status_counts.get('learned', 0),
+        'mastered': status_counts.get('mastered', 0),
+        'average_mastery': float(avg_mastery)
+    }
 
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
@@ -480,7 +677,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     API для WebApp личного кабинета
     Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
     get_categories, create_category, update_category, search_words, create_word, update_word,
-    assign_words, assign_category, get_student_words
+    assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats
     """
     method = event.get('httpMethod', 'POST')
     
@@ -861,6 +1058,88 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'words': words}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_session_words':
+            student_id = body.get('student_id')
+            limit = body.get('limit', 10)
+            
+            if not student_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            words = get_session_words(student_id, limit)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'words': words, 'count': len(words)}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'record_word_usage':
+            student_id = body.get('student_id')
+            word_id = body.get('word_id')
+            is_correct = body.get('is_correct', True)
+            context = body.get('context')
+            
+            if not student_id or not word_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id and word_id are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            result = record_word_usage(student_id, word_id, is_correct, context)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_student_progress_stats':
+            student_id = body.get('student_id')
+            
+            if not student_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            stats = get_student_progress_stats(student_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(stats),
                 'isBase64Encoded': False
             }
         

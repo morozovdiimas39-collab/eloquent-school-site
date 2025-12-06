@@ -5,6 +5,8 @@ import urllib.request
 import urllib.parse
 from typing import Dict, Any, List
 
+SCHEMA = 't_p86463701_eloquent_school_site'
+
 def get_db_connection():
     """Создает подключение к БД"""
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
@@ -16,7 +18,7 @@ def get_user(telegram_id: int):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role FROM users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -32,6 +34,58 @@ def get_user(telegram_id: int):
         }
     return None
 
+def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    """Получает слова для практики в сессии"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Инициализируем прогресс для новых слов
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+        f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+        f"WHERE sw.student_id = {student_id} "
+        f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+    )
+    
+    # Новые слова (40%)
+    new_limit = max(1, int(limit * 0.4))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+        f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
+    )
+    new_words = cur.fetchall()
+    
+    # Слова на повторение (40%)
+    review_limit = max(1, int(limit * 0.4))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
+        f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+        f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
+    )
+    review_words = cur.fetchall()
+    
+    # Освоенные слова (20%)
+    mastered_limit = max(1, limit - len(new_words) - len(review_words))
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'mastered' "
+        f"ORDER BY wp.last_practiced ASC NULLS FIRST LIMIT {mastered_limit}"
+    )
+    mastered_words = cur.fetchall()
+    
+    all_words = list(new_words) + list(review_words) + list(mastered_words)
+    
+    words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in all_words]
+    
+    cur.close()
+    conn.close()
+    return words
+
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str, role: str):
     """Создает пользователя"""
     conn = get_db_connection()
@@ -42,7 +96,7 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     last_name = last_name.replace("'", "''") if last_name else ''
     
     cur.execute(
-        f"INSERT INTO users (telegram_id, username, first_name, last_name, role) "
+        f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role) "
         f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}')"
     )
     
@@ -54,7 +108,7 @@ def get_conversation_history(user_id: int) -> List[Dict[str, str]]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT id FROM conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
+    cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
     row = cur.fetchone()
     
     if not row:
@@ -64,7 +118,7 @@ def get_conversation_history(user_id: int) -> List[Dict[str, str]]:
     
     conversation_id = row[0]
     
-    cur.execute(f"SELECT role, content FROM messages WHERE conversation_id = {conversation_id} ORDER BY created_at ASC LIMIT 20")
+    cur.execute(f"SELECT role, content FROM {SCHEMA}.messages WHERE conversation_id = {conversation_id} ORDER BY created_at ASC LIMIT 20")
     
     history = [{'role': row[0], 'content': row[1]} for row in cur.fetchall()]
     
@@ -77,28 +131,44 @@ def save_message(user_id: int, role: str, content: str):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT id FROM conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
+    cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE user_id = {user_id} ORDER BY updated_at DESC LIMIT 1")
     row = cur.fetchone()
     
     if row:
         conversation_id = row[0]
-        cur.execute(f"UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = {conversation_id}")
+        cur.execute(f"UPDATE {SCHEMA}.conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = {conversation_id}")
     else:
-        cur.execute(f"INSERT INTO conversations (user_id, title) VALUES ({user_id}, 'Новый диалог') RETURNING id")
+        cur.execute(f"INSERT INTO {SCHEMA}.conversations (user_id, title) VALUES ({user_id}, 'Новый диалог') RETURNING id")
         conversation_id = cur.fetchone()[0]
     
     content = content.replace("'", "''")
-    cur.execute(f"INSERT INTO messages (conversation_id, role, content) VALUES ({conversation_id}, '{role}', '{content}')")
+    cur.execute(f"INSERT INTO {SCHEMA}.messages (conversation_id, role, content) VALUES ({conversation_id}, '{role}', '{content}')")
     
     cur.close()
     conn.close()
 
-def call_yandex_gpt(user_message: str, history: List[Dict[str, str]]) -> str:
-    """Вызывает YandexGPT API"""
+def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None) -> str:
+    """Вызывает YandexGPT API с учетом слов для практики"""
     api_key = os.environ['YANDEX_CLOUD_API_KEY']
     folder_id = os.environ['YANDEX_CLOUD_FOLDER_ID']
     
-    messages = []
+    # Формируем system prompt с учетом слов
+    system_prompt = """You are an English language tutor. Always communicate in English only.
+Your task is to help the student practice English vocabulary through natural conversation.
+
+Guidelines:
+- Speak only in English
+- Use the vocabulary words naturally in conversation
+- If the student makes a grammar or vocabulary mistake, politely correct them immediately
+- Keep the conversation engaging and natural
+- Focus on helping them use the target vocabulary correctly"""
+    
+    if session_words:
+        words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
+        system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}"
+    
+    messages = [{'role': 'system', 'text': system_prompt}]
+    
     for msg in history[-10:]:
         messages.append({
             'role': msg['role'],
@@ -294,15 +364,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     user.get('last_name', ''),
                     'student'
                 )
+                existing_user = {'telegram_id': user['id'], 'role': 'student'}
             
-            # Получаем ответ от YandexGPT
+            # Получаем историю диалога
             history = get_conversation_history(user['id'])
+            
+            # Если ученик - загружаем слова для практики
+            session_words = None
+            if existing_user.get('role') == 'student':
+                try:
+                    session_words = get_session_words(user['id'], limit=10)
+                except Exception as e:
+                    print(f"[WARNING] Failed to load session words: {e}")
             
             # Сохраняем вопрос пользователя
             save_message(user['id'], 'user', text)
             
-            # Получаем ответ AI
-            ai_response = call_yandex_gpt(text, history)
+            # Получаем ответ AI с учетом слов для практики
+            ai_response = call_yandex_gpt(text, history, session_words)
             
             # Сохраняем ответ AI
             save_message(user['id'], 'assistant', ai_response)

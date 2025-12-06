@@ -15,6 +15,19 @@ interface AssignedWord {
   category_id: number | null;
   assigned_at: string;
   status: string;
+  mastery_score: number;
+  attempts: number;
+  correct_uses: number;
+  progress_status: 'new' | 'learning' | 'learned' | 'mastered';
+}
+
+interface ProgressStats {
+  total_words: number;
+  new: number;
+  learning: number;
+  learned: number;
+  mastered: number;
+  average_mastery: number;
 }
 
 interface MyWordsProps {
@@ -23,11 +36,13 @@ interface MyWordsProps {
 
 export default function MyWords({ studentId }: MyWordsProps) {
   const [words, setWords] = useState<AssignedWord[]>([]);
+  const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadWords();
+    loadStats();
   }, []);
 
   const loadWords = async () => {
@@ -47,6 +62,43 @@ export default function MyWords({ studentId }: MyWordsProps) {
       console.error('Ошибка загрузки слов:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'get_student_progress_stats',
+          student_id: studentId
+        })
+      });
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error('Ошибка загрузки статистики:', error);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'new': return 'bg-blue-100 text-blue-700';
+      case 'learning': return 'bg-yellow-100 text-yellow-700';
+      case 'learned': return 'bg-green-100 text-green-700';
+      case 'mastered': return 'bg-purple-100 text-purple-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'new': return 'Новое';
+      case 'learning': return 'Изучаю';
+      case 'learned': return 'Выучено';
+      case 'mastered': return 'Освоено';
+      default: return status;
     }
   };
 
@@ -83,6 +135,27 @@ export default function MyWords({ studentId }: MyWordsProps) {
             {words.length}
           </Badge>
         </div>
+        
+        {stats && (
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="bg-blue-50 rounded-lg p-2 border border-blue-200">
+              <div className="text-xs text-blue-600 font-medium">Новые</div>
+              <div className="text-lg font-bold text-blue-700">{stats.new}</div>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-2 border border-yellow-200">
+              <div className="text-xs text-yellow-600 font-medium">Изучаю</div>
+              <div className="text-lg font-bold text-yellow-700">{stats.learning}</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-2 border border-green-200">
+              <div className="text-xs text-green-600 font-medium">Выучено</div>
+              <div className="text-lg font-bold text-green-700">{stats.learned}</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-2 border border-purple-200">
+              <div className="text-xs text-purple-600 font-medium">Освоено</div>
+              <div className="text-lg font-bold text-purple-700">{stats.mastered}</div>
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {words.length === 0 ? (
@@ -117,18 +190,31 @@ export default function MyWords({ studentId }: MyWordsProps) {
                         <h3 className="text-base font-bold text-blue-600 truncate">
                           {word.english_text}
                         </h3>
-                        {word.status === 'completed' && (
-                          <Badge className="bg-green-500 text-white text-xs px-1.5 py-0">
-                            <Icon name="Check" className="h-3 w-3 mr-0.5" />
-                            Выучено
-                          </Badge>
-                        )}
+                        <Badge className={`text-xs px-1.5 py-0 ${getStatusColor(word.progress_status)}`}>
+                          {getStatusText(word.progress_status)}
+                        </Badge>
                       </div>
                       <p className="text-sm text-gray-700">
                         {word.russian_translation}
                       </p>
+                      
+                      {word.attempts > 0 && (
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                            <span>Прогресс: {Math.round(word.mastery_score)}%</span>
+                            <span>{word.correct_uses}/{word.attempts} правильно</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div 
+                              className="bg-gradient-to-r from-blue-500 to-green-500 h-1.5 rounded-full transition-all"
+                              style={{ width: `${word.mastery_score}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
                       <p className="text-xs text-gray-400 mt-1">
-                        {new Date(word.assigned_at).toLocaleDateString('ru-RU')}
+                        Назначено: {new Date(word.assigned_at).toLocaleDateString('ru-RU')}
                       </p>
                     </div>
                   </div>
