@@ -93,6 +93,7 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
 
   const loadStudents = async () => {
     try {
+      console.log('Loading students for teacher:', teacherId);
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,9 +103,10 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
         })
       });
       const data = await response.json();
+      console.log('Students response:', data);
       setStudents(data.students || []);
     } catch (error) {
-      console.error(error);
+      console.error('Error loading students:', error);
     }
   };
 
@@ -209,29 +211,33 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
         <CardContent>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-2 block">Выберите ученика</label>
-              <Select
-                value={selectedStudent?.toString() || ''}
-                onValueChange={(value) => setSelectedStudent(parseInt(value))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите ученика" />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((student) => (
-                    <SelectItem key={student.telegram_id} value={student.telegram_id.toString()}>
-                      {getStudentName(student)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {students.length === 0 && (
-              <div className="text-center py-4 text-muted-foreground">
-                У вас пока нет учеников
-              </div>
-            )}
+              <label className="text-sm font-medium mb-2 block">
+                Выберите ученика (найдено: {students.length})
+              </label>
+              {students.length > 0 ? (
+                <Select
+                  value={selectedStudent?.toString() || ''}
+                  onValueChange={(value) => {
+                    console.log('Student selected:', value);
+                    setSelectedStudent(parseInt(value));
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Выберите ученика" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {students.map((student) => (
+                      <SelectItem key={student.telegram_id} value={student.telegram_id.toString()}>
+                        {getStudentName(student)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground border rounded-lg">
+                  У вас пока нет учеников. Поделитесь промокодом со студентами.
+                </div>
+              )}
           </div>
         </CardContent>
       </Card>
