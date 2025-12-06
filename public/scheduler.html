@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Practice Scheduler Control</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .result {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .result.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #34d399;
+        }
+        
+        .result.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #f87171;
+        }
+        
+        .result strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+        
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #93c5fd;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            color: #1e40af;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        .info-box strong {
+            display: block;
+            margin-bottom: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <span>⏰</span>
+            Practice Scheduler
+        </h1>
+        <p class="subtitle">Отправка проактивных сообщений студентам</p>
+        
+        <div class="info-box">
+            <strong>Как работает:</strong>
+            • Отправляет сообщения студентам, которые не практиковались 2+ часа<br>
+            • Учитывает время суток (не отправляет ночью)<br>
+            • Макс. 20 сообщений за запуск
+        </div>
+        
+        <button id="runButton" class="button" onclick="runScheduler()">
+            <span id="buttonText">🚀 Запустить рассылку</span>
+        </button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const SCHEDULER_URL = 'https://d5di18trqrljtqf8fsjd.apigw.yandexcloud.net/practice-scheduler';
+        
+        async function runScheduler() {
+            const button = document.getElementById('runButton');
+            const result = document.getElementById('result');
+            const buttonText = document.getElementById('buttonText');
+            
+            button.disabled = true;
+            buttonText.innerHTML = '<div class="spinner"></div> Отправка сообщений...';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch(SCHEDULER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.status === 'completed') {
+                    result.className = 'result success';
+                    result.innerHTML = `
+                        <strong>✅ Рассылка завершена!</strong>
+                        Отправлено сообщений: <strong>${data.sent}</strong><br>
+                        Пропущено (неподходящее время): <strong>${data.skipped}</strong><br>
+                        Всего кандидатов найдено: <strong>${data.total_candidates}</strong>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Неизвестная ошибка');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `
+                    <strong>❌ Ошибка</strong>
+                    ${error.message}
+                `;
+            } finally {
+                button.disabled = false;
+                buttonText.textContent = '🚀 Запустить рассылку';
+            }
+        }
+    </script>
+</body>
+</html>
