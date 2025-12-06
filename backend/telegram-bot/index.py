@@ -179,11 +179,13 @@ Language level adaptation ({language_level}):
 {level_instruction}
 
 Your approach:
-- Always communicate in English only
+- Always communicate in English only, never in Russian
+- Respond ONLY with your message, do NOT include conversation history or labels like "User:", "Assistant:"
 - If the student makes a grammar or vocabulary mistake, politely correct them: "Good try! It's better to say: [correct version]"
 - Keep the conversation engaging and natural
 - Be the conversation leader - ask follow-up questions
-- Show genuine interest in what the student shares"""
+- Show genuine interest in what the student shares
+- Reply directly to the student's message, nothing else"""
     
     if session_words:
         words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
@@ -195,9 +197,12 @@ Your approach:
     
     messages = [{'role': 'system', 'text': system_prompt}]
     
-    for msg in history[-10:]:
+    # Добавляем только последние 5 сообщений из истории для контекста
+    for msg in history[-5:]:
+        # YandexGPT использует роли 'user' и 'assistant'
+        role = 'user' if msg['role'] == 'user' else 'assistant'
         messages.append({
-            'role': msg['role'],
+            'role': role,
             'text': msg['content']
         })
     
