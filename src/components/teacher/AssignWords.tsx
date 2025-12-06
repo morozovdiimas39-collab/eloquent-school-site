@@ -200,53 +200,51 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Назначить слова ученику</CardTitle>
-          <CardDescription>
+    <div className="space-y-4">
+      <Card className="border border-gray-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg font-bold">Назначить слова ученику</CardTitle>
+          <CardDescription className="text-sm">
             Выберите ученика, затем выберите слова или целую категорию
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Выберите ученика (найдено: {students.length})
-              </label>
-              {students.length > 0 ? (
-                <Select
-                  value={selectedStudent?.toString() || ''}
-                  onValueChange={(value) => {
-                    console.log('Student selected:', value);
-                    setSelectedStudent(parseInt(value));
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите ученика" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((student) => (
-                      <SelectItem key={student.telegram_id} value={student.telegram_id.toString()}>
-                        {getStudentName(student)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="text-center py-4 text-muted-foreground border rounded-lg">
-                  У вас пока нет учеников. Поделитесь промокодом со студентами.
-                </div>
-              )}
-            </div>
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Выберите ученика
+            </label>
+            {students.length > 0 ? (
+              <Select
+                value={selectedStudent?.toString() || ''}
+                onValueChange={(value) => {
+                  console.log('Student selected:', value);
+                  setSelectedStudent(parseInt(value));
+                }}
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Выберите ученика" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((student) => (
+                    <SelectItem key={student.telegram_id} value={student.telegram_id.toString()}>
+                      {getStudentName(student)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="text-center py-3 text-sm text-muted-foreground border rounded-lg bg-gray-50">
+                У вас пока нет учеников. Поделитесь промокодом.
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
       {categories.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Назначить категорию целиком</CardTitle>
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-bold">Назначить категорию целиком</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -257,8 +255,9 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
                   size="sm"
                   onClick={() => assignCategory(category.id)}
                   disabled={!selectedStudent}
+                  className="h-9 text-sm"
                 >
-                  <Icon name="FolderPlus" className="mr-2 h-4 w-4" />
+                  <Icon name="FolderPlus" className="mr-1.5 h-3.5 w-3.5" />
                   {category.name}
                 </Button>
               ))}
@@ -267,18 +266,18 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Выбрать отдельные слова</CardTitle>
+      <Card className="border border-gray-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-bold">Выбрать отдельные слова</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+        <CardContent className="space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
             <Input
               type="text"
               placeholder="Поиск слов..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="flex-1"
+              className="flex-1 h-10 text-sm"
             />
             <Select
               value={categoryFilter === null ? 'all' : categoryFilter.toString()}
@@ -286,7 +285,7 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
                 setCategoryFilter(value === 'all' ? null : parseInt(value));
               }}
             >
-              <SelectTrigger className="w-full sm:w-[200px]">
+              <SelectTrigger className="w-full sm:w-[180px] h-10 text-sm">
                 <SelectValue placeholder="Все категории" />
               </SelectTrigger>
               <SelectContent>
@@ -301,42 +300,43 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <Button variant="outline" size="sm" onClick={selectAllWords}>
+            <Button variant="outline" size="sm" onClick={selectAllWords} className="h-9 text-sm">
               {selectedWords.size === words.length ? 'Снять выделение' : 'Выбрать все'}
             </Button>
-            <Badge variant="secondary">
+            <Badge variant="secondary" className="text-xs font-semibold">
               Выбрано: {selectedWords.size} из {words.length}
             </Badge>
           </div>
 
           {loading ? (
-            <div className="text-center py-8">
+            <div className="text-center py-6">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : words.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-6 text-sm text-muted-foreground">
               Слова не найдены
             </div>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
+            <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
               {words.map((word) => (
                 <div
                   key={word.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors cursor-pointer"
+                  className="flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
                   onClick={() => toggleWord(word.id)}
                 >
                   <Checkbox
                     checked={selectedWords.has(word.id)}
                     onCheckedChange={() => toggleWord(word.id)}
+                    className="shrink-0"
                   />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{word.english_text}</span>
-                      <span className="text-xs px-2 py-1 rounded-full bg-secondary">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="font-medium text-sm truncate">{word.english_text}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
                         {getCategoryName(word.category_id)}
                       </span>
                     </div>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-xs text-muted-foreground block truncate">
                       {word.russian_translation}
                     </span>
                   </div>
@@ -348,7 +348,7 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
           <Button
             onClick={assignWords}
             disabled={!selectedStudent || selectedWords.size === 0}
-            className="w-full"
+            className="w-full h-11 text-base font-semibold"
           >
             <Icon name="Send" className="mr-2 h-4 w-4" />
             Назначить выбранные слова ({selectedWords.size})

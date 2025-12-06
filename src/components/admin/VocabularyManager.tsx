@@ -268,17 +268,17 @@ export default function VocabularyManager() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold">Управление словарем</h2>
-          <p className="text-muted-foreground">Всего слов: {totalWords}</p>
+          <h2 className="text-xl font-bold">Управление словарем</h2>
+          <p className="text-sm text-muted-foreground">Всего слов: {totalWords}</p>
         </div>
         <div className="flex gap-2">
           <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => openCategoryDialog()} variant="outline">
-                <Icon name="FolderPlus" className="mr-2 h-4 w-4" />
+              <Button onClick={() => openCategoryDialog()} variant="outline" className="h-10 text-sm">
+                <Icon name="FolderPlus" className="mr-1.5 h-4 w-4" />
                 Категория
               </Button>
             </DialogTrigger>
@@ -317,8 +317,8 @@ export default function VocabularyManager() {
 
           <Dialog open={wordDialogOpen} onOpenChange={setWordDialogOpen}>
             <DialogTrigger asChild>
-              <Button onClick={() => openWordDialog()}>
-                <Icon name="Plus" className="mr-2 h-4 w-4" />
+              <Button onClick={() => openWordDialog()} className="h-10 text-sm">
+                <Icon name="Plus" className="mr-1.5 h-4 w-4" />
                 Добавить слово
               </Button>
             </DialogTrigger>
@@ -380,14 +380,14 @@ export default function VocabularyManager() {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2">
         <div className="flex-1">
           <Input
             type="text"
             placeholder="Поиск по английскому или русскому..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full"
+            className="w-full h-10 text-sm"
           />
         </div>
         <Select
@@ -399,7 +399,7 @@ export default function VocabularyManager() {
             else setSelectedCategoryFilter(parseInt(value));
           }}
         >
-          <SelectTrigger className="w-full sm:w-[200px]">
+          <SelectTrigger className="w-full sm:w-[180px] h-10 text-sm">
             <SelectValue placeholder="Все категории" />
           </SelectTrigger>
           <SelectContent>
@@ -415,22 +415,22 @@ export default function VocabularyManager() {
       </div>
 
       {categories.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Категории</CardTitle>
+        <Card className="border border-gray-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold">Категории</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {categories.map((category) => (
                 <div
                   key={category.id}
-                  className="flex items-center gap-2 px-3 py-1 rounded-full border bg-secondary/50 hover:bg-secondary transition-colors"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-300 bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
-                  <span className="text-sm font-medium">{category.name}</span>
+                  <span className="text-xs font-medium">{category.name}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-5 w-5 p-0"
+                    className="h-4 w-4 p-0 hover:bg-transparent"
                     onClick={() => openCategoryDialog(category)}
                   >
                     <Icon name="Edit" className="h-3 w-3" />
@@ -442,46 +442,47 @@ export default function VocabularyManager() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
+      <Card className="border border-gray-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-bold">
             {searchQuery ? `Результаты поиска` : selectedCategoryFilter !== null ? `Слова в категории` : 'Все слова'}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="text-center py-8">
+            <div className="text-center py-6">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <p className="text-sm text-muted-foreground mt-2">Загрузка...</p>
+              <p className="text-xs text-muted-foreground mt-2">Загрузка...</p>
             </div>
           ) : words.length === 0 ? (
-            <div className="text-center py-8">
-              <Icon name="Search" size={48} className="mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">
+            <div className="text-center py-6">
+              <Icon name="Search" size={40} className="mx-auto mb-3 text-muted-foreground opacity-30" />
+              <p className="text-sm text-muted-foreground">
                 {searchQuery ? 'Ничего не найдено' : 'Нет слов. Добавьте первое слово!'}
               </p>
             </div>
           ) : (
             <>
-              <div className="grid gap-3">
+              <div className="grid gap-2">
                 {words.map((word) => (
                   <div
                     key={word.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent transition-colors"
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-lg">{word.english_text}</p>
-                        <span className="text-xs px-2 py-1 rounded-full bg-secondary">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-semibold text-base truncate">{word.english_text}</p>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 shrink-0">
                           {getCategoryName(word.category_id)}
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground">{word.russian_translation}</p>
+                      <p className="text-sm text-muted-foreground truncate">{word.russian_translation}</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => openWordDialog(word)}
+                      className="shrink-0 h-8 w-8 p-0"
                     >
                       <Icon name="Edit" className="h-4 w-4" />
                     </Button>
@@ -490,16 +491,17 @@ export default function VocabularyManager() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-6 border-t">
-                  <p className="text-sm text-muted-foreground">
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <p className="text-xs text-muted-foreground">
                     Страница {currentPage} из {totalPages}
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
                     >
                       <Icon name="ChevronLeft" className="h-4 w-4" />
                     </Button>
@@ -508,6 +510,7 @@ export default function VocabularyManager() {
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
                     >
                       <Icon name="ChevronRight" className="h-4 w-4" />
                     </Button>
