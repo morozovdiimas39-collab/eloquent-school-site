@@ -164,6 +164,166 @@ def get_all_students() -> List[Dict[str, Any]]:
     conn.close()
     return students
 
+def get_all_categories() -> List[Dict[str, Any]]:
+    """Получает список всех категорий"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, name, description, created_at FROM {SCHEMA}.categories ORDER BY name"
+    )
+    
+    categories = []
+    for row in cur.fetchall():
+        categories.append({
+            'id': row[0],
+            'name': row[1],
+            'description': row[2],
+            'created_at': row[3].isoformat() if row[3] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return categories
+
+def create_category(name: str, description: str = None) -> Dict[str, Any]:
+    """Создает новую категорию"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    name_escaped = name.replace("'", "''")
+    if description is None:
+        desc_value = 'NULL'
+    else:
+        desc_escaped = description.replace("'", "''")
+        desc_value = f"'{desc_escaped}'"
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.categories (name, description) VALUES ('{name_escaped}', {desc_value})"
+        f" RETURNING id, name, description, created_at"
+    )
+    
+    row = cur.fetchone()
+    category = {
+        'id': row[0],
+        'name': row[1],
+        'description': row[2],
+        'created_at': row[3].isoformat() if row[3] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return category
+
+def update_category(category_id: int, name: str, description: str = None) -> Dict[str, Any]:
+    """Обновляет категорию"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    name_escaped = name.replace("'", "''")
+    if description is None:
+        desc_value = 'NULL'
+    else:
+        desc_escaped = description.replace("'", "''")
+        desc_value = f"'{desc_escaped}'"
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.categories SET name = '{name_escaped}', "
+        f"description = {desc_value} "
+        f"WHERE id = {category_id} RETURNING id, name, description, created_at"
+    )
+    
+    row = cur.fetchone()
+    category = {
+        'id': row[0],
+        'name': row[1],
+        'description': row[2],
+        'created_at': row[3].isoformat() if row[3] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return category
+
+def get_words_by_category(category_id: int) -> List[Dict[str, Any]]:
+    """Получает слова по категории"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, category_id, english_text, russian_translation, created_at "
+        f"FROM {SCHEMA}.words WHERE category_id = {category_id} ORDER BY created_at DESC"
+    )
+    
+    words = []
+    for row in cur.fetchall():
+        words.append({
+            'id': row[0],
+            'category_id': row[1],
+            'english_text': row[2],
+            'russian_translation': row[3],
+            'created_at': row[4].isoformat() if row[4] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return words
+
+def create_word(category_id: int, english_text: str, russian_translation: str) -> Dict[str, Any]:
+    """Создает новое слово"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    english_text_escaped = english_text.replace("'", "''")
+    russian_translation_escaped = russian_translation.replace("'", "''")
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.words (category_id, english_text, russian_translation) "
+        f"VALUES ({category_id}, '{english_text_escaped}', '{russian_translation_escaped}') "
+        f"RETURNING id, category_id, english_text, russian_translation, created_at"
+    )
+    
+    row = cur.fetchone()
+    word = {
+        'id': row[0],
+        'category_id': row[1],
+        'english_text': row[2],
+        'russian_translation': row[3],
+        'created_at': row[4].isoformat() if row[4] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return word
+
+def update_word(word_id: int, english_text: str, russian_translation: str) -> Dict[str, Any]:
+    """Обновляет слово"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    english_text_escaped = english_text.replace("'", "''")
+    russian_translation_escaped = russian_translation.replace("'", "''")
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.words SET english_text = '{english_text_escaped}', "
+        f"russian_translation = '{russian_translation_escaped}' "
+        f"WHERE id = {word_id} "
+        f"RETURNING id, category_id, english_text, russian_translation, created_at"
+    )
+    
+    row = cur.fetchone()
+    word = {
+        'id': row[0],
+        'category_id': row[1],
+        'english_text': row[2],
+        'russian_translation': row[3],
+        'created_at': row[4].isoformat() if row[4] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return word
+
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
     conn = get_db_connection()
@@ -210,7 +370,8 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
-    Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students
+    Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
+    get_categories, create_category, update_category, get_words, create_word, update_word
     """
     method = event.get('httpMethod', 'POST')
     
@@ -367,6 +528,156 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'students': students}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_categories':
+            categories = get_all_categories()
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'categories': categories}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'create_category':
+            name = body.get('name')
+            description = body.get('description')
+            
+            if not name:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'name is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            category = create_category(name, description)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'category': category}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_category':
+            category_id = body.get('category_id')
+            name = body.get('name')
+            description = body.get('description')
+            
+            if not category_id or not name:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'category_id and name are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            category = update_category(category_id, name, description)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'category': category}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_words':
+            category_id = body.get('category_id')
+            
+            if not category_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'category_id is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            words = get_words_by_category(category_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'words': words}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'create_word':
+            category_id = body.get('category_id')
+            english_text = body.get('english_text')
+            russian_translation = body.get('russian_translation')
+            
+            if not category_id or not english_text or not russian_translation:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'category_id, english_text, and russian_translation are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            word = create_word(category_id, english_text, russian_translation)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'word': word}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_word':
+            word_id = body.get('word_id')
+            english_text = body.get('english_text')
+            russian_translation = body.get('russian_translation')
+            
+            if not word_id or not english_text or not russian_translation:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'word_id, english_text, and russian_translation are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            word = update_word(word_id, english_text, russian_translation)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'word': word}),
                 'isBase64Encoded': False
             }
         

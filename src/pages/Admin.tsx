@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
+import VocabularyManager from '@/components/admin/VocabularyManager';
 
 interface User {
   telegram_id: number;
@@ -29,7 +30,7 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary'>('teachers');
 
   useEffect(() => {
     loadData();
@@ -120,7 +121,7 @@ export default function Admin() {
               className="h-12 text-base"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={() => setActiveTab('teachers')}
               variant={activeTab === 'teachers' ? 'default' : 'outline'}
@@ -136,6 +137,14 @@ export default function Admin() {
             >
               <Icon name="BookOpen" size={20} className="mr-2" />
               Ученики ({students.length})
+            </Button>
+            <Button
+              onClick={() => setActiveTab('vocabulary')}
+              variant={activeTab === 'vocabulary' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-12"
+            >
+              <Icon name="Book" size={20} className="mr-2" />
+              Словарь
             </Button>
           </div>
         </div>
@@ -255,6 +264,10 @@ export default function Admin() {
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'vocabulary' && (
+          <VocabularyManager />
         )}
       </div>
     </div>
