@@ -3,10 +3,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
-import AssignWords from '@/components/teacher/AssignWords';
 import MyWords from '@/components/student/MyWords';
+import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
 
 interface TelegramUser {
   id: number;
@@ -69,6 +71,8 @@ export default function Dashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [assignWordsOpen, setAssignWordsOpen] = useState(false);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -271,27 +275,37 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm sticky top-0 z-10">
-        <div className="px-4 sm:px-6 py-4">
+        <div className="px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
-            <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-600 to-indigo-600 ring-2 ring-blue-500/20 shadow-lg">
+            <Avatar className="h-11 w-11 bg-gradient-to-br from-blue-600 to-indigo-600 ring-2 ring-blue-500/20 shadow-lg">
               {user.photo_url && <AvatarImage src={user.photo_url} alt={userName} />}
-              <AvatarFallback className="text-white text-lg font-semibold">
+              <AvatarFallback className="text-white text-base font-semibold">
                 {userName.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <h1 className="font-bold text-xl text-gray-900 truncate">
+              <h1 className="font-bold text-lg text-gray-900 truncate">
                 {userName}
               </h1>
               {role && (
                 <Badge 
-                  className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/50 font-medium text-xs"
+                  className="inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/50 font-medium text-xs"
                 >
-                  <Icon name={roleIcon} size={12} />
+                  <Icon name={roleIcon} size={11} />
                   <span>{roleText}</span>
                 </Badge>
               )}
             </div>
+            {role && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                className="h-9 w-9 p-0 shrink-0"
+              >
+                <Icon name="Settings" size={18} className="text-gray-600" />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -375,30 +389,31 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {role && (
-          <Card className="border border-gray-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
+        <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
                 <Icon name="Settings" size={20} />
                 Настройки
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 pt-2">
               <Button
                 onClick={() => {
                   setRole(null);
                   setPromocode(null);
                   setTeacherId(null);
+                  setSettingsOpen(false);
                 }}
                 variant="outline"
-                className="w-full h-11 text-base font-medium border hover:bg-gray-50 transition-all"
+                className="w-full h-11 text-sm font-medium"
               >
-                <Icon name="RefreshCw" size={18} className="mr-2" />
+                <Icon name="RefreshCw" size={16} className="mr-2" />
                 Сменить роль
               </Button>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {role === 'teacher' && promocode && (
           <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-200 shadow-sm">
@@ -453,56 +468,69 @@ export default function Dashboard() {
         {role === 'teacher' && (
           <>
             <Card className="border border-gray-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
-                  <Icon name="Users" size={20} />
-                  Мои ученики
-                  <Badge className="ml-auto bg-indigo-100 text-indigo-700 text-xs font-semibold">
-                    {students.length}
-                  </Badge>
-                </CardTitle>
-                <CardDescription className="text-sm text-gray-600">
-                  Ученики, которые привязали твой промокод
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {students.length === 0 ? (
-                  <div className="text-center py-6 text-gray-500">
-                    <Icon name="UserX" size={40} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-sm font-medium">Пока нет учеников</p>
-                    <p className="text-xs mt-1 text-gray-400">Поделись промокодом с учениками</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {students.map((student) => {
-                      const studentName = student.first_name || student.username || 'Ученик';
-                      const studentUsername = student.username ? `@${student.username}` : null;
-                      
-                      return (
-                        <div
-                          key={student.telegram_id}
-                          className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all"
-                        >
-                          <Avatar className="h-10 w-10 bg-gradient-to-br from-blue-600 to-indigo-600 ring-2 ring-blue-500/20 shadow-sm">
-                            <AvatarFallback className="text-white text-sm font-semibold">
-                              {studentName.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-gray-900 text-sm truncate">{studentName}</p>
-                            {studentUsername && (
-                              <p className="text-xs text-gray-500 truncate">{studentUsername}</p>
-                            )}
-                          </div>
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="students" className="border-none">
+                  <CardHeader className="pb-2">
+                    <AccordionTrigger className="hover:no-underline py-2">
+                      <CardTitle className="flex items-center gap-2 text-base font-bold text-gray-900">
+                        <Icon name="Users" size={18} />
+                        Мои ученики
+                        <Badge className="ml-2 bg-indigo-100 text-indigo-700 text-xs font-semibold">
+                          {students.length}
+                        </Badge>
+                      </CardTitle>
+                    </AccordionTrigger>
+                  </CardHeader>
+                  <AccordionContent>
+                    <CardContent className="pt-2 pb-4">
+                      {students.length === 0 ? (
+                        <div className="text-center py-4 text-sm text-gray-600 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          <Icon name="Users" size={32} className="mx-auto mb-2 text-gray-400 opacity-40" />
+                          <p className="font-medium">Пока нет учеников</p>
+                          <p className="text-xs text-gray-500 mt-1">Поделись промокодом</p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {students.map((student) => {
+                            const studentName = student.first_name || student.username || `ID: ${student.telegram_id}`;
+                            return (
+                              <div
+                                key={student.telegram_id}
+                                className="flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/30 transition-all"
+                              >
+                                <Avatar className="h-9 w-9 bg-gradient-to-br from-blue-500 to-cyan-500 ring-1 ring-blue-200">
+                                  <AvatarFallback className="text-white text-sm font-semibold">
+                                    {studentName.charAt(0).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-sm text-gray-900 truncate">{studentName}</p>
+                                  {student.username && (
+                                    <p className="text-xs text-gray-500 truncate">@{student.username}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </Card>
 
-            {user && <AssignWords teacherId={user.id} />}
+            <Card className="border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-sm">
+              <CardContent className="pt-5 pb-5">
+                <Button
+                  onClick={() => setAssignWordsOpen(true)}
+                  className="w-full h-12 text-base font-semibold bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                >
+                  <Icon name="BookPlus" size={18} className="mr-2" />
+                  Назначить слова ученику
+                </Button>
+              </CardContent>
+            </Card>
           </>
         )}
 
@@ -524,6 +552,14 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {user && (
+        <AssignWordsDialog
+          open={assignWordsOpen}
+          onOpenChange={setAssignWordsOpen}
+          teacherId={user.id}
+        />
+      )}
     </div>
   );
 }
