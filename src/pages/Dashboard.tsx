@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
@@ -13,6 +13,7 @@ interface TelegramUser {
   first_name?: string;
   last_name?: string;
   username?: string;
+  photo_url?: string;
 }
 
 declare global {
@@ -273,6 +274,7 @@ export default function Dashboard() {
         <div className="px-4 sm:px-6 py-4">
           <div className="flex items-center gap-3">
             <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-600 to-indigo-600 ring-2 ring-blue-500/20 shadow-lg">
+              {user.photo_url && <AvatarImage src={user.photo_url} alt={userName} />}
               <AvatarFallback className="text-white text-lg font-semibold">
                 {userName.charAt(0).toUpperCase()}
               </AvatarFallback>
