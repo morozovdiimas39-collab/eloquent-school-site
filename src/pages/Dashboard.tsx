@@ -5,6 +5,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
+import AssignWords from '@/components/teacher/AssignWords';
+import MyWords from '@/components/student/MyWords';
 
 interface TelegramUser {
   id: number;
@@ -424,7 +426,11 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {role === 'student' && (
+        {role === 'student' && teacherId && user && (
+          <MyWords studentId={user.id} />
+        )}
+
+        {role === 'student' && !teacherId && (
           <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 shadow-lg">
             <CardContent className="pt-5 pb-5">
               <div className="flex items-start gap-4">
@@ -494,36 +500,7 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="bg-white border border-gray-200 shadow-lg">
-              <CardContent className="pt-5 pb-5">
-                <div className="flex items-start gap-4">
-                  <div className="bg-blue-100 p-2.5 rounded-full">
-                    <Icon name="Info" size={24} className="text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-bold text-lg text-gray-900 mb-3">Как пользоваться:</p>
-                    <ul className="space-y-2 text-base text-gray-700">
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">•</span>
-                        <span>Скопируй свой промокод выше</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">•</span>
-                        <span>Отправь его своим ученикам</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">•</span>
-                        <span>Они смогут использовать бота с твоим промокодом</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 font-bold">•</span>
-                        <span>Задавай вопросы боту в Telegram</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {user && <AssignWords teacherId={user.id} />}
           </>
         )}
 

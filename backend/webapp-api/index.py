@@ -354,6 +354,84 @@ def update_word(word_id: int, english_text: str, russian_translation: str) -> Di
     conn.close()
     return word
 
+def assign_words_to_student(teacher_id: int, student_id: int, word_ids: List[int]) -> Dict[str, Any]:
+    """Назначает слова ученику от преподавателя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    assigned_count = 0
+    for word_id in word_ids:
+        try:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                f"VALUES ({student_id}, {word_id}, {teacher_id}) "
+                f"ON CONFLICT (student_id, word_id) DO NOTHING"
+            )
+            assigned_count += 1
+        except Exception:
+            pass
+    
+    cur.close()
+    conn.close()
+    return {'success': True, 'assigned_count': assigned_count}
+
+def assign_category_to_student(teacher_id: int, student_id: int, category_id: int) -> Dict[str, Any]:
+    """Назначает все слова из категории ученику"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id FROM {SCHEMA}.words WHERE category_id = {category_id}"
+    )
+    
+    word_ids = [row[0] for row in cur.fetchall()]
+    
+    assigned_count = 0
+    for word_id in word_ids:
+        try:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                f"VALUES ({student_id}, {word_id}, {teacher_id}) "
+                f"ON CONFLICT (student_id, word_id) DO NOTHING"
+            )
+            assigned_count += 1
+        except Exception:
+            pass
+    
+    cur.close()
+    conn.close()
+    return {'success': True, 'assigned_count': assigned_count}
+
+def get_student_words(student_id: int) -> List[Dict[str, Any]]:
+    """Получает все назначенные слова для ученика"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT sw.id, sw.word_id, w.english_text, w.russian_translation, "
+        f"w.category_id, sw.assigned_at, sw.status "
+        f"FROM {SCHEMA}.student_words sw "
+        f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+        f"WHERE sw.student_id = {student_id} "
+        f"ORDER BY sw.assigned_at DESC"
+    )
+    
+    words = []
+    for row in cur.fetchall():
+        words.append({
+            'id': row[0],
+            'word_id': row[1],
+            'english_text': row[2],
+            'russian_translation': row[3],
+            'category_id': row[4],
+            'assigned_at': row[5].isoformat() if row[5] else None,
+            'status': row[6]
+        })
+    
+    cur.close()
+    conn.close()
+    return words
+
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
     conn = get_db_connection()
@@ -401,7 +479,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
     Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
-    get_categories, create_category, update_category, search_words, create_word, update_word
+    get_categories, create_category, update_category, search_words, create_word, update_word,
+    assign_words, assign_category, get_student_words
     """
     method = event.get('httpMethod', 'POST')
     
@@ -423,7 +502,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         action = body.get('action')
         telegram_id = body.get('telegram_id')
         
-        if not telegram_id and action not in ['get_all_teachers', 'get_all_students', 'get_categories', 'create_category', 'update_category', 'search_words', 'create_word', 'update_word']:
+        if not telegram_id and action not in ['get_all_teachers', 'get_all_students', 'get_categories', 'create_category', 'update_category', 'search_words', 'create_word', 'update_word', 'assign_words', 'assign_category', 'get_student_words']:
             return {
                 'statusCode': 400,
                 'headers': {
@@ -700,6 +779,88 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'word': word}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'assign_words':
+            teacher_id = body.get('teacher_id')
+            student_id = body.get('student_id')
+            word_ids = body.get('word_ids', [])
+            
+            if not teacher_id or not student_id or not word_ids:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'teacher_id, student_id, and word_ids are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            result = assign_words_to_student(teacher_id, student_id, word_ids)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'assign_category':
+            teacher_id = body.get('teacher_id')
+            student_id = body.get('student_id')
+            category_id = body.get('category_id')
+            
+            if not teacher_id or not student_id or not category_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'teacher_id, student_id, and category_id are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            result = assign_category_to_student(teacher_id, student_id, category_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_student_words':
+            student_id = body.get('student_id')
+            
+            if not student_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            words = get_student_words(student_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'words': words}),
                 'isBase64Encoded': False
             }
         
