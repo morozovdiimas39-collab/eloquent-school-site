@@ -245,14 +245,33 @@ def update_category(category_id: int, name: str, description: str = None) -> Dic
     conn.close()
     return category
 
-def get_words_by_category(category_id: int) -> List[Dict[str, Any]]:
-    """Получает слова по категории"""
+def search_words(search_query: str = None, category_id: int = None, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
+    """Поиск слов с пагинацией"""
     conn = get_db_connection()
     cur = conn.cursor()
     
+    where_parts = []
+    if search_query:
+        search_escaped = search_query.replace("'", "''")
+        where_parts.append(f"(english_text ILIKE '%{search_escaped}%' OR russian_translation ILIKE '%{search_escaped}%')")
+    
+    if category_id is not None:
+        if category_id == 0:
+            where_parts.append("category_id IS NULL")
+        else:
+            where_parts.append(f"category_id = {category_id}")
+    
+    where_clause = " AND ".join(where_parts) if where_parts else "1=1"
+    
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.words WHERE {where_clause}"
+    )
+    total_count = cur.fetchone()[0]
+    
     cur.execute(
         f"SELECT id, category_id, english_text, russian_translation, created_at "
-        f"FROM {SCHEMA}.words WHERE category_id = {category_id} ORDER BY created_at DESC"
+        f"FROM {SCHEMA}.words WHERE {where_clause} "
+        f"ORDER BY created_at DESC LIMIT {limit} OFFSET {offset}"
     )
     
     words = []
@@ -267,9 +286,15 @@ def get_words_by_category(category_id: int) -> List[Dict[str, Any]]:
     
     cur.close()
     conn.close()
-    return words
+    
+    return {
+        'words': words,
+        'total': total_count,
+        'limit': limit,
+        'offset': offset
+    }
 
-def create_word(category_id: int, english_text: str, russian_translation: str) -> Dict[str, Any]:
+def create_word(english_text: str, russian_translation: str, category_id: int = None) -> Dict[str, Any]:
     """Создает новое слово"""
     conn = get_db_connection()
     cur = conn.cursor()
@@ -277,9 +302,14 @@ def create_word(category_id: int, english_text: str, russian_translation: str) -
     english_text_escaped = english_text.replace("'", "''")
     russian_translation_escaped = russian_translation.replace("'", "''")
     
+    if category_id is None or category_id == 0:
+        cat_value = 'NULL'
+    else:
+        cat_value = str(category_id)
+    
     cur.execute(
         f"INSERT INTO {SCHEMA}.words (category_id, english_text, russian_translation) "
-        f"VALUES ({category_id}, '{english_text_escaped}', '{russian_translation_escaped}') "
+        f"VALUES ({cat_value}, '{english_text_escaped}', '{russian_translation_escaped}') "
         f"RETURNING id, category_id, english_text, russian_translation, created_at"
     )
     
@@ -371,7 +401,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
     Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
-    get_categories, create_category, update_category, get_words, create_word, update_word
+    get_categories, create_category, update_category, search_words, create_word, update_word
     """
     method = event.get('httpMethod', 'POST')
     
@@ -599,21 +629,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
-        elif action == 'get_words':
+        elif action == 'search_words':
+            search_query = body.get('search_query')
             category_id = body.get('category_id')
+            limit = body.get('limit', 50)
+            offset = body.get('offset', 0)
             
-            if not category_id:
-                return {
-                    'statusCode': 400,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    },
-                    'body': json.dumps({'error': 'category_id is required'}),
-                    'isBase64Encoded': False
-                }
-            
-            words = get_words_by_category(category_id)
+            result = search_words(search_query, category_id, limit, offset)
             
             return {
                 'statusCode': 200,
@@ -621,27 +643,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 },
-                'body': json.dumps({'words': words}),
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         
         elif action == 'create_word':
-            category_id = body.get('category_id')
             english_text = body.get('english_text')
             russian_translation = body.get('russian_translation')
+            category_id = body.get('category_id')
             
-            if not category_id or not english_text or not russian_translation:
+            if not english_text or not russian_translation:
                 return {
                     'statusCode': 400,
                     'headers': {
                         'Content-Type': 'application/json',
                         'Access-Control-Allow-Origin': '*'
                     },
-                    'body': json.dumps({'error': 'category_id, english_text, and russian_translation are required'}),
+                    'body': json.dumps({'error': 'english_text and russian_translation are required'}),
                     'isBase64Encoded': False
                 }
             
-            word = create_word(category_id, english_text, russian_translation)
+            word = create_word(english_text, russian_translation, category_id)
             
             return {
                 'statusCode': 200,
