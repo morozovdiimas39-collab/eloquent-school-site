@@ -272,31 +272,9 @@ export default function AssignWordsDialog({ open, onOpenChange, teacherId }: Ass
               Назад к выбору ученика
             </Button>
 
-            {categories.length > 0 && (
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  Назначить всю категорию
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {categories.map((category) => (
-                    <Button
-                      key={category.id}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => assignCategory(category.id)}
-                      className="h-9 text-sm"
-                    >
-                      <Icon name="FolderPlus" className="mr-1.5 h-3.5 w-3.5" />
-                      {category.name}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="border-t pt-3">
+            <div>
               <label className="text-sm font-medium mb-2 block">
-                Или выбери отдельные слова
+                Выбери слова
               </label>
               
               <div className="flex flex-col sm:flex-row gap-2 mb-3">
@@ -350,12 +328,26 @@ export default function AssignWordsDialog({ open, onOpenChange, teacherId }: Ass
                     <div
                       key={word.id}
                       className="flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all cursor-pointer"
-                      onClick={() => toggleWord(word.id)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleWord(word.id);
+                      }}
                     >
                       <Checkbox
                         checked={selectedWords.has(word.id)}
-                        onCheckedChange={() => toggleWord(word.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedWords(prev => new Set([...prev, word.id]));
+                          } else {
+                            setSelectedWords(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(word.id);
+                              return newSet;
+                            });
+                          }
+                        }}
                         className="shrink-0"
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5">
