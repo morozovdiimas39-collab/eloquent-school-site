@@ -120,7 +120,7 @@ def get_conversation_history(user_id: int) -> List[Dict[str, str]]:
     
     conversation_id = row[0]
     
-    cur.execute(f"SELECT role, content FROM {SCHEMA}.messages WHERE conversation_id = {conversation_id} ORDER BY created_at ASC LIMIT 20")
+    cur.execute(f"SELECT role, content FROM {SCHEMA}.messages WHERE conversation_id = {conversation_id} ORDER BY created_at ASC LIMIT 50")
     
     history = [{'role': row[0], 'content': row[1]} for row in cur.fetchall()]
     
@@ -223,8 +223,8 @@ Remember: Chat like a friend, not a teacher! Keep it natural, fun, and conversat
     
     messages = [{'role': 'system', 'text': system_prompt}]
     
-    # Добавляем только последние 5 сообщений из истории для контекста
-    for msg in history[-5:]:
+    # Добавляем последние 15 сообщений из истории для контекста
+    for msg in history[-15:]:
         # YandexGPT использует роли 'user' и 'assistant'
         role = 'user' if msg['role'] == 'user' else 'assistant'
         messages.append({
