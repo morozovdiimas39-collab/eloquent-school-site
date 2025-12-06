@@ -348,30 +348,29 @@ export default function VocabularyManager() {
                     placeholder="кошка"
                   />
                 </div>
-                {!editingWord && (
-                  <div>
-                    <Label htmlFor="category">Категория (опционально)</Label>
-                    <Select 
-                      value={wordForm.category_id?.toString() || 'none'} 
-                      onValueChange={(value) => setWordForm({ 
-                        ...wordForm, 
-                        category_id: value === 'none' ? null : parseInt(value) 
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Выберите категорию" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Без категории</SelectItem>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id.toString()}>
-                            {cat.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                <div style={{ display: editingWord ? 'none' : 'block' }}>
+                  <Label htmlFor="category">Категория (опционально)</Label>
+                  <Select 
+                    key="word-category-select"
+                    value={wordForm.category_id?.toString() || 'none'} 
+                    onValueChange={(value) => setWordForm({ 
+                      ...wordForm, 
+                      category_id: value === 'none' ? null : parseInt(value) 
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Выберите категорию" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Без категории</SelectItem>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id.toString()}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button onClick={editingWord ? handleUpdateWord : handleCreateWord} className="w-full">
                   {editingWord ? 'Сохранить' : 'Добавить'}
                 </Button>
@@ -391,7 +390,8 @@ export default function VocabularyManager() {
             className="w-full"
           />
         </div>
-        <Select 
+        <Select
+          key="filter-category-select" 
           value={selectedCategoryFilter === null ? 'all' : selectedCategoryFilter === 0 ? 'uncategorized' : selectedCategoryFilter.toString()} 
           onValueChange={(value) => {
             if (value === 'all') setSelectedCategoryFilter(null);
