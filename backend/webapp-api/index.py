@@ -22,7 +22,7 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode, teacher_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode, teacher_id, language_level, preferred_topics, timezone FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -36,7 +36,10 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
             'last_name': row[3],
             'role': row[4],
             'promocode': row[5],
-            'teacher_id': row[6]
+            'teacher_id': row[6],
+            'language_level': row[7],
+            'preferred_topics': row[8] if row[8] else [],
+            'timezone': row[9]
         }
     return None
 
@@ -629,6 +632,29 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
         'average_mastery': float(avg_mastery)
     }
 
+def update_student_settings(telegram_id: int, language_level: str = None, preferred_topics: List[Dict[str, str]] = None, timezone: str = None) -> Dict[str, Any]:
+    """Обновляет настройки ученика"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    updates = []
+    if language_level:
+        updates.append(f"language_level = '{language_level}'")
+    if preferred_topics is not None:
+        topics_json = json.dumps(preferred_topics).replace("'", "''")
+        updates.append(f"preferred_topics = '{topics_json}'::jsonb")
+    if timezone:
+        timezone_escaped = timezone.replace("'", "''")
+        updates.append(f"timezone = '{timezone_escaped}'")
+    
+    if updates:
+        update_sql = ", ".join(updates)
+        cur.execute(f"UPDATE {SCHEMA}.users SET {update_sql}, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+    
+    cur.close()
+    conn.close()
+    return {'success': True}
+
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
     conn = get_db_connection()
@@ -677,7 +703,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     API для WebApp личного кабинета
     Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
     get_categories, create_category, update_category, search_words, create_word, update_word,
-    assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats
+    assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats, update_student_settings
     """
     method = event.get('httpMethod', 'POST')
     
@@ -1140,6 +1166,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps(stats),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_student_settings':
+            language_level = body.get('language_level')
+            preferred_topics = body.get('preferred_topics')
+            timezone = body.get('timezone')
+            
+            result = update_student_settings(telegram_id, language_level, preferred_topics, timezone)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         

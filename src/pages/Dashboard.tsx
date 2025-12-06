@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
 import MyWords from '@/components/student/MyWords';
+import StudentSettings from '@/components/student/StudentSettings';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
 
 interface TelegramUser {
@@ -73,6 +74,9 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [assignWordsOpen, setAssignWordsOpen] = useState(false);
+  const [languageLevel, setLanguageLevel] = useState('A1');
+  const [preferredTopics, setPreferredTopics] = useState<Array<{emoji: string, topic: string}>>([]);
+  const [timezone, setTimezone] = useState('UTC');
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -113,6 +117,15 @@ export default function Dashboard() {
         }
         if (data.user.teacher_id) {
           setTeacherId(data.user.teacher_id);
+        }
+        if (data.user.language_level) {
+          setLanguageLevel(data.user.language_level);
+        }
+        if (data.user.preferred_topics) {
+          setPreferredTopics(data.user.preferred_topics);
+        }
+        if (data.user.timezone) {
+          setTimezone(data.user.timezone);
         }
         if (data.user.role === 'teacher') {
           loadStudents(telegramId);
@@ -444,7 +457,15 @@ export default function Dashboard() {
         )}
 
         {role === 'student' && teacherId && user && (
-          <MyWords studentId={user.id} />
+          <>
+            <StudentSettings 
+              studentId={user.id}
+              currentLevel={languageLevel}
+              currentTopics={preferredTopics}
+              currentTimezone={timezone}
+            />
+            <MyWords studentId={user.id} />
+          </>
         )}
 
         {role === 'student' && !teacherId && (

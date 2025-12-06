@@ -18,7 +18,7 @@ def get_user(telegram_id: int):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -30,7 +30,9 @@ def get_user(telegram_id: int):
             'username': row[1],
             'first_name': row[2],
             'last_name': row[3],
-            'role': row[4]
+            'role': row[4],
+            'language_level': row[5] or 'A1',
+            'preferred_topics': row[6] if row[6] else []
         }
     return None
 
@@ -147,25 +149,49 @@ def save_message(user_id: int, role: str, content: str):
     cur.close()
     conn.close()
 
-def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None) -> str:
-    """Вызывает YandexGPT API с учетом слов для практики"""
+def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
+    """Вызывает YandexGPT API с учетом слов, уровня и тем"""
     api_key = os.environ['YANDEX_CLOUD_API_KEY']
     folder_id = os.environ['YANDEX_CLOUD_FOLDER_ID']
     
-    # Формируем system prompt с учетом слов
-    system_prompt = """You are an English language tutor. Always communicate in English only.
-Your task is to help the student practice English vocabulary through natural conversation.
+    # Определяем сложность диалога по уровню
+    level_instructions = {
+        'A1': 'Use very simple words and short sentences. Speak slowly and clearly. Use present simple tense mostly.',
+        'A2': 'Use simple everyday vocabulary. Keep sentences clear and not too long. Use basic grammar structures.',
+        'B1': 'Use common vocabulary. You can use more complex sentences. Mix different tenses naturally.',
+        'B2': 'Use varied vocabulary including some idioms. Use complex grammar naturally. Discuss abstract topics.',
+        'C1': 'Use sophisticated vocabulary and expressions. Use advanced grammar structures. Discuss nuanced topics.',
+        'C2': 'Use native-level vocabulary and expressions. Feel free to use idioms, slang, and complex structures.'
+    }
+    
+    level_instruction = level_instructions.get(language_level, level_instructions['A1'])
+    
+    # Формируем system prompt
+    system_prompt = f"""You are Anya, a friendly and supportive English language tutor. Your student's level is {language_level}.
 
-Guidelines:
-- Speak only in English
-- Use the vocabulary words naturally in conversation
-- If the student makes a grammar or vocabulary mistake, politely correct them immediately
+Your personality:
+- Warm, encouraging, and patient
+- Enthusiastic about helping students learn
+- You love initiating interesting conversations
+- You gently correct mistakes without being harsh
+
+Language level adaptation ({language_level}):
+{level_instruction}
+
+Your approach:
+- Always communicate in English only
+- If the student makes a grammar or vocabulary mistake, politely correct them: "Good try! It's better to say: [correct version]"
 - Keep the conversation engaging and natural
-- Focus on helping them use the target vocabulary correctly"""
+- Be the conversation leader - ask follow-up questions
+- Show genuine interest in what the student shares"""
     
     if session_words:
         words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
-        system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}"
+        system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}\nTry to use these words naturally in the conversation."
+    
+    if preferred_topics and len(preferred_topics) > 0:
+        topics_list = [f"{t['emoji']} {t['topic']}" for t in preferred_topics[:5]]
+        system_prompt += f"\n\nStudent's favorite topics: {', '.join(topics_list)}\nFeel free to bring up these topics in conversation."
     
     messages = [{'role': 'system', 'text': system_prompt}]
     
@@ -371,6 +397,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             # Если ученик - загружаем слова для практики
             session_words = None
+            language_level = existing_user.get('language_level', 'A1')
+            preferred_topics = existing_user.get('preferred_topics', [])
+            
             if existing_user.get('role') == 'student':
                 try:
                     session_words = get_session_words(user['id'], limit=10)
@@ -380,8 +409,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Сохраняем вопрос пользователя
             save_message(user['id'], 'user', text)
             
-            # Получаем ответ AI с учетом слов для практики
-            ai_response = call_yandex_gpt(text, history, session_words)
+            # Получаем ответ AI с учетом слов, уровня и тем
+            ai_response = call_yandex_gpt(text, history, session_words, language_level, preferred_topics)
             
             # Сохраняем ответ AI
             save_message(user['id'], 'assistant', ai_response)

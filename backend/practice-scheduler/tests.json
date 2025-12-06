@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Test scheduler execution",
+      "method": "POST",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "status": "completed"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
