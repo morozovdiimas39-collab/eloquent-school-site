@@ -620,6 +620,58 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
     )
     avg_mastery = cur.fetchone()[0] or 0
     
+    # Streak данные
+    cur.execute(
+        f"SELECT current_streak, longest_streak, total_practice_days FROM {SCHEMA}.practice_streaks "
+        f"WHERE student_id = {student_id}"
+    )
+    streak_row = cur.fetchone()
+    if streak_row:
+        current_streak = streak_row[0]
+        longest_streak = streak_row[1]
+        total_practice_days = streak_row[2]
+    else:
+        current_streak = 0
+        longest_streak = 0
+        total_practice_days = 0
+    
+    # Статистика за последние 7 дней
+    cur.execute(
+        f"SELECT practice_date, messages_sent, words_practiced, errors_corrected "
+        f"FROM {SCHEMA}.daily_stats "
+        f"WHERE student_id = {student_id} AND practice_date >= CURRENT_DATE - INTERVAL '7 days' "
+        f"ORDER BY practice_date DESC"
+    )
+    daily_stats = []
+    for row in cur.fetchall():
+        daily_stats.append({
+            'date': row[0].isoformat(),
+            'messages': row[1],
+            'words': row[2],
+            'errors': row[3]
+        })
+    
+    # Достижения
+    cur.execute(
+        f"SELECT a.code, a.title_en, a.title_ru, a.emoji, a.points, ua.unlocked_at "
+        f"FROM {SCHEMA}.user_achievements ua "
+        f"JOIN {SCHEMA}.achievements a ON a.code = ua.achievement_code "
+        f"WHERE ua.student_id = {student_id} "
+        f"ORDER BY ua.unlocked_at DESC"
+    )
+    achievements = []
+    total_points = 0
+    for row in cur.fetchall():
+        achievements.append({
+            'code': row[0],
+            'title_en': row[1],
+            'title_ru': row[2],
+            'emoji': row[3],
+            'points': row[4],
+            'unlocked_at': row[5].isoformat() if row[5] else None
+        })
+        total_points += row[4]
+    
     cur.close()
     conn.close()
     
@@ -629,7 +681,13 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
         'learning': status_counts.get('learning', 0),
         'learned': status_counts.get('learned', 0),
         'mastered': status_counts.get('mastered', 0),
-        'average_mastery': float(avg_mastery)
+        'average_mastery': float(avg_mastery),
+        'current_streak': current_streak,
+        'longest_streak': longest_streak,
+        'total_practice_days': total_practice_days,
+        'daily_stats': daily_stats,
+        'achievements': achievements,
+        'total_points': total_points
     }
 
 def update_student_settings(telegram_id: int, language_level: str = None, preferred_topics: List[Dict[str, str]] = None, timezone: str = None) -> Dict[str, Any]:
@@ -654,6 +712,163 @@ def update_student_settings(telegram_id: int, language_level: str = None, prefer
     cur.close()
     conn.close()
     return {'success': True}
+
+def update_daily_stats(student_id: int, messages: int = 0, words: int = 0, errors: int = 0):
+    """Обновляет ежедневную статистику студента"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.daily_stats (student_id, practice_date, messages_sent, words_practiced, errors_corrected) "
+        f"VALUES ({student_id}, CURRENT_DATE, {messages}, {words}, {errors}) "
+        f"ON CONFLICT (student_id, practice_date) DO UPDATE SET "
+        f"messages_sent = {SCHEMA}.daily_stats.messages_sent + {messages}, "
+        f"words_practiced = {SCHEMA}.daily_stats.words_practiced + {words}, "
+        f"errors_corrected = {SCHEMA}.daily_stats.errors_corrected + {errors}"
+    )
+    
+    cur.close()
+    conn.close()
+
+def update_practice_streak(student_id: int):
+    """Обновляет streak студента"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Получаем текущий streak
+    cur.execute(
+        f"SELECT current_streak, longest_streak, last_practice_date, total_practice_days "
+        f"FROM {SCHEMA}.practice_streaks WHERE student_id = {student_id}"
+    )
+    row = cur.fetchone()
+    
+    if row:
+        current_streak = row[0]
+        longest_streak = row[1]
+        last_practice_date = row[2]
+        total_practice_days = row[3]
+        
+        # Проверяем дату последней практики
+        from datetime import date, timedelta
+        today = date.today()
+        
+        if last_practice_date == today:
+            # Уже практиковался сегодня, ничего не делаем
+            cur.close()
+            conn.close()
+            return current_streak
+        elif last_practice_date == today - timedelta(days=1):
+            # Практиковался вчера, увеличиваем streak
+            current_streak += 1
+            total_practice_days += 1
+            longest_streak = max(longest_streak, current_streak)
+        else:
+            # Пропустил дни, сбрасываем streak
+            current_streak = 1
+            total_practice_days += 1
+        
+        cur.execute(
+            f"UPDATE {SCHEMA}.practice_streaks SET "
+            f"current_streak = {current_streak}, "
+            f"longest_streak = {longest_streak}, "
+            f"last_practice_date = CURRENT_DATE, "
+            f"total_practice_days = {total_practice_days}, "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id}"
+        )
+    else:
+        # Первая практика
+        current_streak = 1
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.practice_streaks (student_id, current_streak, longest_streak, last_practice_date, total_practice_days) "
+            f"VALUES ({student_id}, 1, 1, CURRENT_DATE, 1)"
+        )
+    
+    cur.close()
+    conn.close()
+    return current_streak
+
+def check_and_unlock_achievements(student_id: int):
+    """Проверяет и разблокирует достижения"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Получаем статистику
+    cur.execute(
+        f"SELECT current_streak, total_practice_days FROM {SCHEMA}.practice_streaks WHERE student_id = {student_id}"
+    )
+    streak_row = cur.fetchone()
+    
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.word_progress WHERE student_id = {student_id} AND status IN ('learned', 'mastered')"
+    )
+    learned_words = cur.fetchone()[0]
+    
+    cur.execute(
+        f"SELECT SUM(messages_sent) FROM {SCHEMA}.daily_stats WHERE student_id = {student_id}"
+    )
+    total_messages = cur.fetchone()[0] or 0
+    
+    cur.execute(
+        f"SELECT words_practiced FROM {SCHEMA}.daily_stats WHERE student_id = {student_id} AND practice_date = CURRENT_DATE"
+    )
+    today_words = cur.fetchone()
+    today_words = today_words[0] if today_words else 0
+    
+    # Список достижений для проверки
+    achievements_to_check = []
+    
+    if total_messages >= 1:
+        achievements_to_check.append('first_message')
+    if streak_row and streak_row[0] >= 3:
+        achievements_to_check.append('day_3_streak')
+    if streak_row and streak_row[0] >= 7:
+        achievements_to_check.append('day_7_streak')
+    if streak_row and streak_row[0] >= 30:
+        achievements_to_check.append('day_30_streak')
+    if learned_words >= 10:
+        achievements_to_check.append('words_10')
+    if learned_words >= 50:
+        achievements_to_check.append('words_50')
+    if learned_words >= 100:
+        achievements_to_check.append('words_100')
+    if total_messages >= 10:
+        achievements_to_check.append('messages_10')
+    if total_messages >= 100:
+        achievements_to_check.append('messages_100')
+    if today_words >= 5:
+        achievements_to_check.append('perfect_day')
+    
+    # Разблокируем достижения
+    unlocked = []
+    for achievement_code in achievements_to_check:
+        try:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.user_achievements (student_id, achievement_code) "
+                f"VALUES ({student_id}, '{achievement_code}') "
+                f"ON CONFLICT (student_id, achievement_code) DO NOTHING "
+                f"RETURNING achievement_code"
+            )
+            if cur.fetchone():
+                # Получаем информацию о достижении
+                cur.execute(
+                    f"SELECT title_en, title_ru, emoji, points FROM {SCHEMA}.achievements WHERE code = '{achievement_code}'"
+                )
+                ach = cur.fetchone()
+                if ach:
+                    unlocked.append({
+                        'code': achievement_code,
+                        'title_en': ach[0],
+                        'title_ru': ach[1],
+                        'emoji': ach[2],
+                        'points': ach[3]
+                    })
+        except Exception:
+            pass
+    
+    cur.close()
+    conn.close()
+    return unlocked
 
 def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     """Получает полную историю всех диалогов пользователя"""
@@ -703,7 +918,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     API для WebApp личного кабинета
     Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
     get_categories, create_category, update_category, search_words, create_word, update_word,
-    assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats, update_student_settings
+    assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats, update_student_settings,
+    record_practice, get_available_achievements
     """
     method = event.get('httpMethod', 'POST')
     
@@ -1183,6 +1399,75 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'record_practice':
+            student_id = body.get('student_id')
+            messages = body.get('messages', 1)
+            words = body.get('words', 0)
+            errors = body.get('errors', 0)
+            
+            if not student_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            update_daily_stats(student_id, messages, words, errors)
+            current_streak = update_practice_streak(student_id)
+            unlocked = check_and_unlock_achievements(student_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'success': True,
+                    'current_streak': current_streak,
+                    'unlocked_achievements': unlocked
+                }),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_available_achievements':
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            cur.execute(
+                f"SELECT code, title_en, title_ru, description_en, description_ru, emoji, points "
+                f"FROM {SCHEMA}.achievements ORDER BY points ASC"
+            )
+            
+            achievements = []
+            for row in cur.fetchall():
+                achievements.append({
+                    'code': row[0],
+                    'title_en': row[1],
+                    'title_ru': row[2],
+                    'description_en': row[3],
+                    'description_ru': row[4],
+                    'emoji': row[5],
+                    'points': row[6]
+                })
+            
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'achievements': achievements}),
                 'isBase64Encoded': False
             }
         

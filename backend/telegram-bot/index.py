@@ -446,6 +446,38 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Сохраняем ответ AI
             save_message(user['id'], 'assistant', ai_response)
             
+            # Обновляем статистику практики
+            if existing_user.get('role') == 'student':
+                try:
+                    # Отправляем статистику в webapp-api
+                    import urllib.parse
+                    webapp_api_url = os.environ.get('WEBAPP_API_URL', '')
+                    if webapp_api_url:
+                        record_payload = json.dumps({
+                            'action': 'record_practice',
+                            'student_id': user['id'],
+                            'messages': 1,
+                            'words': 0,
+                            'errors': 0
+                        }).encode('utf-8')
+                        
+                        record_req = urllib.request.Request(
+                            webapp_api_url,
+                            data=record_payload,
+                            headers={'Content-Type': 'application/json'},
+                            method='POST'
+                        )
+                        
+                        with urllib.request.urlopen(record_req) as resp:
+                            result = json.loads(resp.read().decode('utf-8'))
+                            # Если разблокировали достижение - отправляем уведомление
+                            if result.get('unlocked_achievements'):
+                                for ach in result['unlocked_achievements']:
+                                    achievement_msg = f"\n\n🎉 Achievement Unlocked!\n{ach['emoji']} {ach['title_en']} (+{ach['points']} points)"
+                                    ai_response += achievement_msg
+                except Exception as e:
+                    print(f"[WARNING] Failed to record practice: {e}")
+            
             # Отправляем ответ
             send_telegram_message(chat_id, ai_response)
         

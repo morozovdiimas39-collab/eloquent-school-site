@@ -9,6 +9,7 @@ import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
 import MyWords from '@/components/student/MyWords';
 import StudentSettings from '@/components/student/StudentSettings';
+import ProgressStats from '@/components/student/ProgressStats';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
 
 interface TelegramUser {
@@ -458,6 +459,7 @@ export default function Dashboard() {
 
         {role === 'student' && teacherId && user && (
           <>
+            <ProgressStats studentId={user.id} />
             <StudentSettings 
               studentId={user.id}
               currentLevel={languageLevel}
