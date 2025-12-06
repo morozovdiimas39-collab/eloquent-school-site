@@ -238,6 +238,7 @@ export default function AssignWords({ teacherId }: AssignWordsProps) {
                   У вас пока нет учеников. Поделитесь промокодом со студентами.
                 </div>
               )}
+            </div>
           </div>
         </CardContent>
       </Card>
