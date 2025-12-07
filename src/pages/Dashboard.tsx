@@ -491,19 +491,6 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {role === 'student' && teacherId && user && (
-          <>
-            <ProgressStats studentId={user.id} />
-            <StudentSettings 
-              studentId={user.id}
-              currentLevel={languageLevel}
-              currentTopics={preferredTopics}
-              currentTimezone={timezone}
-            />
-            <MyWords studentId={user.id} />
-          </>
-        )}
-
         {role === 'student' && !teacherId && (
           <Card className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 border border-blue-200 shadow-sm">
             <CardContent className="pt-4 pb-4">
