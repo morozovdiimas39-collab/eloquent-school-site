@@ -866,28 +866,38 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             # Если не режим диалога - даем первое упражнение
             if mode != 'dialog':
-                # Проверяем и добавляем дефолтные слова если их нет
-                ensure_user_has_words(user['id'], language_level)
-                word = get_random_word(user['id'], language_level)
-                if word:
-                    if mode == 'sentence':
-                        exercise_text = generate_sentence_exercise(word, language_level)
-                        update_exercise_state(user['id'], word['id'], word['english'])
-                        send_telegram_message(chat_id, exercise_text, parse_mode=None)
-                    elif mode == 'context':
-                        exercise_text, answer = generate_context_exercise(word, language_level)
-                        update_exercise_state(user['id'], word['id'], answer)
-                        send_telegram_message(chat_id, exercise_text, parse_mode=None)
-                    elif mode == 'association':
-                        exercise_text, answer = generate_association_exercise(word, language_level)
-                        update_exercise_state(user['id'], word['id'], answer)
-                        send_telegram_message(chat_id, exercise_text, parse_mode=None)
-                    elif mode == 'translation':
-                        exercise_text, answer = generate_translation_exercise(word)
-                        update_exercise_state(user['id'], word['id'], answer)
-                        send_telegram_message(chat_id, exercise_text, parse_mode=None)
-                else:
-                    send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.', parse_mode=None)
+                try:
+                    print(f"[DEBUG] Checking words for user {user['id']}, level {language_level}")
+                    # Проверяем и добавляем дефолтные слова если их нет
+                    ensure_user_has_words(user['id'], language_level)
+                    print(f"[DEBUG] Getting random word for user {user['id']}")
+                    word = get_random_word(user['id'], language_level)
+                    print(f"[DEBUG] Got word: {word}")
+                    if word:
+                        if mode == 'sentence':
+                            exercise_text = generate_sentence_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], word['english'])
+                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                        elif mode == 'context':
+                            exercise_text, answer = generate_context_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                        elif mode == 'association':
+                            exercise_text, answer = generate_association_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                        elif mode == 'translation':
+                            exercise_text, answer = generate_translation_exercise(word)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                    else:
+                        print(f"[ERROR] No words found for user {user['id']}")
+                        send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.', parse_mode=None)
+                except Exception as e:
+                    print(f"[ERROR] Failed to generate exercise: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    send_telegram_message(chat_id, '❌ Произошла ошибка при генерации упражнения. Попробуйте позже или используйте режим диалога.', parse_mode=None)
         else:
             # Любое другое сообщение - обрабатываем в зависимости от режима
             existing_user = get_user(user['id'])
