@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 import funcUrls from '../../../backend/func2url.json';
@@ -20,6 +21,10 @@ interface StudentSettingsProps {
   currentLevel: string;
   currentTopics: Topic[];
   currentTimezone: string;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+  photoUrl?: string;
 }
 
 const LANGUAGE_LEVELS = [
@@ -54,7 +59,11 @@ export default function StudentSettings({
   studentId, 
   currentLevel, 
   currentTopics, 
-  currentTimezone 
+  currentTimezone,
+  username,
+  firstName,
+  lastName,
+  photoUrl
 }: StudentSettingsProps) {
   const [languageLevel, setLanguageLevel] = useState(currentLevel);
   const [topics, setTopics] = useState<Topic[]>(currentTopics);
@@ -128,9 +137,44 @@ export default function StudentSettings({
   };
 
   const levelInfo = LANGUAGE_LEVELS.find(l => l.value === languageLevel);
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || username || 'Пользователь';
+  const initials = [firstName?.[0], lastName?.[0]].filter(Boolean).join('').toUpperCase() || username?.[0]?.toUpperCase() || 'U';
 
   return (
-    <Card className="border border-gray-200 shadow-sm">
+    <div className="space-y-6">
+      <Card className="border border-gray-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
+            <Icon name="User" size={20} />
+            Мой профиль
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Информация о вашем аккаунте
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={photoUrl} alt={displayName} />
+              <AvatarFallback className="bg-blue-500 text-white text-xl">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-semibold text-lg">{displayName}</p>
+              {username && <p className="text-sm text-gray-500">@{username}</p>}
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <p className="text-xs text-gray-500 mb-2">
+              Telegram ID: <span className="font-mono">{studentId}</span>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-gray-200 shadow-sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg font-bold">
           <Icon name="Settings" size={20} />
@@ -263,5 +307,6 @@ export default function StudentSettings({
         </Button>
       </CardContent>
     </Card>
+    </div>
   );
 }

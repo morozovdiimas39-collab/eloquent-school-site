@@ -26,10 +26,6 @@ interface PartnerProgramProps {
 export default function PartnerProgram({ teacherId }: PartnerProgramProps) {
   const [stats, setStats] = useState<PartnerStats | null>(null);
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [phone, setPhone] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [bankName, setBankName] = useState('');
 
   useEffect(() => {
     loadStats();
@@ -49,35 +45,8 @@ export default function PartnerProgram({ teacherId }: PartnerProgramProps) {
 
       const data = await response.json();
       setStats(data);
-      setPhone(data.phone || '');
-      setCardNumber(data.card_number || '');
-      setBankName(data.bank_name || '');
     } catch (error) {
       console.error('Ошибка загрузки статистики:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const savePayoutInfo = async () => {
-    setLoading(true);
-    try {
-      await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'update_payout_info',
-          telegram_id: teacherId,
-          phone,
-          card_number: cardNumber,
-          bank_name: bankName
-        })
-      });
-
-      setEditing(false);
-      loadStats();
-    } catch (error) {
-      console.error('Ошибка сохранения данных:', error);
     } finally {
       setLoading(false);
     }
@@ -141,8 +110,7 @@ export default function PartnerProgram({ teacherId }: PartnerProgramProps) {
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground">
                     <li>Вы получаете {stats.commission_rate}% с каждого платежа ученика</li>
                     <li>Деньги приходят на баланс автоматически после оплаты</li>
-                    <li>Вывод доступен от 1000 ₽</li>
-                    <li>Для вывода настройте платежные данные ниже</li>
+                    <li>Платежные данные можно настроить в настройках профиля (кнопка с шестеренкой справа вверху)</li>
                   </ul>
                   <div className="flex items-center gap-2 mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
                     <Icon name="MessageCircle" className="h-4 w-4" />
@@ -155,90 +123,6 @@ export default function PartnerProgram({ teacherId }: PartnerProgramProps) {
               </div>
             </CardContent>
           </Card>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Icon name="CreditCard" className="h-5 w-5" />
-            Настройки выплат
-          </CardTitle>
-          <CardDescription>
-            Укажите данные для получения выплат
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {editing ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Номер телефона</Label>
-                <Input
-                  id="phone"
-                  placeholder="+7 (999) 123-45-67"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="card">Номер карты</Label>
-                <Input
-                  id="card"
-                  placeholder="2200 1234 5678 9012"
-                  value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="bank">Банк</Label>
-                <Input
-                  id="bank"
-                  placeholder="Сбербанк"
-                  value={bankName}
-                  onChange={(e) => setBankName(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={savePayoutInfo} disabled={loading}>
-                  <Icon name="Save" className="mr-2 h-4 w-4" />
-                  Сохранить
-                </Button>
-                <Button variant="outline" onClick={() => setEditing(false)} disabled={loading}>
-                  Отмена
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Icon name="Phone" className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Телефон:</span>
-                  <span className="font-medium">{phone || 'Не указан'}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Icon name="CreditCard" className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Карта:</span>
-                  <span className="font-medium">{cardNumber || 'Не указана'}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Icon name="Building" className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Банк:</span>
-                  <span className="font-medium">{bankName || 'Не указан'}</span>
-                </div>
-              </div>
-
-              <Button onClick={() => setEditing(true)}>
-                <Icon name="Edit" className="mr-2 h-4 w-4" />
-                Редактировать
-              </Button>
-            </>
-          )}
         </CardContent>
       </Card>
     </div>

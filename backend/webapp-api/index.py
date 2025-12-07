@@ -22,7 +22,7 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode, teacher_id, language_level, preferred_topics, timezone FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, promocode, teacher_id, language_level, preferred_topics, timezone, phone, card_number, bank_name FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -39,7 +39,10 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
             'teacher_id': row[6],
             'language_level': row[7],
             'preferred_topics': row[8] if row[8] else [],
-            'timezone': row[9]
+            'timezone': row[9],
+            'phone': row[10],
+            'card_number': row[11],
+            'bank_name': row[12]
         }
     return None
 

@@ -12,6 +12,7 @@ import StudentSettings from '@/components/student/StudentSettings';
 import ProgressStats from '@/components/student/ProgressStats';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
 import PartnerProgram from '@/components/teacher/PartnerProgram';
+import TeacherSettings from '@/components/teacher/TeacherSettings';
 
 interface TelegramUser {
   id: number;
@@ -79,6 +80,9 @@ export default function Dashboard() {
   const [languageLevel, setLanguageLevel] = useState('A1');
   const [preferredTopics, setPreferredTopics] = useState<Array<{emoji: string, topic: string}>>([]);
   const [timezone, setTimezone] = useState('UTC');
+  const [phone, setPhone] = useState<string | null>(null);
+  const [cardNumber, setCardNumber] = useState<string | null>(null);
+  const [bankName, setBankName] = useState<string | null>(null);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -128,6 +132,15 @@ export default function Dashboard() {
         }
         if (data.user.timezone) {
           setTimezone(data.user.timezone);
+        }
+        if (data.user.phone) {
+          setPhone(data.user.phone);
+        }
+        if (data.user.card_number) {
+          setCardNumber(data.user.card_number);
+        }
+        if (data.user.bank_name) {
+          setBankName(data.user.bank_name);
         }
         if (data.user.role === 'teacher') {
           loadStudents(telegramId);
@@ -405,27 +418,53 @@ export default function Dashboard() {
         )}
 
         <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Icon name="Settings" size={20} />
                 Настройки
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-3 pt-2">
-              <Button
-                onClick={() => {
-                  setRole(null);
-                  setPromocode(null);
-                  setTeacherId(null);
-                  setSettingsOpen(false);
-                }}
-                variant="outline"
-                className="w-full h-11 text-sm font-medium"
-              >
-                <Icon name="RefreshCw" size={16} className="mr-2" />
-                Сменить роль
-              </Button>
+            <div className="space-y-4 pt-2">
+              {role === 'student' && user && (
+                <StudentSettings
+                  studentId={user.id}
+                  currentLevel={languageLevel}
+                  currentTopics={preferredTopics}
+                  currentTimezone={timezone}
+                  username={user.username}
+                  firstName={user.first_name}
+                  lastName={user.last_name}
+                  photoUrl={user.photo_url}
+                />
+              )}
+              {role === 'teacher' && user && (
+                <TeacherSettings
+                  teacherId={user.id}
+                  username={user.username}
+                  firstName={user.first_name}
+                  lastName={user.last_name}
+                  photoUrl={user.photo_url}
+                  currentPhone={phone}
+                  currentCardNumber={cardNumber}
+                  currentBankName={bankName}
+                />
+              )}
+              <div className="border-t pt-4">
+                <Button
+                  onClick={() => {
+                    setRole(null);
+                    setPromocode(null);
+                    setTeacherId(null);
+                    setSettingsOpen(false);
+                  }}
+                  variant="outline"
+                  className="w-full h-11 text-sm font-medium"
+                >
+                  <Icon name="RefreshCw" size={16} className="mr-2" />
+                  Сменить роль
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
