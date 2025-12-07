@@ -372,25 +372,42 @@ IMPORTANT:
         }
     }
     
-    # Настраиваем прокси если он есть
-    if proxy_url:
-        proxy_handler = urllib.request.ProxyHandler({
-            'http': f'http://{proxy_url}',
-            'https': f'http://{proxy_url}'
-        })
-        opener = urllib.request.build_opener(proxy_handler)
-    else:
-        opener = urllib.request.build_opener()
-    
-    req = urllib.request.Request(
-        gemini_url,
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'}
-    )
-    
-    with opener.open(req, timeout=30) as response:
-        result = json.loads(response.read().decode('utf-8'))
-        return result['candidates'][0]['content']['parts'][0]['text']
+    # Пробуем сначала БЕЗ прокси (Cloud Functions может иметь прямой доступ)
+    try:
+        print(f"[DEBUG] Trying Gemini without proxy...")
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG] Gemini success without proxy!")
+            return result['candidates'][0]['content']['parts'][0]['text']
+    except Exception as e:
+        print(f"[DEBUG] Direct connection failed: {e}, trying with proxy...")
+        
+        # Если не работает без прокси - пробуем с прокси
+        if proxy_url:
+            proxy_handler = urllib.request.ProxyHandler({
+                'http': f'http://{proxy_url}',
+                'https': f'http://{proxy_url}'
+            })
+            opener = urllib.request.build_opener(proxy_handler)
+            
+            req = urllib.request.Request(
+                gemini_url,
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            with opener.open(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                print(f"[DEBUG] Gemini success with proxy!")
+                return result['candidates'][0]['content']['parts'][0]['text']
+        else:
+            raise
 
 def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     """Отправляет сообщение в Telegram"""
