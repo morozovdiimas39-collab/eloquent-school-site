@@ -360,8 +360,8 @@ IMPORTANT:
         'parts': [{'text': user_message}]
     })
     
-    # Подготавливаем запрос к Gemini REST API (правильный URL!)
-    gemini_url = f'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={api_key}'
+    # Подготавливаем запрос к Gemini REST API
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}'
     
     payload = {
         'contents': contents,
