@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Icon from '@/components/ui/icon';
+import { useNavigate } from 'react-router-dom';
 import funcUrls from '../../backend/func2url.json';
 import StudentSettings from '@/components/student/StudentSettings';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
@@ -68,6 +69,7 @@ interface Student {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<TelegramUser | null>(null);
   const [role, setRole] = useState<'student' | 'teacher' | null>(null);
   const [promocode, setPromocode] = useState<string | null>(null);
@@ -376,6 +378,30 @@ export default function Dashboard() {
 
         {role === 'student' && user && (
           <>
+            <Card className="border border-indigo-200 shadow-sm bg-gradient-to-br from-indigo-50 to-purple-50">
+              <CardContent className="pt-5 pb-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                      <Icon name="Crown" size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-base">Бесплатный план</h3>
+                      <p className="text-sm text-gray-600">20 сообщений в день</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => navigate('/pricing')}
+                    variant="default"
+                    className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 font-semibold"
+                  >
+                    Улучшить
+                    <Icon name="ArrowRight" size={16} className="ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <TeacherCard 
               teacherId={teacherId} 
               onBindTeacher={() => setBindTeacherOpen(true)}

@@ -10,6 +10,7 @@ import Admin from "./pages/Admin";
 import AngryBirdsGame from "./pages/AngryBirdsGame";
 import SystemTest from "./pages/SystemTest";
 import TimezoneSetup from "./pages/TimezoneSetup";
+import Pricing from "./pages/webapp/Pricing";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/app" element={<Dashboard />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/game" element={<AngryBirdsGame />} />
           <Route path="/system-test" element={<SystemTest />} />
