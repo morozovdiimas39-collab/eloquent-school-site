@@ -19,7 +19,7 @@ def get_user(telegram_id: int):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics, conversation_mode, current_exercise_word_id, current_exercise_answer FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -33,7 +33,10 @@ def get_user(telegram_id: int):
             'last_name': row[3],
             'role': row[4],
             'language_level': row[5] or 'A1',
-            'preferred_topics': row[6] if row[6] else []
+            'preferred_topics': row[6] if row[6] else [],
+            'conversation_mode': row[7] or 'dialog',
+            'current_exercise_word_id': row[8],
+            'current_exercise_answer': row[9]
         }
     return None
 
@@ -189,6 +192,210 @@ def get_emoji_for_mood(mood: str) -> str:
     
     emojis = emoji_sets.get(mood, emoji_sets['casual'])
     return random.choice(emojis)
+
+def update_conversation_mode(telegram_id: int, mode: str):
+    """Обновляет режим разговора для пользователя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = '{mode}' WHERE telegram_id = {telegram_id}")
+    cur.close()
+    conn.close()
+
+def update_exercise_state(telegram_id: int, word_id: int, answer: str):
+    """Сохраняет состояние текущего упражнения"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    answer_escaped = answer.replace("'", "''")
+    cur.execute(f"UPDATE {SCHEMA}.users SET current_exercise_word_id = {word_id}, current_exercise_answer = '{answer_escaped}' WHERE telegram_id = {telegram_id}")
+    cur.close()
+    conn.close()
+
+def clear_exercise_state(telegram_id: int):
+    """Очищает состояние упражнения"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(f"UPDATE {SCHEMA}.users SET current_exercise_word_id = NULL, current_exercise_answer = NULL WHERE telegram_id = {telegram_id}")
+    cur.close()
+    conn.close()
+
+def get_learning_mode_keyboard():
+    """Возвращает Inline Keyboard с режимами обучения"""
+    return {
+        'inline_keyboard': [
+            [
+                {'text': '💬 Диалог', 'callback_data': 'mode_dialog'},
+                {'text': '✍️ Предложения', 'callback_data': 'mode_sentence'}
+            ],
+            [
+                {'text': '📝 Контекст', 'callback_data': 'mode_context'},
+                {'text': '🎯 Ассоциации', 'callback_data': 'mode_association'}
+            ],
+            [
+                {'text': '🇷🇺→🇬🇧 Перевод', 'callback_data': 'mode_translation'}
+            ]
+        ]
+    }
+
+def get_default_words_for_level(language_level: str) -> List[Dict[str, str]]:
+    """Возвращает базовый набор слов для самостоятельного обучения"""
+    words_by_level = {
+        'A1': [
+            {'english': 'hello', 'russian': 'привет'},
+            {'english': 'family', 'russian': 'семья'},
+            {'english': 'food', 'russian': 'еда'},
+            {'english': 'water', 'russian': 'вода'},
+            {'english': 'house', 'russian': 'дом'},
+            {'english': 'friend', 'russian': 'друг'},
+            {'english': 'book', 'russian': 'книга'},
+            {'english': 'cat', 'russian': 'кот'},
+            {'english': 'dog', 'russian': 'собака'},
+            {'english': 'work', 'russian': 'работа'}
+        ],
+        'A2': [
+            {'english': 'travel', 'russian': 'путешествие'},
+            {'english': 'weather', 'russian': 'погода'},
+            {'english': 'meeting', 'russian': 'встреча'},
+            {'english': 'money', 'russian': 'деньги'},
+            {'english': 'health', 'russian': 'здоровье'},
+            {'english': 'hobby', 'russian': 'хобби'},
+            {'english': 'sport', 'russian': 'спорт'},
+            {'english': 'movie', 'russian': 'фильм'},
+            {'english': 'music', 'russian': 'музыка'},
+            {'english': 'language', 'russian': 'язык'}
+        ],
+        'B1': [
+            {'english': 'experience', 'russian': 'опыт'},
+            {'english': 'relationship', 'russian': 'отношения'},
+            {'english': 'opportunity', 'russian': 'возможность'},
+            {'english': 'challenge', 'russian': 'вызов'},
+            {'english': 'decision', 'russian': 'решение'},
+            {'english': 'environment', 'russian': 'окружающая среда'},
+            {'english': 'technology', 'russian': 'технология'},
+            {'english': 'knowledge', 'russian': 'знание'},
+            {'english': 'development', 'russian': 'развитие'},
+            {'english': 'achievement', 'russian': 'достижение'}
+        ],
+        'B2': [
+            {'english': 'perspective', 'russian': 'перспектива'},
+            {'english': 'ambition', 'russian': 'амбиция'},
+            {'english': 'consequence', 'russian': 'последствие'},
+            {'english': 'phenomenon', 'russian': 'феномен'},
+            {'english': 'hypothesis', 'russian': 'гипотеза'},
+            {'english': 'innovation', 'russian': 'инновация'},
+            {'english': 'controversy', 'russian': 'спор'},
+            {'english': 'sustainability', 'russian': 'устойчивость'},
+            {'english': 'diversity', 'russian': 'разнообразие'},
+            {'english': 'resilience', 'russian': 'жизнестойкость'}
+        ]
+    }
+    
+    return words_by_level.get(language_level, words_by_level['A1'])
+
+def ensure_user_has_words(telegram_id: int, language_level: str):
+    """Проверяет есть ли у пользователя слова, если нет - добавляет базовые"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}"
+    )
+    count = cur.fetchone()[0]
+    
+    if count == 0:
+        default_words = get_default_words_for_level(language_level)
+        
+        for word_data in default_words:
+            english = word_data['english'].replace("'", "''")
+            russian = word_data['russian'].replace("'", "''")
+            
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                f"VALUES ('{english}', '{russian}') "
+                f"ON CONFLICT (english_text) DO UPDATE SET english_text = EXCLUDED.english_text "
+                f"RETURNING id"
+            )
+            word_id = cur.fetchone()[0]
+            
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.student_words (student_id, word_id) "
+                f"VALUES ({telegram_id}, {word_id}) "
+                f"ON CONFLICT DO NOTHING"
+            )
+    
+    cur.close()
+    conn.close()
+
+def get_random_word(telegram_id: int, language_level: str = 'A1') -> Dict[str, Any]:
+    """Получает случайное слово для упражнения"""
+    ensure_user_has_words(telegram_id, language_level)
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
+        f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+        f"WHERE sw.student_id = {telegram_id} "
+        f"ORDER BY RANDOM() LIMIT 1"
+    )
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if row:
+        return {'id': row[0], 'english': row[1], 'russian': row[2]}
+    return None
+
+def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> str:
+    """Генерирует задание на составление предложения"""
+    return f"✍️ Составь предложение со словом: <b>{word['english']}</b> ({word['russian']})"
+
+def generate_context_exercise(word: Dict[str, Any], language_level: str) -> tuple:
+    """Генерирует упражнение Fill in the blanks"""
+    templates = {
+        'A1': [
+            f"I ___ {word['english']} every day",
+            f"She likes ___",
+            f"They ___ to the store"
+        ],
+        'A2': [
+            f"Yesterday I ___ {word['english']}",
+            f"I have never ___ this before",
+            f"We should ___ together"
+        ]
+    }
+    
+    level_templates = templates.get(language_level, templates['A1'])
+    sentence_template = random.choice(level_templates)
+    
+    return (
+        f"📝 Вставь пропущенное слово:\n\n{sentence_template}\n\nСлово: {word['russian']}",
+        word['english']
+    )
+
+def generate_association_exercise(word: Dict[str, Any], language_level: str) -> tuple:
+    """Генерирует упражнение с ассоциациями"""
+    associations = {
+        'cat': ['meow', 'furry', 'pet'],
+        'book': ['read', 'pages', 'story'],
+        'water': ['drink', 'liquid', 'H2O']
+    }
+    
+    hints = associations.get(word['english'].lower(), ['word', 'english', 'language'])
+    hints_text = ', '.join(hints[:3])
+    
+    return (
+        f"🎯 Угадай слово по ассоциациям:\n\n{hints_text}\n\nПереведи на русский: {word['russian']}",
+        word['english']
+    )
+
+def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
+    """Генерирует упражнение на перевод"""
+    return (
+        f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n<b>{word['russian']}</b>",
+        word['english']
+    )
 
 def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня и тем"""
@@ -508,7 +715,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         body = json.loads(event.get('body', '{}'))
         print(f"[DEBUG] Received update: {json.dumps(body)}")
         
-        # Обработка callback_query (выбор роли)
+        # Обработка callback_query (выбор роли или режима)
         if 'callback_query' in body:
             callback = body['callback_query']
             data = callback.get('data', '')
@@ -533,6 +740,50 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     f'✅ Отлично! Вы зарегистрированы как <b>{role_text}</b>\n\n'
                     f'Теперь просто пишите мне вопросы, и я буду отвечать прямо здесь в чате!'
                 )
+            
+            elif data.startswith('mode_'):
+                mode = data.replace('mode_', '')
+                update_conversation_mode(user['id'], mode)
+                
+                user_data = get_user(user['id'])
+                language_level = user_data.get('language_level', 'A1') if user_data else 'A1'
+                
+                mode_names = {
+                    'dialog': '💬 Диалог с Аней',
+                    'sentence': '✍️ Составление предложений',
+                    'context': '📝 Контекст (Fill in the blanks)',
+                    'association': '🎯 Ассоциации',
+                    'translation': '🇷🇺→🇬🇧 Перевод'
+                }
+                
+                mode_name = mode_names.get(mode, mode)
+                edit_telegram_message(
+                    chat_id,
+                    message_id,
+                    f'✅ Режим изменен на: <b>{mode_name}</b>'
+                )
+                
+                if mode != 'dialog':
+                    word = get_random_word(user['id'], language_level)
+                    if word:
+                        if mode == 'sentence':
+                            exercise_text = generate_sentence_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], word['english'])
+                            send_telegram_message(chat_id, exercise_text)
+                        elif mode == 'context':
+                            exercise_text, answer = generate_context_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                        elif mode == 'association':
+                            exercise_text, answer = generate_association_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                        elif mode == 'translation':
+                            exercise_text, answer = generate_translation_exercise(word)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                    else:
+                        send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.')
             
             return {
                 'statusCode': 200,
@@ -577,13 +828,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
             send_telegram_message(
                 chat_id,
-                '👋 Привет! Я AnyaGPT - AI-помощник на базе Gemini.\n\n'
-                'Задавай мне любые вопросы прямо здесь в чате, и я отвечу!\n\n'
-                'Чтобы изменить роль или посмотреть историю - открой личный кабинет 👇',
+                '👋 Привет! Я Anya - твой AI-преподаватель английского!\n\n'
+                '💬 Просто пиши мне на английском, и я буду помогать тебе учиться!\n\n'
+                '📚 Используй /modes чтобы выбрать режим обучения\n'
+                '📱 Открой личный кабинет для настроек 👇',
+                keyboard
+            )
+        
+        # Команда /modes - выбор режима обучения
+        elif text == '/modes':
+            keyboard = get_learning_mode_keyboard()
+            send_telegram_message(
+                chat_id,
+                '🎓 Выбери режим обучения:\n\n'
+                '💬 <b>Диалог</b> - свободное общение с Аней\n'
+                '✍️ <b>Предложения</b> - составляй предложения со словами\n'
+                '📝 <b>Контекст</b> - вставляй пропущенные слова\n'
+                '🎯 <b>Ассоциации</b> - угадывай слова по подсказкам\n'
+                '🇷🇺→🇬🇧 <b>Перевод</b> - переводи слова с русского на английский',
                 keyboard
             )
         else:
-            # Любое другое сообщение - обрабатываем через YandexGPT
+            # Любое другое сообщение - обрабатываем в зависимости от режима
             existing_user = get_user(user['id'])
             
             if not existing_user:
@@ -595,41 +861,84 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     user.get('last_name', ''),
                     'student'
                 )
-                existing_user = {'telegram_id': user['id'], 'role': 'student'}
+                existing_user = {'telegram_id': user['id'], 'role': 'student', 'conversation_mode': 'dialog'}
             
-            # Получаем историю диалога
-            history = get_conversation_history(user['id'])
-            
-            # Если ученик - загружаем слова для практики
-            session_words = None
+            conversation_mode = existing_user.get('conversation_mode', 'dialog')
             language_level = existing_user.get('language_level', 'A1')
-            preferred_topics = existing_user.get('preferred_topics', [])
             
-            if existing_user.get('role') == 'student':
+            # Если режим не диалог - проверяем ответ на упражнение
+            if conversation_mode != 'dialog':
+                correct_answer = existing_user.get('current_exercise_answer', '')
+                user_answer = text.strip().lower()
+                
+                if correct_answer:
+                    correct_answer_lower = correct_answer.lower()
+                    
+                    if user_answer == correct_answer_lower:
+                        send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉')
+                    else:
+                        send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: <b>{correct_answer}</b>')
+                    
+                    clear_exercise_state(user['id'])
+                    
+                    word = get_random_word(user['id'], language_level)
+                    if word:
+                        if conversation_mode == 'sentence':
+                            exercise_text = generate_sentence_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], word['english'])
+                            send_telegram_message(chat_id, exercise_text)
+                        elif conversation_mode == 'context':
+                            exercise_text, answer = generate_context_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                        elif conversation_mode == 'association':
+                            exercise_text, answer = generate_association_exercise(word, language_level)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                        elif conversation_mode == 'translation':
+                            exercise_text, answer = generate_translation_exercise(word)
+                            update_exercise_state(user['id'], word['id'], answer)
+                            send_telegram_message(chat_id, exercise_text)
+                    else:
+                        send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.')
+                        update_conversation_mode(user['id'], 'dialog')
+                
+            else:
+                # Режим диалога - обрабатываем через Gemini
+                history = get_conversation_history(user['id'])
+                
+                # Если ученик - загружаем слова для практики
+                session_words = None
+                preferred_topics = existing_user.get('preferred_topics', [])
+                
+                if existing_user.get('role') == 'student':
+                    try:
+                        session_words = get_session_words(user['id'], limit=10)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to load session words: {e}")
+                
+                # Сохраняем вопрос пользователя
+                save_message(user['id'], 'user', text)
+                
+                # Получаем ответ AI с учетом слов, уровня и тем
                 try:
-                    session_words = get_session_words(user['id'], limit=10)
+                    print(f"[DEBUG] Calling Gemini with message: {text}")
+                    ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
+                    print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
                 except Exception as e:
-                    print(f"[WARNING] Failed to load session words: {e}")
+                    print(f"[ERROR] Gemini API failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
+                
+                # Сохраняем ответ AI
+                save_message(user['id'], 'assistant', ai_response)
+                
+                # Отправляем ответ в Telegram
+                send_telegram_message(chat_id, ai_response)
             
-            # Сохраняем вопрос пользователя
-            save_message(user['id'], 'user', text)
-            
-            # Получаем ответ AI с учетом слов, уровня и тем
-            try:
-                print(f"[DEBUG] Calling Gemini with message: {text}")
-                ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
-                print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
-            except Exception as e:
-                print(f"[ERROR] Gemini API failed: {e}")
-                import traceback
-                traceback.print_exc()
-                ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
-            
-            # Сохраняем ответ AI
-            save_message(user['id'], 'assistant', ai_response)
-            
-            # Обновляем статистику практики
-            if existing_user.get('role') == 'student':
+            # Обновляем статистику практики (только для режима диалога)
+            if conversation_mode == 'dialog' and existing_user.get('role') == 'student':
                 try:
                     # Отправляем статистику в webapp-api
                     import urllib.parse
@@ -659,9 +968,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                     ai_response += achievement_msg
                 except Exception as e:
                     print(f"[WARNING] Failed to record practice: {e}")
-            
-            # Отправляем ответ
-            send_telegram_message(chat_id, ai_response)
         
         return {
             'statusCode': 200,
