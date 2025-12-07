@@ -1053,7 +1053,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         action = body.get('action')
         telegram_id = body.get('telegram_id')
         
-        if not telegram_id and action not in ['get_all_teachers', 'get_all_students', 'get_categories', 'create_category', 'update_category', 'search_words', 'create_word', 'update_word', 'assign_words', 'assign_category', 'get_student_words']:
+        if not telegram_id and action not in ['get_all_teachers', 'get_all_students', 'get_analytics', 'get_categories', 'create_category', 'update_category', 'search_words', 'create_word', 'update_word', 'assign_words', 'assign_category', 'get_student_words']:
             return {
                 'statusCode': 400,
                 'headers': {
