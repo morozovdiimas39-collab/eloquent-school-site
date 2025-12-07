@@ -7,12 +7,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
-import MyWords from '@/components/student/MyWords';
 import StudentSettings from '@/components/student/StudentSettings';
-import ProgressStats from '@/components/student/ProgressStats';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
 import PartnerProgram from '@/components/teacher/PartnerProgram';
 import TeacherSettings from '@/components/teacher/TeacherSettings';
+import ImprovedMyWords from '@/components/student/ImprovedMyWords';
+import TeacherCard from '@/components/student/TeacherCard';
+import StreakCard from '@/components/student/StreakCard';
+import AchievementsDialog from '@/components/student/AchievementsDialog';
 
 interface TelegramUser {
   id: number;
@@ -83,6 +85,8 @@ export default function Dashboard() {
   const [phone, setPhone] = useState<string | null>(null);
   const [cardNumber, setCardNumber] = useState<string | null>(null);
   const [bankName, setBankName] = useState<string | null>(null);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [bindTeacherOpen, setBindTeacherOpen] = useState(false);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -371,50 +375,40 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {role === 'student' && !teacherId && (
-          <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
-                <Icon name="UserPlus" size={20} />
-                Привязать преподавателя
-              </CardTitle>
-              <CardDescription className="text-sm text-gray-600">
-                Введи промокод от своего преподавателя
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              <input
-                type="text"
-                value={promocodeInput}
-                onChange={(e) => setPromocodeInput(e.target.value.toUpperCase())}
-                placeholder="Например: ABC12345"
-                className="w-full h-12 px-4 text-base font-mono border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
-                maxLength={8}
-              />
-              <Button
-                onClick={bindTeacher}
-                disabled={loading || !promocodeInput.trim()}
-                className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow transition-all"
-              >
-                <Icon name="Link" size={18} className="mr-2" />
-                Привязать
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+        {role === 'student' && user && (
+          <>
+            <TeacherCard 
+              teacherId={teacherId} 
+              onBindTeacher={() => setBindTeacherOpen(true)}
+            />
 
-        {role === 'student' && teacherId && (
-          <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
-                <Icon name="CheckCircle" size={20} className="text-green-600" />
-                Преподаватель привязан
-              </CardTitle>
-              <CardDescription className="text-sm text-gray-700">
-                Ты успешно привязан к преподавателю
-              </CardDescription>
-            </CardHeader>
-          </Card>
+            <ImprovedMyWords
+              studentId={user.id}
+              teacherId={teacherId}
+              languageLevel={languageLevel}
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <StreakCard studentId={user.id} />
+              
+              <Card 
+                className="border border-yellow-200 shadow-sm hover:shadow-md transition-all cursor-pointer bg-gradient-to-br from-yellow-50 to-orange-50"
+                onClick={() => setAchievementsOpen(true)}
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base font-bold">
+                    <Icon name="Trophy" size={20} className="text-yellow-600" />
+                    Достижения
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-center pt-2">
+                    <Icon name="ChevronRight" size={24} className="text-yellow-600" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
         )}
 
         <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
@@ -618,7 +612,52 @@ export default function Dashboard() {
         )}
       </div>
 
-      {user && (
+      {user && role === 'student' && (
+        <>
+          <AchievementsDialog
+            open={achievementsOpen}
+            onOpenChange={setAchievementsOpen}
+            studentId={user.id}
+          />
+
+          <Dialog open={bindTeacherOpen} onOpenChange={setBindTeacherOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Icon name="UserPlus" size={20} />
+                  Привязать преподавателя
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <p className="text-sm text-gray-600">
+                  Введи промокод от своего преподавателя, чтобы он мог назначать тебе слова и отслеживать прогресс
+                </p>
+                <input
+                  type="text"
+                  value={promocodeInput}
+                  onChange={(e) => setPromocodeInput(e.target.value.toUpperCase())}
+                  placeholder="Например: ABC12345"
+                  className="w-full h-12 px-4 text-base font-mono border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                  maxLength={8}
+                />
+                <Button
+                  onClick={() => {
+                    bindTeacher();
+                    setBindTeacherOpen(false);
+                  }}
+                  disabled={loading || !promocodeInput.trim()}
+                  className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700"
+                >
+                  <Icon name="Link" size={18} className="mr-2" />
+                  Привязать
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+
+      {user && role === 'teacher' && (
         <AssignWordsDialog
           open={assignWordsOpen}
           onOpenChange={setAssignWordsOpen}

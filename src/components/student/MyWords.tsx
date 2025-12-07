@@ -32,18 +32,21 @@ interface ProgressStats {
 
 interface MyWordsProps {
   studentId: number;
+  teacherId?: number | null;
+  languageLevel?: string;
 }
 
-export default function MyWords({ studentId }: MyWordsProps) {
+export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: MyWordsProps) {
   const [words, setWords] = useState<AssignedWord[]>([]);
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [autoAssigning, setAutoAssigning] = useState(false);
 
   useEffect(() => {
     loadWords();
     loadStats();
-  }, []);
+  }, [studentId]);
 
   const loadWords = async () => {
     setLoading(true);
