@@ -913,6 +913,70 @@ def get_full_history(telegram_id: int) -> List[Dict[str, Any]]:
     conn.close()
     return conversations
 
+def get_partner_stats(teacher_id: int) -> Dict[str, Any]:
+    """Получает статистику по партнерской программе для учителя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Общее количество учеников
+    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.users WHERE teacher_id = {teacher_id} AND role = 'student'")
+    total_students = cur.fetchone()[0]
+    
+    # Количество активных учеников (с подпиской)
+    # TODO: добавить проверку подписки когда будет платежная система
+    active_students = 0
+    
+    # Получаем финансовые данные учителя
+    cur.execute(
+        f"SELECT phone, card_number, bank_name, total_earnings, current_balance "
+        f"FROM {SCHEMA}.users WHERE telegram_id = {teacher_id}"
+    )
+    row = cur.fetchone()
+    
+    phone = row[0] if row else None
+    card_number = row[1] if row else None
+    bank_name = row[2] if row else None
+    total_earnings = float(row[3]) if row and row[3] else 0.0
+    current_balance = float(row[4]) if row and row[4] else 0.0
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        'total_students': total_students,
+        'active_students': active_students,
+        'total_earnings': total_earnings,
+        'current_balance': current_balance,
+        'phone': phone,
+        'card_number': card_number,
+        'bank_name': bank_name,
+        'commission_rate': 30  # 30% с каждой оплаты
+    }
+
+def update_payout_info(teacher_id: int, phone: str = None, card_number: str = None, bank_name: str = None) -> Dict[str, Any]:
+    """Обновляет платежную информацию учителя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    updates = []
+    if phone:
+        phone_escaped = phone.replace("'", "''")
+        updates.append(f"phone = '{phone_escaped}'")
+    if card_number:
+        card_escaped = card_number.replace("'", "''")
+        updates.append(f"card_number = '{card_escaped}'")
+    if bank_name:
+        bank_escaped = bank_name.replace("'", "''")
+        updates.append(f"bank_name = '{bank_escaped}'")
+    
+    if updates:
+        update_sql = ", ".join(updates)
+        cur.execute(f"UPDATE {SCHEMA}.users SET {update_sql}, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {teacher_id}")
+    
+    cur.close()
+    conn.close()
+    return {'success': True}
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
@@ -1468,6 +1532,36 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'achievements': achievements}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_partner_stats':
+            stats = get_partner_stats(telegram_id)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(stats),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_payout_info':
+            phone = body.get('phone')
+            card_number = body.get('card_number')
+            bank_name = body.get('bank_name')
+            
+            result = update_payout_info(telegram_id, phone, card_number, bank_name)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         

@@ -11,6 +11,7 @@ import MyWords from '@/components/student/MyWords';
 import StudentSettings from '@/components/student/StudentSettings';
 import ProgressStats from '@/components/student/ProgressStats';
 import AssignWordsDialog from '@/components/teacher/AssignWordsDialog';
+import PartnerProgram from '@/components/teacher/PartnerProgram';
 
 interface TelegramUser {
   id: number;
@@ -554,6 +555,8 @@ export default function Dashboard() {
                 </Button>
               </CardContent>
             </Card>
+
+            <PartnerProgram teacherId={user.id} />
           </>
         )}
 
