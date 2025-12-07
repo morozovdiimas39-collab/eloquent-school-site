@@ -31,6 +31,7 @@ interface Teacher extends User {
 }
 
 const API_URL = funcUrls['webapp-api'];
+const SCHEDULER_URL = funcUrls['practice-scheduler'];
 
 export default function Admin() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -40,6 +41,8 @@ export default function Admin() {
   const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics'>('teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [schedulerRunning, setSchedulerRunning] = useState(false);
+  const [schedulerResult, setSchedulerResult] = useState<any>(null);
 
   useEffect(() => {
     loadData();
@@ -97,6 +100,25 @@ export default function Admin() {
       }
     } catch (error) {
       console.error('Error loading analytics:', error);
+    }
+  };
+
+  const runScheduler = async () => {
+    setSchedulerRunning(true);
+    setSchedulerResult(null);
+    try {
+      const res = await fetch(SCHEDULER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      setSchedulerResult(data);
+    } catch (error) {
+      console.error('Error running scheduler:', error);
+      setSchedulerResult({ error: 'Ошибка запуска' });
+    } finally {
+      setSchedulerRunning(false);
     }
   };
 
@@ -371,18 +393,76 @@ export default function Admin() {
         )}
 
         {activeTab === 'analytics' && analytics && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="border border-green-200 shadow-sm">
+          <div className="space-y-4">
+            <Card className="border border-indigo-200 shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Icon name="Users" size={16} className="text-green-600" />
-                  Всего подписчиков
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Icon name="Send" size={16} className="text-indigo-600" />
+                    Управление рассылкой от Ани
+                  </CardTitle>
+                  <Button
+                    onClick={runScheduler}
+                    disabled={schedulerRunning}
+                    size="sm"
+                    variant="outline"
+                    className="h-9"
+                  >
+                    {schedulerRunning ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Запуск...
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="Play" size={16} className="mr-2" />
+                        Запустить сейчас
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-green-700">{analytics.total_subscribers}</p>
-              </CardContent>
+              {schedulerResult && (
+                <CardContent>
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                    {schedulerResult.error ? (
+                      <div className="flex items-center gap-2 text-red-600">
+                        <Icon name="AlertCircle" size={20} />
+                        <span className="font-medium">{schedulerResult.error}</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Отправлено сообщений:</span>
+                          <Badge className="bg-green-100 text-green-700">{schedulerResult.sent}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Пропущено:</span>
+                          <Badge className="bg-gray-100 text-gray-700">{schedulerResult.skipped}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Всего студентов:</span>
+                          <Badge className="bg-blue-100 text-blue-700">{schedulerResult.total_students}</Badge>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              )}
             </Card>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card className="border border-green-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Icon name="Users" size={16} className="text-green-600" />
+                    Всего подписчиков
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-bold text-green-700">{analytics.total_subscribers}</p>
+                </CardContent>
+              </Card>
 
             <Card className="border border-blue-200 shadow-sm">
               <CardHeader className="pb-3">
@@ -419,6 +499,7 @@ export default function Admin() {
                 <p className="text-3xl font-bold text-emerald-700">{analytics.profit.toLocaleString('ru-RU')} ₽</p>
               </CardContent>
             </Card>
+            </div>
           </div>
         )}
 
