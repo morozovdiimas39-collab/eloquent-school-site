@@ -375,6 +375,8 @@ IMPORTANT:
     # Пробуем сначала БЕЗ прокси (Cloud Functions может иметь прямой доступ)
     try:
         print(f"[DEBUG] Trying Gemini without proxy...")
+        print(f"[DEBUG] URL: {gemini_url[:80]}...")
+        print(f"[DEBUG] Payload keys: {list(payload.keys())}")
         req = urllib.request.Request(
             gemini_url,
             data=json.dumps(payload).encode('utf-8'),
@@ -385,6 +387,10 @@ IMPORTANT:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Gemini success without proxy!")
             return result['candidates'][0]['content']['parts'][0]['text']
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8') if e.fp else 'no body'
+        print(f"[DEBUG] HTTP Error {e.code}: {error_body}")
+        print(f"[DEBUG] Direct connection failed: {e}, trying with proxy...")
     except Exception as e:
         print(f"[DEBUG] Direct connection failed: {e}, trying with proxy...")
         
