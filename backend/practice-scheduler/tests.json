@@ -6,7 +6,7 @@
       "path": "/",
       "expectedStatus": 200,
       "expectedBody": {
-        "status": "completed"
+        "success": true
       },
       "bodyMatcher": "partial"
     }

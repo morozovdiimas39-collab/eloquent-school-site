@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import AngryBirdsGame from "./pages/AngryBirdsGame";
 import SystemTest from "./pages/SystemTest";
+import TimezoneSetup from "./pages/TimezoneSetup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/admin" element={<Admin />} />
           <Route path="/game" element={<AngryBirdsGame />} />
           <Route path="/system-test" element={<SystemTest />} />
+          <Route path="/timezone-setup" element={<TimezoneSetup />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
