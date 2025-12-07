@@ -867,6 +867,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Если не режим диалога - даем первое упражнение
             if mode != 'dialog':
                 try:
+                    # Получаем уровень пользователя
+                    language_level = user.get('language_level', 'A1')
                     print(f"[DEBUG] Checking words for user {user['id']}, level {language_level}")
                     # Проверяем и добавляем дефолтные слова если их нет
                     ensure_user_has_words(user['id'], language_level)
