@@ -866,6 +866,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             # Если не режим диалога - даем первое упражнение
             if mode != 'dialog':
+                # Проверяем и добавляем дефолтные слова если их нет
+                ensure_user_has_words(user['id'], language_level)
                 word = get_random_word(user['id'], language_level)
                 if word:
                     if mode == 'sentence':
