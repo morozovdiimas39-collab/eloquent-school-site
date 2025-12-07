@@ -37,10 +37,13 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics'>('teachers');
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [analytics, setAnalytics] = useState<any>(null);
 
   useEffect(() => {
     loadData();
+    loadAnalytics();
   }, []);
 
   const loadData = async () => {
@@ -78,6 +81,22 @@ export default function Admin() {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAnalytics = async () => {
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_analytics' })
+      });
+      const data = await res.json();
+      if (data.analytics) {
+        setAnalytics(data.analytics);
+      }
+    } catch (error) {
+      console.error('Error loading analytics:', error);
     }
   };
 
@@ -159,6 +178,14 @@ export default function Admin() {
               <Icon name="Book" size={16} className="mr-1.5" />
               Словарь
             </Button>
+            <Button
+              onClick={() => setActiveTab('analytics')}
+              variant={activeTab === 'analytics' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-11 text-sm font-medium"
+            >
+              <Icon name="BarChart3" size={16} className="mr-1.5" />
+              Финансы
+            </Button>
           </div>
         </div>
 
@@ -221,6 +248,15 @@ export default function Admin() {
                       <span className="text-xs text-gray-600">ID:</span>
                       <span className="text-xs font-mono text-gray-700">{teacher.telegram_id}</span>
                     </div>
+                    <Button
+                      onClick={() => setSelectedTeacher(teacher)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full mt-2 h-9 text-xs"
+                    >
+                      <Icon name="Eye" size={14} className="mr-1.5" />
+                      Подробнее
+                    </Button>
                   </CardContent>
                 </Card>
               );
@@ -332,6 +368,128 @@ export default function Admin() {
 
         {activeTab === 'vocabulary' && (
           <VocabularyManager />
+        )}
+
+        {activeTab === 'analytics' && analytics && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card className="border border-green-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Icon name="Users" size={16} className="text-green-600" />
+                  Всего подписчиков
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-green-700">{analytics.total_subscribers}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-blue-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Icon name="UserCheck" size={16} className="text-blue-600" />
+                  Активные подписчики
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-blue-700">{analytics.active_subscribers}</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-purple-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Icon name="DollarSign" size={16} className="text-purple-600" />
+                  К выплате преподавателям
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-purple-700">{analytics.teacher_payouts.toLocaleString('ru-RU')} ₽</p>
+              </CardContent>
+            </Card>
+
+            <Card className="border border-emerald-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <Icon name="TrendingUp" size={16} className="text-emerald-600" />
+                  Прибыль
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-emerald-700">{analytics.profit.toLocaleString('ru-RU')} ₽</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {selectedTeacher && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setSelectedTeacher(null)}>
+            <Card className="max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-16 w-16 bg-gradient-to-br from-indigo-600 to-purple-600 ring-2 ring-indigo-500/20">
+                      {selectedTeacher.photo_url && <AvatarImage src={selectedTeacher.photo_url} />}
+                      <AvatarFallback className="text-white text-xl font-semibold">
+                        {(selectedTeacher.first_name || selectedTeacher.username || 'Т').charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <CardTitle className="text-xl">{selectedTeacher.first_name || selectedTeacher.username || 'Преподаватель'}</CardTitle>
+                      {selectedTeacher.username && (
+                        <CardDescription>@{selectedTeacher.username}</CardDescription>
+                      )}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedTeacher(null)}>
+                    <Icon name="X" size={20} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-sm font-medium text-gray-600">Telegram ID</span>
+                    <span className="text-sm font-mono text-gray-900">{selectedTeacher.telegram_id}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-sm font-medium text-gray-600">Промокод</span>
+                    <Badge className="bg-indigo-100 text-indigo-700 font-mono">{selectedTeacher.promocode || 'Нет'}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b">
+                    <span className="text-sm font-medium text-gray-600">Количество учеников</span>
+                    <Badge className="bg-blue-100 text-blue-700">{selectedTeacher.students_count || 0}</Badge>
+                  </div>
+                  {selectedTeacher.phone && (
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm font-medium text-gray-600">Телефон</span>
+                      <a href={`tel:${selectedTeacher.phone}`} className="text-sm text-blue-600 hover:underline">
+                        {selectedTeacher.phone}
+                      </a>
+                    </div>
+                  )}
+                  {selectedTeacher.card_number && (
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm font-medium text-gray-600">Номер карты</span>
+                      <span className="text-sm font-mono text-gray-900">{selectedTeacher.card_number}</span>
+                    </div>
+                  )}
+                  {selectedTeacher.bank_name && (
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <span className="text-sm font-medium text-gray-600">Банк</span>
+                      <span className="text-sm text-gray-900">{selectedTeacher.bank_name}</span>
+                    </div>
+                  )}
+                  {selectedTeacher.created_at && (
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-sm font-medium text-gray-600">Дата регистрации</span>
+                      <span className="text-sm text-gray-900">{new Date(selectedTeacher.created_at).toLocaleDateString('ru-RU')}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </div>

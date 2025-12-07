@@ -991,10 +991,44 @@ def update_payout_info(teacher_id: int, phone: str = None, card_number: str = No
     conn.close()
     return {'success': True}
 
+def get_analytics() -> Dict[str, Any]:
+    """Получает финансовую аналитику для администратора"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Всего подписчиков (students)
+    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.users WHERE role = 'student'")
+    total_subscribers = cur.fetchone()[0]
+    
+    # Активные подписчики (практиковались за последние 7 дней)
+    cur.execute(
+        f"SELECT COUNT(DISTINCT student_id) FROM {SCHEMA}.daily_stats "
+        f"WHERE practice_date >= CURRENT_DATE - INTERVAL '7 days'"
+    )
+    active_subscribers = cur.fetchone()[0]
+    
+    # К выплате преподавателям (70% от всех оплат - commission_rate 30%)
+    # Предполагаем цену подписки 500 руб/мес
+    subscription_price = 500
+    teacher_payouts = int(total_subscribers * subscription_price * 0.7)
+    
+    # Прибыль платформы (30% от всех оплат)
+    profit = int(total_subscribers * subscription_price * 0.3)
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        'total_subscribers': total_subscribers,
+        'active_subscribers': active_subscribers,
+        'teacher_payouts': teacher_payouts,
+        'profit': profit
+    }
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     API для WebApp личного кабинета
-    Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students,
+    Действия: get_user, change_role, get_history, bind_teacher, get_students, get_all_teachers, get_all_students, get_analytics,
     get_categories, create_category, update_category, search_words, create_word, update_word,
     assign_words, assign_category, get_student_words, get_session_words, record_word_usage, get_student_progress_stats, update_student_settings,
     record_practice, get_available_achievements
@@ -1600,6 +1634,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'Access-Control-Allow-Origin': '*'
                 },
                 'body': json.dumps({'students': students}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_analytics':
+            analytics = get_analytics()
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'analytics': analytics}),
                 'isBase64Encoded': False
             }
         
