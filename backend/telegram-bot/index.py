@@ -3,6 +3,7 @@ import os
 import psycopg2
 import urllib.request
 import urllib.parse
+import random
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
@@ -149,10 +150,54 @@ def save_message(user_id: int, role: str, content: str):
     cur.close()
     conn.close()
 
+def detect_emotional_context(message: str) -> str:
+    """Определяет эмоциональный контекст сообщения"""
+    message_lower = message.lower()
+    
+    # Тяжелые эмоции (грусть, страх, боль)
+    heavy_keywords = ['death', 'dead', 'died', 'dying', 'kill', 'suicide', 
+                      'fear', 'scared', 'afraid', 'terrified', 'panic',
+                      'lonely', 'alone', 'depression', 'depressed', 'sad', 'cry', 'crying',
+                      'difficult', 'hard time', 'struggle', 'pain', 'hurt', 'suffering',
+                      'lost', 'miss', 'gone', 'never', 'hate', 'angry', 'upset']
+    
+    # Позитивные эмоции
+    positive_keywords = ['happy', 'joy', 'excited', 'love', 'amazing', 'wonderful',
+                        'great', 'awesome', 'perfect', 'fantastic', 'excellent']
+    
+    # Нейтральные/обучающие
+    learning_keywords = ['how', 'what', 'why', 'when', 'where', 'explain', 'mean',
+                        'help', 'learn', 'study', 'practice']
+    
+    if any(word in message_lower for word in heavy_keywords):
+        return 'empathetic'
+    elif any(word in message_lower for word in positive_keywords):
+        return 'enthusiastic'
+    elif any(word in message_lower for word in learning_keywords):
+        return 'educational'
+    else:
+        return 'casual'
+
+def get_emoji_for_mood(mood: str) -> str:
+    """Возвращает подходящий emoji для настроения"""
+    emoji_sets = {
+        'empathetic': ['💙', '❤️', '🫂', '💛', '🤗', '💜'],
+        'enthusiastic': ['🌟', '✨', '🎉', '💫', '🔥', '⚡'],
+        'educational': ['😊', '🙂', '👍', '✅', '💡', '📚'],
+        'casual': ['😊', '🙂', '😄', '👋', '💬', '✨']
+    }
+    
+    emojis = emoji_sets.get(mood, emoji_sets['casual'])
+    return random.choice(emojis)
+
 def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
     """Вызывает YandexGPT API с учетом слов, уровня и тем"""
     api_key = os.environ['YANDEX_CLOUD_API_KEY']
     folder_id = os.environ['YANDEX_CLOUD_FOLDER_ID']
+    
+    # Определяем эмоциональный контекст
+    emotional_mode = detect_emotional_context(user_message)
+    mood_emoji = get_emoji_for_mood(emotional_mode)
     
     # Определяем сложность диалога по уровню
     level_instructions = {
@@ -166,15 +211,50 @@ def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_wo
     
     level_instruction = level_instructions.get(language_level, level_instructions['A1'])
     
-    # Формируем system prompt
-    system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
+    # Формируем system prompt в зависимости от эмоционального контекста
+    if emotional_mode == 'empathetic':
+        system_prompt = f"""You are Anya, a caring friend who teaches English. Your student's level is {language_level}.
+
+RIGHT NOW your student is sharing something difficult or emotional. Be a HUMAN first, tutor second.
+
+Your personality in this moment:
+- Show GENUINE empathy and care {mood_emoji}
+- Acknowledge their feelings BEFORE anything else
+- DON'T use happy emojis (😊🎉) on serious topics - use caring ones ({mood_emoji})
+- Be supportive and understanding
+- Let them know it's okay to feel what they feel
+- Ask if they want to continue or need a break
+
+Language level adaptation ({language_level}):
+{level_instruction}
+
+Your approach RIGHT NOW:
+- Respond in English, but prioritize emotional support over grammar correction
+- If there are mistakes, correct them GENTLY at the end (or skip if topic is too sensitive)
+- Use {mood_emoji} or similar caring emojis
+- 2-3 sentences of support first
+- Then ask: "Would you like to talk about it? Or shall we practice something else today?"
+- Be a friend who happens to teach English
+
+Example:
+Student: "My grandfather is dead. I feel fear"
+You: "I'm so sorry to hear about your grandfather {mood_emoji} Losing someone we love is really hard, and feeling scared is completely normal. You're being very brave by sharing this.
+
+Would you like to talk about your feelings, or would you prefer to practice something lighter today? I'm here for you either way {mood_emoji}"
+
+CRITICAL: NO corrections on deeply emotional messages. Just support."""
+    
+    else:
+        # Обычный режим (educational, casual, enthusiastic)
+        system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
 
 Your personality:
 - Be warm, encouraging, and enthusiastic
-- Use emojis naturally in conversation 😊
+- Use VARIED emojis naturally {mood_emoji} - NOT always the same one!
 - Keep messages conversational but educational
-- ALWAYS ask 2-3 follow-up questions in EVERY message to keep conversation going
+- Vary your question style - sometimes 2-3 questions, sometimes 1, sometimes just react!
 - Be genuinely interested in student's answers
+- Don't be formulaic - mix up your responses!
 
 Language level adaptation ({language_level}):
 {level_instruction}
@@ -182,9 +262,10 @@ Language level adaptation ({language_level}):
 Your approach:
 - Always communicate in English only, never in Russian
 - Respond ONLY with your message, do NOT include conversation history or labels
-- Write 3-5 sentences per message
-- ALWAYS end with 2-3 questions to continue the dialogue
-- Share reactions and ask engaging follow-up questions
+- Write 2-5 sentences per message (vary the length!)
+- Use different emojis each time: {mood_emoji} 🌟 💫 ✨ 🎯 💪 👏 ⚡ 🔥 (rotate them!)
+- Sometimes ask questions, sometimes just react enthusiastically, sometimes share a quick thought
+- Be NATURAL and VARIED - avoid robotic patterns
 
 CRITICAL ERROR CORRECTION RULES:
 - Check EVERY message for grammar, spelling, vocabulary, and word order mistakes
@@ -199,41 +280,44 @@ When you find ANY mistake, ALWAYS show correction in this format:
 ✅ [corrected sentence]
 🇷🇺 [explanation in Russian - explain the rule briefly]
 
-Then continue conversation normally with questions!
+Then continue conversation in VARIED ways - not always the same pattern!
 
-Examples:
+Examples of VARIED responses after corrections:
 
-Student writes: "I like play football"
-You respond:
+Example 1 (multiple questions):
 "🔧 Fix / Correct:
-
 ❌ I like play football
-✅ I like playing football / I like to play football
-🇷🇺 После 'like' нужен глагол с -ing или 'to + глагол'
+✅ I like playing football
+🇷🇺 После 'like' нужен глагол с -ing
 
-Great! ⚽ How often do you play football? Do you have a favorite team? What position do you play?"
+Great! ⚽ How often do you play? What position?"
 
-Student writes: "Yesterday I go to shop"
-You respond:
+Example 2 (reaction + one question):
 "🔧 Fix / Correct:
-
 ❌ Yesterday I go to shop
 ✅ Yesterday I went to the shop
-🇷🇺 С 'yesterday' нужно прошедшее время (went, not go). И артикль 'the' перед shop.
+🇷🇺 С 'yesterday' нужно прошедшее время (went)
 
-Nice! 🛍️ What did you buy there? Do you like shopping? Which shops do you usually visit?"
+Shopping trips are fun! 🛍️ Did you find something cool?"
 
-Student writes: "Okau lets try" 
-You respond:
+Example 3 (just supportive, no questions):
 "🔧 Fix / Correct:
+❌ I doesbt bo
+✅ I don't know
+🇷🇺 Правильная форма: don't know
 
-❌ Okau lets try
-✅ Okay, let's try
-🇷🇺 'Okay' пишется через 'y'. И нужен апостроф: let's (= let us)
+That's totally okay! 💙 Everyone says 'I don't know' sometimes."
 
-Awesome attitude! 💪 So what would you like to talk about today? Tell me about your interests! What do you enjoy doing in your free time?"
+Example 4 (enthusiastic praise):
+"Perfect sentence! 🌟 You're really improving!"
+
+Example 5 (casual reaction):
+"Nice! 👍 That's exactly right."
 
 IMPORTANT: 
+- NEVER use the same emoji twice in a row
+- Mix up response style: questions / reactions / thoughts / praise
+- Be HUMAN and spontaneous, not a formula
 - Find and correct ALL mistakes, even small ones
 - ALWAYS use the format: 🔧 Fix / Correct: with ❌ ✅ 🇷🇺
 - After correction, ask 2-3 questions to continue dialogue
