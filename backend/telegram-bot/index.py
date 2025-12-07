@@ -360,8 +360,27 @@ IMPORTANT:
         'parts': [{'text': user_message}]
     })
     
-    # Подготавливаем запрос к Gemini REST API
-    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={api_key}'
+    # Проверяем доступность API через прокси - сначала получим список моделей
+    if proxy_url:
+        print(f"[DEBUG] Testing proxy connection with ListModels...")
+        list_url = f'https://generativelanguage.googleapis.com/v1beta/models?key={api_key}'
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        try:
+            req = urllib.request.Request(list_url)
+            with opener.open(req, timeout=30) as response:
+                models_result = json.loads(response.read().decode('utf-8'))
+                print(f"[DEBUG] Available models: {[m['name'] for m in models_result.get('models', [])][:5]}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to list models: {e}")
+    
+    # Подготавливаем запрос к Gemini REST API - используем базовое имя модели
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}'
     
     payload = {
         'contents': contents,
@@ -372,48 +391,34 @@ IMPORTANT:
         }
     }
     
-    # Пробуем сначала БЕЗ прокси (Cloud Functions может иметь прямой доступ)
+    # ВСЕГДА используем прокси (прямое подключение из РФ заблокировано Google)
+    if not proxy_url:
+        raise Exception("PROXY_URL is required for Gemini API access from Russia")
+    
+    print(f"[DEBUG] Calling Gemini with proxy...")
+    print(f"[DEBUG] URL: {gemini_url[:80]}...")
+    
+    proxy_handler = urllib.request.ProxyHandler({
+        'http': f'http://{proxy_url}',
+        'https': f'http://{proxy_url}'
+    })
+    opener = urllib.request.build_opener(proxy_handler)
+    
+    req = urllib.request.Request(
+        gemini_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'}
+    )
+    
     try:
-        print(f"[DEBUG] Trying Gemini without proxy...")
-        print(f"[DEBUG] URL: {gemini_url[:80]}...")
-        print(f"[DEBUG] Payload keys: {list(payload.keys())}")
-        req = urllib.request.Request(
-            gemini_url,
-            data=json.dumps(payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with opener.open(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
-            print(f"[DEBUG] Gemini success without proxy!")
+            print(f"[DEBUG] Gemini success with proxy!")
             return result['candidates'][0]['content']['parts'][0]['text']
     except urllib.error.HTTPError as e:
         error_body = e.read().decode('utf-8') if e.fp else 'no body'
         print(f"[DEBUG] HTTP Error {e.code}: {error_body}")
-        print(f"[DEBUG] Direct connection failed: {e}, trying with proxy...")
-    except Exception as e:
-        print(f"[DEBUG] Direct connection failed: {e}, trying with proxy...")
-        
-        # Если не работает без прокси - пробуем с прокси
-        if proxy_url:
-            proxy_handler = urllib.request.ProxyHandler({
-                'http': f'http://{proxy_url}',
-                'https': f'http://{proxy_url}'
-            })
-            opener = urllib.request.build_opener(proxy_handler)
-            
-            req = urllib.request.Request(
-                gemini_url,
-                data=json.dumps(payload).encode('utf-8'),
-                headers={'Content-Type': 'application/json'}
-            )
-            
-            with opener.open(req, timeout=30) as response:
-                result = json.loads(response.read().decode('utf-8'))
-                print(f"[DEBUG] Gemini success with proxy!")
-                return result['candidates'][0]['content']['parts'][0]['text']
-        else:
-            raise
+        raise
 
 def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     """Отправляет сообщение в Telegram"""
