@@ -572,7 +572,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             save_message(user['id'], 'user', text)
             
             # Получаем ответ AI с учетом слов, уровня и тем
-            ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
+            try:
+                print(f"[DEBUG] Calling Gemini with message: {text}")
+                ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
+                print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
+            except Exception as e:
+                print(f"[ERROR] Gemini API failed: {e}")
+                import traceback
+                traceback.print_exc()
+                ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
             
             # Сохраняем ответ AI
             save_message(user['id'], 'assistant', ai_response)
