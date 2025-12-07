@@ -1579,6 +1579,30 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
+        elif action == 'get_all_teachers':
+            teachers = get_all_teachers()
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'teachers': teachers}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_all_students':
+            students = get_all_students()
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'students': students}),
+                'isBase64Encoded': False
+            }
+        
         else:
             return {
                 'statusCode': 400,

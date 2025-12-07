@@ -59,8 +59,14 @@ export default function Admin() {
         })
       ]);
 
+      console.log('Teachers response status:', teachersRes.status);
+      console.log('Students response status:', studentsRes.status);
+
       const teachersData = await teachersRes.json();
       const studentsData = await studentsRes.json();
+
+      console.log('Teachers data:', teachersData);
+      console.log('Students data:', studentsData);
 
       if (teachersData.teachers) {
         setTeachers(teachersData.teachers);
