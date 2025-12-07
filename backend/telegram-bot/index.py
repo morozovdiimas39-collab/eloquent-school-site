@@ -5,7 +5,6 @@ import urllib.request
 import urllib.parse
 import random
 from typing import Dict, Any, List
-import google.generativeai as genai
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
@@ -196,18 +195,6 @@ def call_gemini(user_message: str, history: List[Dict[str, str]], session_words:
     api_key = os.environ['GEMINI_API_KEY']
     proxy_url = os.environ.get('PROXY_URL', '')
     
-    # Настраиваем прокси для urllib
-    if proxy_url:
-        proxy_handler = urllib.request.ProxyHandler({
-            'http': f'http://{proxy_url}',
-            'https': f'http://{proxy_url}'
-        })
-        opener = urllib.request.build_opener(proxy_handler)
-        urllib.request.install_opener(opener)
-    
-    # Настраиваем Gemini
-    genai.configure(api_key=api_key)
-    
     # Определяем эмоциональный контекст
     emotional_mode = detect_emotional_context(user_message)
     mood_emoji = get_emoji_for_mood(emotional_mode)
@@ -344,26 +331,66 @@ IMPORTANT:
         topics_list = [f"{t['emoji']} {t['topic']}" for t in preferred_topics[:5]]
         system_prompt += f"\n\nStudent's favorite topics: {', '.join(topics_list)}\nFeel free to bring up these topics in conversation."
     
-    # Создаем модель Gemini
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Формируем содержимое для Gemini (system prompt + история + новое сообщение)
+    contents = []
     
-    # Формируем историю для Gemini
-    chat_history = []
+    # Добавляем системный промпт как первое сообщение пользователя
+    contents.append({
+        'role': 'user',
+        'parts': [{'text': system_prompt}]
+    })
+    
+    # Добавляем ответ модели что она поняла
+    contents.append({
+        'role': 'model',
+        'parts': [{'text': 'Understood! I will follow these instructions.'}]
+    })
+    
+    # Добавляем историю диалога
     for msg in history[-15:]:
         role = 'user' if msg['role'] == 'user' else 'model'
-        chat_history.append({
+        contents.append({
             'role': role,
-            'parts': [msg['content']]
+            'parts': [{'text': msg['content']}]
         })
     
-    # Создаем чат с историей
-    chat = model.start_chat(history=chat_history)
+    # Добавляем новое сообщение
+    contents.append({
+        'role': 'user',
+        'parts': [{'text': user_message}]
+    })
     
-    # Отправляем системный промпт + сообщение пользователя
-    full_message = f"{system_prompt}\n\n---\n\nStudent's message: {user_message}"
+    # Подготавливаем запрос к Gemini REST API
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}'
     
-    response = chat.send_message(full_message)
-    return response.text
+    payload = {
+        'contents': contents,
+        'generationConfig': {
+            'temperature': 0.8,
+            'maxOutputTokens': 2000,
+            'topP': 0.95
+        }
+    }
+    
+    # Настраиваем прокси если он есть
+    if proxy_url:
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+    else:
+        opener = urllib.request.build_opener()
+    
+    req = urllib.request.Request(
+        gemini_url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'}
+    )
+    
+    with opener.open(req, timeout=30) as response:
+        result = json.loads(response.read().decode('utf-8'))
+        return result['candidates'][0]['content']['parts'][0]['text']
 
 def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     """Отправляет сообщение в Telegram"""
