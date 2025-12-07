@@ -388,26 +388,7 @@ export default function Dashboard() {
               languageLevel={languageLevel}
             />
 
-            <div className="grid grid-cols-2 gap-3">
-              <StreakCard studentId={user.id} />
-              
-              <Card 
-                className="border border-yellow-200 shadow-sm hover:shadow-md transition-all cursor-pointer bg-gradient-to-br from-yellow-50 to-orange-50"
-                onClick={() => setAchievementsOpen(true)}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base font-bold">
-                    <Icon name="Trophy" size={20} className="text-yellow-600" />
-                    Достижения
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-center pt-2">
-                    <Icon name="ChevronRight" size={24} className="text-yellow-600" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <StreakCard studentId={user.id} />
           </>
         )}
 
