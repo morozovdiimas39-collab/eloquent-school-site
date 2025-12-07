@@ -13,7 +13,6 @@ import PartnerProgram from '@/components/teacher/PartnerProgram';
 import TeacherSettings from '@/components/teacher/TeacherSettings';
 import ImprovedMyWords from '@/components/student/ImprovedMyWords';
 import TeacherCard from '@/components/student/TeacherCard';
-import StreakCard from '@/components/student/StreakCard';
 import AchievementsDialog from '@/components/student/AchievementsDialog';
 
 interface TelegramUser {
@@ -387,8 +386,6 @@ export default function Dashboard() {
               teacherId={teacherId}
               languageLevel={languageLevel}
             />
-
-            <StreakCard studentId={user.id} />
           </>
         )}
 

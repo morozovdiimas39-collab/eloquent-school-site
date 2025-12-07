@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
@@ -17,10 +17,17 @@ interface User {
   promocode?: string;
   teacher_id?: number;
   created_at?: string;
+  photo_url?: string;
+  language_level?: string;
+  preferred_topics?: string[];
+  timezone?: string;
 }
 
 interface Teacher extends User {
   students_count?: number;
+  phone?: string;
+  card_number?: string;
+  bank_name?: string;
 }
 
 const API_URL = funcUrls['webapp-api'];
@@ -160,6 +167,7 @@ export default function Admin() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12 bg-gradient-to-br from-indigo-600 to-purple-600 ring-2 ring-indigo-500/20 shadow-sm">
+                        {teacher.photo_url && <AvatarImage src={teacher.photo_url} alt={teacherName} />}
                         <AvatarFallback className="text-white text-base font-semibold">
                           {teacherName.charAt(0).toUpperCase()}
                         </AvatarFallback>
@@ -185,7 +193,25 @@ export default function Admin() {
                         {teacher.students_count || 0}
                       </Badge>
                     </div>
-                    <div className="flex items-center justify-between">
+                    {teacher.phone && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Телефон:</span>
+                        <span className="text-xs text-gray-700">{teacher.phone}</span>
+                      </div>
+                    )}
+                    {teacher.card_number && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Карта:</span>
+                        <span className="text-xs font-mono text-gray-700">{teacher.card_number}</span>
+                      </div>
+                    )}
+                    {teacher.bank_name && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Банк:</span>
+                        <span className="text-xs text-gray-700">{teacher.bank_name}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1 border-t">
                       <span className="text-xs text-gray-600">ID:</span>
                       <span className="text-xs font-mono text-gray-700">{teacher.telegram_id}</span>
                     </div>
@@ -220,6 +246,7 @@ export default function Admin() {
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-600 to-cyan-600 ring-2 ring-blue-500/20 shadow-sm">
+                        {student.photo_url && <AvatarImage src={student.photo_url} alt={studentName} />}
                         <AvatarFallback className="text-white text-base font-semibold">
                           {studentName.charAt(0).toUpperCase()}
                         </AvatarFallback>
@@ -241,11 +268,42 @@ export default function Admin() {
                         </Badge>
                       ) : (
                         <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold">
-                          Нет
+                          Самостоятельно
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center justify-between">
+                    {student.language_level && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Уровень:</span>
+                        <Badge className="bg-purple-100 text-purple-700 text-xs font-semibold">
+                          {student.language_level}
+                        </Badge>
+                      </div>
+                    )}
+                    {student.timezone && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">Часовой пояс:</span>
+                        <span className="text-xs text-gray-700">{student.timezone}</span>
+                      </div>
+                    )}
+                    {student.preferred_topics && student.preferred_topics.length > 0 && (
+                      <div>
+                        <span className="text-xs text-gray-600 block mb-1">Интересы:</span>
+                        <div className="flex flex-wrap gap-1">
+                          {student.preferred_topics.slice(0, 3).map((topic, idx) => (
+                            <Badge key={idx} className="bg-blue-50 text-blue-700 text-xs">
+                              {topic}
+                            </Badge>
+                          ))}
+                          {student.preferred_topics.length > 3 && (
+                            <Badge className="bg-gray-100 text-gray-600 text-xs">
+                              +{student.preferred_topics.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between pt-1 border-t">
                       <span className="text-xs text-gray-600">ID:</span>
                       <span className="text-xs font-mono text-gray-700">{student.telegram_id}</span>
                     </div>

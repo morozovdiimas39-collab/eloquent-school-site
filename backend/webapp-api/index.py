@@ -117,11 +117,13 @@ def get_all_teachers() -> List[Dict[str, Any]]:
     
     cur.execute(
         f"SELECT u.telegram_id, u.username, u.first_name, u.last_name, u.promocode, u.created_at, "
+        f"u.phone, u.card_number, u.bank_name, u.photo_url, "
         f"COUNT(s.telegram_id) as students_count "
         f"FROM {SCHEMA}.users u "
         f"LEFT JOIN {SCHEMA}.users s ON s.teacher_id = u.telegram_id AND s.role = 'student' "
         f"WHERE u.role = 'teacher' "
-        f"GROUP BY u.telegram_id, u.username, u.first_name, u.last_name, u.promocode, u.created_at "
+        f"GROUP BY u.telegram_id, u.username, u.first_name, u.last_name, u.promocode, u.created_at, "
+        f"u.phone, u.card_number, u.bank_name, u.photo_url "
         f"ORDER BY u.created_at DESC"
     )
     
@@ -135,7 +137,11 @@ def get_all_teachers() -> List[Dict[str, Any]]:
             'role': 'teacher',
             'promocode': row[4],
             'created_at': row[5].isoformat() if row[5] else None,
-            'students_count': row[6]
+            'phone': row[6],
+            'card_number': row[7],
+            'bank_name': row[8],
+            'photo_url': row[9],
+            'students_count': row[10]
         })
     
     cur.close()
@@ -148,7 +154,8 @@ def get_all_students() -> List[Dict[str, Any]]:
     cur = conn.cursor()
     
     cur.execute(
-        f"SELECT telegram_id, username, first_name, last_name, teacher_id, created_at "
+        f"SELECT telegram_id, username, first_name, last_name, teacher_id, created_at, "
+        f"language_level, preferred_topics, timezone, photo_url "
         f"FROM {SCHEMA}.users "
         f"WHERE role = 'student' "
         f"ORDER BY created_at DESC"
@@ -163,7 +170,11 @@ def get_all_students() -> List[Dict[str, Any]]:
             'last_name': row[3],
             'role': 'student',
             'teacher_id': row[4],
-            'created_at': row[5].isoformat() if row[5] else None
+            'created_at': row[5].isoformat() if row[5] else None,
+            'language_level': row[6],
+            'preferred_topics': row[7] if row[7] else [],
+            'timezone': row[8],
+            'photo_url': row[9]
         })
     
     cur.close()
