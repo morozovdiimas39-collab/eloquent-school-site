@@ -5,6 +5,7 @@ import urllib.request
 import urllib.parse
 import random
 from typing import Dict, Any, List
+import google.generativeai as genai
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
@@ -190,10 +191,22 @@ def get_emoji_for_mood(mood: str) -> str:
     emojis = emoji_sets.get(mood, emoji_sets['casual'])
     return random.choice(emojis)
 
-def call_yandex_gpt(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
-    """Вызывает YandexGPT API с учетом слов, уровня и тем"""
-    api_key = os.environ['YANDEX_CLOUD_API_KEY']
-    folder_id = os.environ['YANDEX_CLOUD_FOLDER_ID']
+def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
+    """Вызывает Gemini API через прокси с учетом слов, уровня и тем"""
+    api_key = os.environ['GEMINI_API_KEY']
+    proxy_url = os.environ.get('PROXY_URL', '')
+    
+    # Настраиваем прокси для urllib
+    if proxy_url:
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        urllib.request.install_opener(opener)
+    
+    # Настраиваем Gemini
+    genai.configure(api_key=api_key)
     
     # Определяем эмоциональный контекст
     emotional_mode = detect_emotional_context(user_message)
@@ -331,45 +344,26 @@ IMPORTANT:
         topics_list = [f"{t['emoji']} {t['topic']}" for t in preferred_topics[:5]]
         system_prompt += f"\n\nStudent's favorite topics: {', '.join(topics_list)}\nFeel free to bring up these topics in conversation."
     
-    messages = [{'role': 'system', 'text': system_prompt}]
+    # Создаем модель Gemini
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
-    # Добавляем последние 15 сообщений из истории для контекста
+    # Формируем историю для Gemini
+    chat_history = []
     for msg in history[-15:]:
-        # YandexGPT использует роли 'user' и 'assistant'
-        role = 'user' if msg['role'] == 'user' else 'assistant'
-        messages.append({
+        role = 'user' if msg['role'] == 'user' else 'model'
+        chat_history.append({
             'role': role,
-            'text': msg['content']
+            'parts': [msg['content']]
         })
     
-    messages.append({
-        'role': 'user',
-        'text': user_message
-    })
+    # Создаем чат с историей
+    chat = model.start_chat(history=chat_history)
     
-    payload = {
-        'modelUri': f'gpt://{folder_id}/yandexgpt-lite',
-        'completionOptions': {
-            'stream': False,
-            'temperature': 0.7,
-            'maxTokens': 2000
-        },
-        'messages': messages
-    }
+    # Отправляем системный промпт + сообщение пользователя
+    full_message = f"{system_prompt}\n\n---\n\nStudent's message: {user_message}"
     
-    req = urllib.request.Request(
-        'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
-        data=json.dumps(payload).encode('utf-8'),
-        headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Api-Key {api_key}',
-            'x-folder-id': folder_id
-        }
-    )
-    
-    with urllib.request.urlopen(req) as response:
-        result = json.loads(response.read().decode('utf-8'))
-        return result['result']['alternatives'][0]['message']['text']
+    response = chat.send_message(full_message)
+    return response.text
 
 def send_telegram_message(chat_id: int, text: str, reply_markup=None):
     """Отправляет сообщение в Telegram"""
@@ -513,7 +507,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
             send_telegram_message(
                 chat_id,
-                '👋 Привет! Я AnyaGPT - AI-помощник на базе YandexGPT.\n\n'
+                '👋 Привет! Я AnyaGPT - AI-помощник на базе Gemini.\n\n'
                 'Задавай мне любые вопросы прямо здесь в чате, и я отвечу!\n\n'
                 'Чтобы изменить роль или посмотреть историю - открой личный кабинет 👇',
                 keyboard
@@ -551,7 +545,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             save_message(user['id'], 'user', text)
             
             # Получаем ответ AI с учетом слов, уровня и тем
-            ai_response = call_yandex_gpt(text, history, session_words, language_level, preferred_topics)
+            ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
             
             # Сохраняем ответ AI
             save_message(user['id'], 'assistant', ai_response)
