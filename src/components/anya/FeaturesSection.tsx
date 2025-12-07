@@ -49,10 +49,10 @@ export default function FeaturesSection() {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {features.map((feature, idx) => (
-            <Card key={idx} className="border-2 hover:border-violet-200 transition-all hover:shadow-xl">
+            <Card key={idx} className="border-2 hover:border-blue-200 transition-all hover:shadow-xl">
               <CardContent className="p-6">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-purple-100 flex items-center justify-center mb-4">
-                  <Icon name={feature.icon as any} size={28} className="text-violet-600" />
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center mb-4">
+                  <Icon name={feature.icon as any} size={28} className="text-blue-600" />
                 </div>
                 <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
                 <p className="text-gray-600">{feature.description}</p>

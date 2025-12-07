@@ -9,7 +9,7 @@ export default function HeroSection({ onStartDemo }: HeroSectionProps) {
   return (
     <section className="container mx-auto px-4 py-20 md:py-32">
       <div className="max-w-5xl mx-auto text-center space-y-8">
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-100 text-violet-700 font-medium text-sm border border-violet-200">
+        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-medium text-sm border border-blue-200">
           <Icon name="Sparkles" size={16} />
           <span>Твой личный ИИ-репетитор английского</span>
         </div>
@@ -17,7 +17,7 @@ export default function HeroSection({ onStartDemo }: HeroSectionProps) {
         <h1 className="text-5xl md:text-7xl font-bold leading-tight">
           Учи английский
           <br />
-          <span className="bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
             в разговорах с Аней
           </span>
         </h1>
@@ -30,7 +30,7 @@ export default function HeroSection({ onStartDemo }: HeroSectionProps) {
           <Button
             onClick={onStartDemo}
             size="lg"
-            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 font-semibold text-lg h-14 px-8 shadow-xl"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold text-lg h-14 px-8 shadow-xl"
           >
             Попробовать демо
             <Icon name="MessageSquare" size={20} className="ml-2" />

@@ -105,8 +105,8 @@ export default function DemoChat() {
           </p>
         </div>
 
-        <Card className="overflow-hidden shadow-2xl border-2 border-violet-100">
-          <div className="bg-gradient-to-r from-violet-600 to-purple-600 p-4 text-white">
+        <Card className="overflow-hidden shadow-2xl border-2 border-blue-100">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
                 <span className="text-2xl">👩‍🏫</span>
@@ -128,8 +128,8 @@ export default function DemoChat() {
                   <div
                     className={`rounded-2xl px-4 py-3 ${
                       message.sender === 'user'
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-white border-2 border-violet-100 text-gray-900'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white border-2 border-blue-100 text-gray-900'
                     }`}
                   >
                     <p className="text-sm md:text-base">{message.text}</p>
@@ -150,11 +150,11 @@ export default function DemoChat() {
             ))}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="bg-white border-2 border-violet-100 rounded-2xl px-4 py-3">
+                <div className="bg-white border-2 border-blue-100 rounded-2xl px-4 py-3">
                   <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
                 </div>
               </div>
@@ -183,12 +183,12 @@ export default function DemoChat() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="Type your message in English..."
-                className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-violet-400 focus:outline-none"
+                className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-400 focus:outline-none"
               />
               <Button
                 onClick={handleSend}
                 disabled={!input.trim() || isTyping}
-                className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 px-6"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-6"
               >
                 <Icon name="Send" size={20} />
               </Button>

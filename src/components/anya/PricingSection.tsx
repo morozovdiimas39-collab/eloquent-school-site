@@ -59,13 +59,13 @@ export default function PricingSection() {
               key={idx}
               className={`relative ${
                 plan.popular
-                  ? 'border-4 border-violet-600 shadow-2xl scale-105'
+                  ? 'border-4 border-blue-600 shadow-2xl scale-105'
                   : 'border-2 hover:shadow-xl transition-all'
               }`}
             >
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <div className="bg-gradient-to-r from-violet-600 to-purple-600 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg">
+                  <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg">
                     🔥 Популярный
                   </div>
                 </div>
@@ -74,7 +74,7 @@ export default function PricingSection() {
               <CardHeader className="text-center pb-4">
                 <CardTitle className="text-2xl font-bold mb-2">{plan.name}</CardTitle>
                 <div className="mb-3">
-                  <span className="text-5xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                  <span className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                     {plan.price}
                   </span>
                   <span className="text-gray-600 text-lg ml-2">{plan.period}</span>
@@ -102,7 +102,7 @@ export default function PricingSection() {
                   onClick={() => navigate('/app')}
                   className={`w-full font-semibold text-lg h-12 ${
                     plan.popular
-                      ? 'bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 shadow-lg'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg'
                       : 'bg-gray-900 hover:bg-gray-800'
                   }`}
                 >
