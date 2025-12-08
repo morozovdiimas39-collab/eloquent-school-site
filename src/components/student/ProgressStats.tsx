@@ -91,31 +91,6 @@ export default function ProgressStats({ studentId }: ProgressStatsProps) {
 
   return (
     <div className="space-y-4">
-      {/* Streak Card */}
-      <Card className="bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-lg font-bold">
-            🔥 Streak
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-lg p-3 text-center border border-orange-100">
-              <div className="text-2xl font-bold text-orange-600">{stats.current_streak}</div>
-              <div className="text-xs text-gray-600 mt-1">Текущий</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 text-center border border-orange-100">
-              <div className="text-2xl font-bold text-orange-600">{stats.longest_streak}</div>
-              <div className="text-xs text-gray-600 mt-1">Рекорд</div>
-            </div>
-            <div className="bg-white rounded-lg p-3 text-center border border-orange-100">
-              <div className="text-2xl font-bold text-orange-600">{stats.total_practice_days}</div>
-              <div className="text-xs text-gray-600 mt-1">Всего дней</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Words Progress */}
       <Card className="border border-gray-200 shadow-sm">
         <CardHeader className="pb-3">

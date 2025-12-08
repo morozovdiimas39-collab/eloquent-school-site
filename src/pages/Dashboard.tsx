@@ -15,6 +15,7 @@ import TeacherSettings from '@/components/teacher/TeacherSettings';
 import ImprovedMyWords from '@/components/student/ImprovedMyWords';
 import TeacherCard from '@/components/student/TeacherCard';
 import AchievementsDialog from '@/components/student/AchievementsDialog';
+import ProgressStats from '@/components/student/ProgressStats';
 
 interface TelegramUser {
   id: number;
@@ -406,6 +407,8 @@ export default function Dashboard() {
               teacherId={teacherId} 
               onBindTeacher={() => setBindTeacherOpen(true)}
             />
+
+            <ProgressStats studentId={user.id} />
 
             <ImprovedMyWords
               studentId={user.id}
