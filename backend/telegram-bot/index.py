@@ -4,6 +4,7 @@ import psycopg2
 import urllib.request
 import urllib.parse
 import random
+import re
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
@@ -217,6 +218,51 @@ def clear_exercise_state(telegram_id: int):
     cur.execute(f"UPDATE {SCHEMA}.users SET current_exercise_word_id = NULL, current_exercise_answer = NULL WHERE telegram_id = {telegram_id}")
     cur.close()
     conn.close()
+
+def update_word_progress_api(student_id: int, word_id: int, is_correct: bool):
+    """Обновляет прогресс слова через webapp-api"""
+    try:
+        webapp_api_url = os.environ.get('WEBAPP_API_URL', '')
+        if not webapp_api_url:
+            print("[WARNING] WEBAPP_API_URL not set, skipping progress update")
+            return
+        
+        payload = json.dumps({
+            'action': 'update_word_progress',
+            'student_id': student_id,
+            'word_id': word_id,
+            'is_correct': is_correct
+        }).encode('utf-8')
+        
+        req = urllib.request.Request(
+            webapp_api_url,
+            data=payload,
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+            print(f"[DEBUG] Word progress updated: word_id={word_id}, is_correct={is_correct}, result={result}")
+            return result
+    except Exception as e:
+        print(f"[ERROR] Failed to update word progress: {e}")
+        return None
+
+def detect_words_in_text(text: str, session_words: List[Dict[str, Any]]) -> List[int]:
+    """Определяет, какие слова из сессии использованы в тексте"""
+    text_lower = text.lower()
+    # Убираем пунктуацию для точного поиска
+    text_clean = re.sub(r'[^\w\s]', ' ', text_lower)
+    words_in_text = set(text_clean.split())
+    
+    used_word_ids = []
+    for word in session_words:
+        # Проверяем точное совпадение слова
+        if word['english'].lower() in words_in_text:
+            used_word_ids.append(word['id'])
+    
+    return used_word_ids
 
 def get_learning_mode_keyboard():
     """Возвращает Inline Keyboard с режимами обучения"""
@@ -917,19 +963,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             language_level = existing_user.get('language_level', 'A1')
+            used_word_ids = []  # Инициализируем для использования в статистике
             
             # Если режим не диалог - проверяем ответ на упражнение
             if conversation_mode != 'dialog':
                 correct_answer = existing_user.get('current_exercise_answer', '')
+                current_word_id = existing_user.get('current_exercise_word_id')
                 user_answer = text.strip().lower()
                 
                 if correct_answer:
                     correct_answer_lower = correct_answer.lower()
+                    is_correct = (user_answer == correct_answer_lower)
                     
-                    if user_answer == correct_answer_lower:
+                    if is_correct:
                         send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉')
                     else:
                         send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: <b>{correct_answer}</b>')
+                    
+                    # Обновляем прогресс слова
+                    if current_word_id:
+                        update_word_progress_api(user['id'], current_word_id, is_correct)
                     
                     clear_exercise_state(user['id'])
                     
@@ -969,6 +1022,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     except Exception as e:
                         print(f"[WARNING] Failed to load session words: {e}")
                 
+                # Анализируем использование слов в сообщении ученика
+                used_word_ids = []
+                if session_words:
+                    used_word_ids = detect_words_in_text(text, session_words)
+                    print(f"[DEBUG] Detected words in message: {used_word_ids}")
+                
                 # Сохраняем вопрос пользователя
                 save_message(user['id'], 'user', text)
                 
@@ -983,24 +1042,31 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     traceback.print_exc()
                     ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
                 
+                # Обновляем прогресс использованных слов (считаем правильным использованием)
+                for word_id in used_word_ids:
+                    update_word_progress_api(user['id'], word_id, True)
+                
                 # Сохраняем ответ AI
                 save_message(user['id'], 'assistant', ai_response)
                 
                 # Отправляем ответ в Telegram
                 send_telegram_message(chat_id, ai_response)
             
-            # Обновляем статистику практики (только для режима диалога)
-            if conversation_mode == 'dialog' and existing_user.get('role') == 'student':
+            # Обновляем статистику практики (для всех режимов)
+            if existing_user.get('role') == 'student':
                 try:
                     # Отправляем статистику в webapp-api
                     import urllib.parse
                     webapp_api_url = os.environ.get('WEBAPP_API_URL', '')
                     if webapp_api_url:
+                        # В режиме диалога считаем использованные слова, в упражнениях - 1 слово
+                        words_count = len(used_word_ids) if conversation_mode == 'dialog' else 1
+                        
                         record_payload = json.dumps({
                             'action': 'record_practice',
                             'student_id': user['id'],
                             'messages': 1,
-                            'words': 0,
+                            'words': words_count,
                             'errors': 0
                         }).encode('utf-8')
                         
