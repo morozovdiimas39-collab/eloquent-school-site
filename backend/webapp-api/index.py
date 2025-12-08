@@ -632,7 +632,8 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
     cur.execute(
         f"SELECT AVG(mastery_score) FROM {SCHEMA}.word_progress WHERE student_id = {student_id}"
     )
-    avg_mastery = cur.fetchone()[0] or 0
+    avg_mastery_result = cur.fetchone()[0]
+    avg_mastery = float(avg_mastery_result) if avg_mastery_result is not None else 0.0
     
     # Streak данные
     cur.execute(
@@ -695,7 +696,7 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
         'learning': status_counts.get('learning', 0),
         'learned': status_counts.get('learned', 0),
         'mastered': status_counts.get('mastered', 0),
-        'average_mastery': float(avg_mastery),
+        'average_mastery': avg_mastery,
         'current_streak': current_streak,
         'longest_streak': longest_streak,
         'total_practice_days': total_practice_days,

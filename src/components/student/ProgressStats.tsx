@@ -104,7 +104,7 @@ export default function ProgressStats({ studentId }: ProgressStatsProps) {
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Всего слов</span>
               <Badge className="bg-blue-100 text-blue-700 text-sm font-bold">
-                {stats.total_words}
+                {stats.total_words || 0}
               </Badge>
             </div>
             <div className="space-y-2">
@@ -113,39 +113,41 @@ export default function ProgressStats({ studentId }: ProgressStatsProps) {
                   <span className="w-3 h-3 bg-gray-300 rounded-full"></span>
                   Новые
                 </span>
-                <span className="font-semibold">{stats.new}</span>
+                <span className="font-semibold">{stats.new || 0}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2">
                   <span className="w-3 h-3 bg-yellow-400 rounded-full"></span>
                   Изучаю
                 </span>
-                <span className="font-semibold">{stats.learning}</span>
+                <span className="font-semibold">{stats.learning || 0}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2">
                   <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
                   Выучил
                 </span>
-                <span className="font-semibold">{stats.learned}</span>
+                <span className="font-semibold">{stats.learned || 0}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2">
                   <span className="w-3 h-3 bg-green-500 rounded-full"></span>
                   Освоил
                 </span>
-                <span className="font-semibold">{stats.mastered}</span>
+                <span className="font-semibold">{stats.mastered || 0}</span>
               </div>
             </div>
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">Средний прогресс</span>
-                <span className="font-bold text-blue-600">{Math.round(stats.average_mastery)}%</span>
+                <span className="font-bold text-blue-600">
+                  {Math.round(stats.average_mastery || 0)}%
+                </span>
               </div>
               <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all"
-                  style={{ width: `${Math.round(stats.average_mastery)}%` }}
+                  style={{ width: `${Math.round(stats.average_mastery || 0)}%` }}
                 ></div>
               </div>
             </div>
@@ -199,7 +201,7 @@ export default function ProgressStats({ studentId }: ProgressStatsProps) {
           <CardTitle className="flex items-center gap-2 text-lg font-bold">
             🏆 Достижения
             <Badge className="ml-auto bg-purple-600 text-white text-sm font-bold">
-              {stats.total_points} очков
+              {stats.total_points || 0} очков
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -222,7 +224,7 @@ export default function ProgressStats({ studentId }: ProgressStatsProps) {
                     {achievement.title_ru}
                   </div>
                   <div className="text-xs text-purple-600 font-semibold mt-1">
-                    {achievement.points} очков
+                    {achievement.points || 0} очков
                   </div>
                   {isUnlocked && (
                     <div className="mt-1">
