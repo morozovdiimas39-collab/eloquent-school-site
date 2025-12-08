@@ -1472,6 +1472,36 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
+        elif action == 'update_word_progress':
+            # Алиас для record_word_usage (для telegram-bot)
+            student_id = body.get('student_id')
+            word_id = body.get('word_id')
+            is_correct = body.get('is_correct', True)
+            context = body.get('context')
+            
+            if not student_id or not word_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps({'error': 'student_id and word_id are required'}),
+                    'isBase64Encoded': False
+                }
+            
+            result = record_word_usage(student_id, word_id, is_correct, context)
+            
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
         elif action == 'get_student_progress_stats':
             student_id = body.get('student_id')
             
