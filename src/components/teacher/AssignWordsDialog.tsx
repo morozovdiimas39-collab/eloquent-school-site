@@ -162,6 +162,7 @@ export default function AssignWordsDialog({ open, onOpenChange, teacherId }: Ass
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'assign_category',
+          teacher_id: teacherId,
           student_id: selectedStudent,
           category_id: categoryId
         })
@@ -190,6 +191,7 @@ export default function AssignWordsDialog({ open, onOpenChange, teacherId }: Ass
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'assign_words',
+          teacher_id: teacherId,
           student_id: selectedStudent,
           word_ids: Array.from(selectedWords)
         })
