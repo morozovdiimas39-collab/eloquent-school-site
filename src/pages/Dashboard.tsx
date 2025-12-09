@@ -93,24 +93,32 @@ export default function Dashboard() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     
+    console.log('🔍 Telegram WebApp:', tg);
+    console.log('🔍 initDataUnsafe:', tg?.initDataUnsafe);
+    console.log('🔍 user:', tg?.initDataUnsafe?.user);
+    
     if (tg) {
       tg.ready();
       tg.expand();
       
       const telegramUser = tg.initDataUnsafe.user;
       if (telegramUser) {
+        console.log('✅ User found:', telegramUser);
         setUser(telegramUser);
         checkUser(telegramUser.id);
       } else {
+        console.error('❌ User not found in initDataUnsafe');
         setError('Не удалось получить данные пользователя Telegram');
       }
     } else {
+      console.error('❌ Telegram WebApp not found');
       setError('Откройте это приложение через Telegram');
     }
   }, []);
 
   const checkUser = async (telegramId: number) => {
     try {
+      console.log('📡 Fetching user data for telegram_id:', telegramId);
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,8 +129,10 @@ export default function Dashboard() {
       });
       
       const data = await response.json();
+      console.log('📥 Received data:', data);
       
       if (data.user) {
+        console.log('✅ User role:', data.user.role);
         setRole(data.user.role);
         if (data.user.promocode) {
           setPromocode(data.user.promocode);
