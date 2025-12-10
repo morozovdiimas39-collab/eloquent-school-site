@@ -38,10 +38,10 @@ export default function TeacherSection() {
             <span>Для учителей</span>
           </div>
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
-            Помогай ученикам эффективнее
+            Работай эффективнее
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Ты репетитор? anyaGPT станет твоим помощником для домашней практики учеников
+            Ты репетитор? anyaGPT станет твоим помощником для домашней практики
           </p>
         </div>
 
