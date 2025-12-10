@@ -13,7 +13,7 @@ export default function Header() {
           className="group flex items-center gap-2 hover:scale-105 transition-transform"
         >
           <img 
-            src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/931dcb0b-eec8-4c08-a674-367a1c6ecf66.jpg" 
+            src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/18725014-599d-4e0d-9f9c-fda9c37e1b86.jpg" 
             alt="anyaGPT" 
             className="h-10 w-auto object-contain"
           />
