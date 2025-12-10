@@ -596,12 +596,14 @@ def record_word_usage(student_id: int, word_id: int, is_correct: bool, context: 
     else:
         mastery_score = 0
     
-    # Определяем новый статус
+    # Определяем новый статус (требуем многократное использование)
     new_status = current_status
-    if mastery_score >= 75 and correct_uses >= 5:
+    if mastery_score >= 90 and correct_uses >= 10:
         new_status = 'mastered'
-    elif mastery_score >= 50:
+    elif mastery_score >= 75 and correct_uses >= 5:
         new_status = 'learned'
+    elif mastery_score >= 50 and correct_uses >= 3:
+        new_status = 'learning'
     elif attempts > 0:
         new_status = 'learning'
     
