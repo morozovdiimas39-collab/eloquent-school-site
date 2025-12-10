@@ -1,6 +1,7 @@
 import json
 import os
 import psycopg2
+import requests
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
@@ -11,12 +12,73 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def get_proxies():
+    """Возвращает прокси из env"""
+    proxy_url = os.environ.get('PROXY_URL')
+    if proxy_url:
+        return {
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        }
+    return None
+
+def generate_learning_goal_suggestions(user_input: str) -> Dict[str, Any]:
+    """Генерирует рекомендации по детализации цели обучения через Gemini"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found', 'suggestions': []}
+    
+    prompt = f"""Ты — помощник для изучения английского языка. Студент указал свою цель: "{user_input}".
+
+Твоя задача: дать 2-3 коротких совета (по 1 предложению каждый) как конкретизировать эту цель для более эффективного обучения.
+
+Формат ответа (только JSON, без markdown):
+{{
+  "suggestions": [
+    "Совет 1",
+    "Совет 2",
+    "Совет 3"
+  ]
+}}
+
+Отвечай ТОЛЬКО валидным JSON, без объяснений."""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 500
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            result = json.loads(text)
+            return result
+        
+        return {'error': 'No response from Gemini', 'suggestions': []}
+    
+    except Exception as e:
+        return {'error': str(e), 'suggestions': []}
+
 def get_user_info(telegram_id: int) -> Dict[str, Any]:
     """Получает информацию о пользователе (только студент)"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, language_level, preferred_topics, timezone, photo_url FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, language_level, preferred_topics, timezone, photo_url, learning_goal, learning_goal_details FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -31,7 +93,9 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
             'language_level': row[4] or 'A1',
             'preferred_topics': row[5] if row[5] else [],
             'timezone': row[6] or 'UTC',
-            'photo_url': row[7]
+            'photo_url': row[7],
+            'learning_goal': row[8],
+            'learning_goal_details': row[9]
         }
     return None
 
@@ -345,7 +409,7 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
         'average_mastery': float(row[5]) if row[5] else 0.0
     }
 
-def update_student_settings(telegram_id: int, language_level: str = None, preferred_topics: List[Dict] = None, timezone: str = None) -> bool:
+def update_student_settings(telegram_id: int, language_level: str = None, preferred_topics: List[Dict] = None, timezone: str = None, learning_goal: str = None, learning_goal_details: str = None) -> bool:
     """Обновляет настройки студента"""
     conn = get_db_connection()
     cur = conn.cursor()
@@ -363,6 +427,20 @@ def update_student_settings(telegram_id: int, language_level: str = None, prefer
     if timezone is not None:
         tz_escaped = timezone.replace("'", "''")
         updates.append(f"timezone = '{tz_escaped}'")
+    
+    if learning_goal is not None:
+        if learning_goal:
+            goal_escaped = learning_goal.replace("'", "''")
+            updates.append(f"learning_goal = '{goal_escaped}'")
+        else:
+            updates.append("learning_goal = NULL")
+    
+    if learning_goal_details is not None:
+        if learning_goal_details:
+            details_escaped = learning_goal_details.replace("'", "''")
+            updates.append(f"learning_goal_details = '{details_escaped}'")
+        else:
+            updates.append("learning_goal_details = NULL")
     
     if updates:
         updates.append("updated_at = CURRENT_TIMESTAMP")
@@ -529,11 +607,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             language_level = body_data.get('language_level')
             preferred_topics = body_data.get('preferred_topics')
             timezone = body_data.get('timezone')
-            update_student_settings(telegram_id, language_level, preferred_topics, timezone)
+            learning_goal = body_data.get('learning_goal')
+            learning_goal_details = body_data.get('learning_goal_details')
+            update_student_settings(telegram_id, language_level, preferred_topics, timezone, learning_goal, learning_goal_details)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'suggest_learning_goal':
+            user_input = body_data.get('user_input', '')
+            result = generate_learning_goal_suggestions(user_input)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         

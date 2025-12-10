@@ -21,6 +21,8 @@ interface StudentSettingsProps {
   currentLevel: string;
   currentTopics: Topic[];
   currentTimezone: string;
+  currentLearningGoal?: string;
+  currentLearningGoalDetails?: string;
   username?: string;
   firstName?: string;
   lastName?: string;
@@ -34,6 +36,16 @@ const LANGUAGE_LEVELS = [
   { value: 'B2', label: 'B2 - Upper Intermediate', description: 'Выше среднего' },
   { value: 'C1', label: 'C1 - Advanced', description: 'Продвинутый' },
   { value: 'C2', label: 'C2 - Proficiency', description: 'Владение в совершенстве' }
+];
+
+const LEARNING_GOALS = [
+  { value: 'work_it', label: '💻 Работа в IT', description: 'Технический английский, общение с командой' },
+  { value: 'work_business', label: '💼 Работа в бизнесе', description: 'Деловой английский, переговоры, презентации' },
+  { value: 'work_medicine', label: '⚕️ Работа в медицине', description: 'Медицинская терминология, общение с пациентами' },
+  { value: 'travel', label: '✈️ Путешествия', description: 'Английский для туризма и поездок' },
+  { value: 'exams', label: '📝 Экзамены', description: 'IELTS, TOEFL, Cambridge' },
+  { value: 'relocation', label: '🌍 Переезд за границу', description: 'Адаптация, общение в быту' },
+  { value: 'personal', label: '⭐ Для себя', description: 'Саморазвитие, хобби, интерес' }
 ];
 
 const POPULAR_TOPICS = [
@@ -60,6 +72,8 @@ export default function StudentSettings({
   currentLevel, 
   currentTopics, 
   currentTimezone,
+  currentLearningGoal,
+  currentLearningGoalDetails,
   username,
   firstName,
   lastName,
@@ -70,13 +84,17 @@ export default function StudentSettings({
   const [newTopicEmoji, setNewTopicEmoji] = useState('');
   const [newTopicName, setNewTopicName] = useState('');
   const [timezone, setTimezone] = useState(currentTimezone);
+  const [learningGoal, setLearningGoal] = useState(currentLearningGoal || '');
+  const [learningGoalDetails, setLearningGoalDetails] = useState(currentLearningGoalDetails || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setLanguageLevel(currentLevel);
     setTopics(currentTopics);
     setTimezone(currentTimezone);
-  }, [currentLevel, currentTopics, currentTimezone]);
+    setLearningGoal(currentLearningGoal || '');
+    setLearningGoalDetails(currentLearningGoalDetails || '');
+  }, [currentLevel, currentTopics, currentTimezone, currentLearningGoal, currentLearningGoalDetails]);
 
   const addTopic = () => {
     if (!newTopicEmoji || !newTopicName.trim()) {
@@ -117,7 +135,9 @@ export default function StudentSettings({
           telegram_id: studentId,
           language_level: languageLevel,
           preferred_topics: topics,
-          timezone: timezone
+          timezone: timezone,
+          learning_goal: learningGoal || null,
+          learning_goal_details: learningGoalDetails || null
         })
       });
 
@@ -209,6 +229,45 @@ export default function StudentSettings({
             <p className="text-xs text-gray-500 mt-1.5">
               Аня адаптирует сложность диалогов под твой уровень
             </p>
+          )}
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold mb-2 block text-gray-700">
+            Цель изучения английского
+          </label>
+          <Select value={learningGoal} onValueChange={setLearningGoal}>
+            <SelectTrigger className="h-11">
+              <SelectValue placeholder="Выбери свою цель" />
+            </SelectTrigger>
+            <SelectContent>
+              {LEARNING_GOALS.map((goal) => (
+                <SelectItem key={goal.value} value={goal.value}>
+                  <div className="flex flex-col">
+                    <span className="font-semibold">{goal.label}</span>
+                    <span className="text-xs text-gray-500">{goal.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500 mt-1.5">
+            Аня подстроит диалоги под твою цель
+          </p>
+          
+          {learningGoal && (
+            <div className="mt-3">
+              <label className="text-xs font-medium mb-1.5 block text-gray-600">
+                Расскажи подробнее (опционально)
+              </label>
+              <Input
+                type="text"
+                value={learningGoalDetails}
+                onChange={(e) => setLearningGoalDetails(e.target.value)}
+                placeholder="Например: готовлюсь к собеседованию в Google"
+                className="h-10 text-sm"
+              />
+            </div>
           )}
         </div>
 

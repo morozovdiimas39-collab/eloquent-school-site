@@ -64,6 +64,8 @@ export default function Dashboard() {
   const [languageLevel, setLanguageLevel] = useState('A1');
   const [preferredTopics, setPreferredTopics] = useState<Array<{emoji: string, topic: string}>>([]);
   const [timezone, setTimezone] = useState('UTC');
+  const [learningGoal, setLearningGoal] = useState<string>('');
+  const [learningGoalDetails, setLearningGoalDetails] = useState<string>('');
   const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   useEffect(() => {
@@ -116,6 +118,12 @@ export default function Dashboard() {
         }
         if (data.user.timezone) {
           setTimezone(data.user.timezone);
+        }
+        if (data.user.learning_goal) {
+          setLearningGoal(data.user.learning_goal);
+        }
+        if (data.user.learning_goal_details) {
+          setLearningGoalDetails(data.user.learning_goal_details);
         }
       }
     } catch (error) {
@@ -244,6 +252,8 @@ export default function Dashboard() {
                 currentLevel={languageLevel}
                 currentTopics={preferredTopics}
                 currentTimezone={timezone}
+                currentLearningGoal={learningGoal}
+                currentLearningGoalDetails={learningGoalDetails}
                 username={user.username}
                 firstName={user.first_name}
                 lastName={user.last_name}
