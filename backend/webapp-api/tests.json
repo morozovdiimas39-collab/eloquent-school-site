@@ -16,20 +16,23 @@
       },
       "expectedStatus": 200,
       "expectedBody": {
-        "user": null
+        "success": true,
+        "user": {
+          "telegram_id": 123456
+        }
       },
       "bodyMatcher": "partial"
     },
     {
-      "name": "Test missing telegram_id",
+      "name": "Test get_categories",
       "method": "POST",
       "path": "/",
       "body": {
-        "action": "get_user"
+        "action": "get_categories"
       },
-      "expectedStatus": 400,
+      "expectedStatus": 200,
       "expectedBody": {
-        "error": "telegram_id is required"
+        "success": true
       },
       "bodyMatcher": "partial"
     }

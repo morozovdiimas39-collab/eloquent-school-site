@@ -34,11 +34,10 @@ interface ProgressStats {
 
 interface ImprovedMyWordsProps {
   studentId: number;
-  teacherId?: number | null;
   languageLevel?: string;
 }
 
-export default function ImprovedMyWords({ studentId, teacherId, languageLevel = 'A1' }: ImprovedMyWordsProps) {
+export default function ImprovedMyWords({ studentId, languageLevel = 'A1' }: ImprovedMyWordsProps) {
   const [words, setWords] = useState<AssignedWord[]>([]);
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
