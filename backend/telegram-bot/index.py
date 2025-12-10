@@ -688,6 +688,18 @@ IMPORTANT:
         print(f"[DEBUG] HTTP Error {e.code}: {error_body}")
         raise
 
+def get_reply_keyboard():
+    """Возвращает актуальную клавиатуру для всех пользователей"""
+    return {
+        'keyboard': [
+            [{'text': '💬 Диалог'}, {'text': '✍️ Предложения'}],
+            [{'text': '📝 Контекст'}, {'text': '🎯 Ассоциации'}],
+            [{'text': '🇷🇺→🇬🇧 Перевод'}]
+        ],
+        'resize_keyboard': True,
+        'persistent': True
+    }
+
 def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode='HTML'):
     """Отправляет сообщение в Telegram"""
     token = os.environ['TELEGRAM_BOT_TOKEN']
@@ -870,21 +882,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
             
             # Отправляем приветствие с Reply Keyboard со всеми режимами
-            reply_keyboard = {
-                'keyboard': [
-                    [{'text': '💬 Диалог'}, {'text': '✍️ Предложения'}],
-                    [{'text': '📝 Контекст'}, {'text': '🎯 Ассоциации'}],
-                    [{'text': '🇷🇺→🇬🇧 Перевод'}]
-                ],
-                'resize_keyboard': True,
-                'persistent': True
-            }
             send_telegram_message(
                 chat_id,
                 '👋 Привет! Я Anya - твой AI-преподаватель английского!\n\n'
                 '💬 Просто пиши мне на английском, и я буду помогать тебе учиться!\n\n'
                 '📚 Выбери режим обучения на клавиатуре внизу 👇',
-                reply_keyboard,
+                get_reply_keyboard(),
                 parse_mode=None
             )
         
@@ -976,9 +979,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     is_correct = (user_answer == correct_answer_lower)
                     
                     if is_correct:
-                        send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉')
+                        send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉', get_reply_keyboard())
                     else:
-                        send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: <b>{correct_answer}</b>')
+                        send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: <b>{correct_answer}</b>', get_reply_keyboard())
                     
                     # Обновляем прогресс слова
                     if current_word_id:
@@ -991,21 +994,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         if conversation_mode == 'sentence':
                             exercise_text = generate_sentence_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], word['english'])
-                            send_telegram_message(chat_id, exercise_text)
+                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                         elif conversation_mode == 'context':
                             exercise_text, answer = generate_context_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text)
+                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                         elif conversation_mode == 'association':
                             exercise_text, answer = generate_association_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text)
+                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                         elif conversation_mode == 'translation':
                             exercise_text, answer = generate_translation_exercise(word)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text)
+                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                     else:
-                        send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.')
+                        send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
                         update_conversation_mode(user['id'], 'dialog')
                 
             else:
@@ -1049,8 +1052,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Сохраняем ответ AI
                 save_message(user['id'], 'assistant', ai_response)
                 
-                # Отправляем ответ в Telegram
-                send_telegram_message(chat_id, ai_response)
+                # Отправляем ответ в Telegram с клавиатурой
+                send_telegram_message(chat_id, ai_response, get_reply_keyboard())
             
             # Обновляем статистику практики (для всех режимов)
             if existing_user.get('role') == 'student':
