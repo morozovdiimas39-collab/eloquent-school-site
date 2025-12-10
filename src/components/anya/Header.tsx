@@ -13,10 +13,12 @@ export default function Header() {
           className="group hover:opacity-80 transition-opacity"
         >
           <div className="flex flex-col">
-            <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              anyaGPT
+            <span className="text-3xl font-black tracking-tight">
+              <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">A</span>
+              <span className="text-gray-900">nya</span>
+              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GPT</span>
             </span>
-            <span className="text-xs text-gray-500 -mt-1">
+            <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase -mt-1">
               ИИ-репетитор английского
             </span>
           </div>
