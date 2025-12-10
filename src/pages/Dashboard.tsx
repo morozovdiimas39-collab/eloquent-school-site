@@ -234,6 +234,7 @@ export default function Dashboard() {
         <ImprovedMyWords
           studentId={user.id}
           languageLevel={languageLevel}
+          learningGoal={learningGoal}
         />
       </div>
 

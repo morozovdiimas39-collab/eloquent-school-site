@@ -35,14 +35,16 @@ interface ProgressStats {
 interface ImprovedMyWordsProps {
   studentId: number;
   languageLevel?: string;
+  learningGoal?: string;
 }
 
-export default function ImprovedMyWords({ studentId, languageLevel = 'A1' }: ImprovedMyWordsProps) {
+export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learningGoal = '' }: ImprovedMyWordsProps) {
   const [words, setWords] = useState<AssignedWord[]>([]);
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [autoAssigning, setAutoAssigning] = useState(false);
+  const [generatingWords, setGeneratingWords] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -79,6 +81,42 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1' }: Imp
       console.error('Ошибка загрузки слов:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generatePersonalizedWords = async () => {
+    if (!learningGoal) {
+      toast.error('Укажите цель обучения в настройках');
+      return;
+    }
+
+    setGeneratingWords(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_personalized_words',
+          student_id: studentId,
+          learning_goal: learningGoal,
+          language_level: languageLevel,
+          count: 7
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.words) {
+        toast.success(`Добавлено ${data.count} персональных слов для вашей цели!`);
+        await loadData();
+      } else {
+        toast.error(data.error || 'Ошибка генерации слов');
+      }
+    } catch (error) {
+      console.error('Error generating words:', error);
+      toast.error('Ошибка генерации слов');
+    } finally {
+      setGeneratingWords(false);
     }
   };
 
@@ -219,34 +257,60 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1' }: Imp
                 : 'Преподаватель скоро назначит слова для изучения'}
             </p>
             {!teacherId && (
-              <Button
-                onClick={autoAssignWords}
-                disabled={autoAssigning}
-                className="bg-blue-600 hover:bg-blue-700 h-10"
-              >
-                {autoAssigning ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Добавляем слова...
-                  </>
-                ) : (
-                  <>
-                    <Icon name="Sparkles" className="mr-2 h-4 w-4" />
-                    Добавить слова автоматически
-                  </>
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={generatePersonalizedWords}
+                  disabled={generatingWords || !learningGoal}
+                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10 text-white"
+                >
+                  {generatingWords ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Генерация слов...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="Sparkles" className="mr-2 h-4 w-4" />
+                      Персональные слова для моей цели
+                    </>
+                  )}
+                </Button>
+                {!learningGoal && (
+                  <p className="text-xs text-gray-500 text-center">
+                    Укажите цель обучения в настройках
+                  </p>
                 )}
-              </Button>
+              </div>
             )}
           </div>
         ) : (
           <div className="space-y-3">
-            <Input
-              type="text"
-              placeholder="Поиск по словам..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-10 text-sm bg-white"
-            />
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="Поиск по словам..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 h-10 text-sm bg-white"
+              />
+              {!teacherId && learningGoal && stats && stats.mastered === stats.total_words && stats.total_words > 0 && (
+                <Button
+                  onClick={generatePersonalizedWords}
+                  disabled={generatingWords}
+                  size="sm"
+                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white whitespace-nowrap"
+                >
+                  {generatingWords ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <Icon name="Plus" size={16} className="mr-1" />
+                      Новые слова
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {filteredWords.map((word) => (

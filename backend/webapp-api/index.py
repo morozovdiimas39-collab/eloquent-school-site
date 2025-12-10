@@ -73,6 +73,117 @@ def generate_learning_goal_suggestions(user_input: str) -> Dict[str, Any]:
     except Exception as e:
         return {'error': str(e), 'suggestions': []}
 
+def generate_personalized_words(student_id: int, learning_goal: str, language_level: str, count: int = 7) -> Dict[str, Any]:
+    """Генерирует персональные слова через Gemini на основе цели и уровня студента"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found', 'words': []}
+    
+    level_descriptions = {
+        'A1': 'начальный уровень (простые базовые слова)',
+        'A2': 'элементарный уровень (повседневная лексика)',
+        'B1': 'средний уровень (распространенная лексика)',
+        'B2': 'продвинутый уровень (профессиональная лексика)',
+        'C1': 'высокий уровень (сложная лексика)',
+        'C2': 'свободное владение (нативная лексика)'
+    }
+    
+    level_desc = level_descriptions.get(language_level, level_descriptions['A1'])
+    
+    prompt = f"""Ты — эксперт по изучению английского языка. 
+
+Студент изучает английский:
+- Цель обучения: {learning_goal}
+- Уровень: {language_level} ({level_desc})
+
+Твоя задача: подобрать {count} САМЫХ ВАЖНЫХ английских слов для этой цели и уровня.
+
+Требования:
+1. Слова должны быть релевантны цели обучения
+2. Сложность должна соответствовать уровню {language_level}
+3. Выбирай практичные слова, которые студент будет использовать часто
+4. Избегай редких и узкоспециализированных терминов (кроме случаев когда цель требует специальной лексики)
+
+Формат ответа (только JSON, без markdown):
+{{
+  "words": [
+    {{
+      "english": "слово на английском",
+      "russian": "перевод на русском"
+    }}
+  ]
+}}
+
+Отвечай ТОЛЬКО валидным JSON массивом из {count} слов, без объяснений."""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 1000
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            result = json.loads(text)
+            
+            if 'words' in result and len(result['words']) > 0:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                added_words = []
+                for word_data in result['words']:
+                    english = word_data['english'].strip().lower()
+                    russian = word_data['russian'].strip()
+                    
+                    english_escaped = english.replace("'", "''")
+                    russian_escaped = russian.replace("'", "''")
+                    
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                        f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                        f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                        f"RETURNING id"
+                    )
+                    word_id = cur.fetchone()[0]
+                    
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id) "
+                        f"VALUES ({student_id}, {word_id}) "
+                        f"ON CONFLICT DO NOTHING"
+                    )
+                    
+                    added_words.append({
+                        'id': word_id,
+                        'english': english,
+                        'russian': russian
+                    })
+                
+                cur.close()
+                conn.close()
+                
+                return {'success': True, 'words': added_words, 'count': len(added_words)}
+            
+            return {'error': 'No words generated', 'words': []}
+        
+        return {'error': 'No response from Gemini', 'words': []}
+    
+    except Exception as e:
+        return {'error': str(e), 'words': []}
+
 def get_user_info(telegram_id: int) -> Dict[str, Any]:
     """Получает информацию о пользователе (только студент)"""
     conn = get_db_connection()
@@ -772,6 +883,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'suggest_learning_goal':
             user_input = body_data.get('user_input', '')
             result = generate_learning_goal_suggestions(user_input)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'generate_personalized_words':
+            student_id = body_data.get('student_id')
+            learning_goal = body_data.get('learning_goal', '')
+            language_level = body_data.get('language_level', 'A1')
+            count = body_data.get('count', 7)
+            result = generate_personalized_words(student_id, learning_goal, language_level, count)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
