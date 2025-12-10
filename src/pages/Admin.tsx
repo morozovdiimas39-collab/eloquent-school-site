@@ -34,7 +34,16 @@ interface Teacher extends User {
 const API_URL = funcUrls['webapp-api'];
 const SCHEDULER_URL = funcUrls['practice-scheduler'];
 
+const ALLOWED_IDS = [994807644, 7515380522];
+const ADMIN_PASSWORD = 'AnyaGPT2025!';
+
 export default function Admin() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [telegramId, setTelegramId] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +55,63 @@ export default function Admin() {
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
 
   useEffect(() => {
-    loadData();
-    loadAnalytics();
+    const savedAuth = localStorage.getItem('admin_auth');
+    if (savedAuth) {
+      try {
+        const { id, pass, timestamp } = JSON.parse(savedAuth);
+        const hoursPassed = (Date.now() - timestamp) / (1000 * 60 * 60);
+        
+        if (hoursPassed < 24 && ALLOWED_IDS.includes(Number(id)) && pass === ADMIN_PASSWORD) {
+          setIsAuthenticated(true);
+        } else {
+          localStorage.removeItem('admin_auth');
+        }
+      } catch {
+        localStorage.removeItem('admin_auth');
+      }
+    }
+    setAuthLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadData();
+      loadAnalytics();
+    }
+  }, [isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    const id = Number(telegramId);
+    
+    if (!ALLOWED_IDS.includes(id)) {
+      setAuthError('Доступ запрещен');
+      return;
+    }
+
+    if (password !== ADMIN_PASSWORD) {
+      setAuthError('Неверный пароль');
+      return;
+    }
+
+    const authData = {
+      id: telegramId,
+      pass: password,
+      timestamp: Date.now()
+    };
+    
+    localStorage.setItem('admin_auth', JSON.stringify(authData));
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_auth');
+    setIsAuthenticated(false);
+    setTelegramId('');
+    setPassword('');
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -66,14 +129,8 @@ export default function Admin() {
         })
       ]);
 
-      console.log('Teachers response status:', teachersRes.status);
-      console.log('Students response status:', studentsRes.status);
-
       const teachersData = await teachersRes.json();
       const studentsData = await studentsRes.json();
-
-      console.log('Teachers data:', teachersData);
-      console.log('Students data:', studentsData);
 
       if (teachersData.teachers) {
         setTeachers(teachersData.teachers);
@@ -140,6 +197,77 @@ export default function Admin() {
     );
   });
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-sm">
+          <CardContent className="pt-6 pb-6">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-700 text-base font-medium">Проверка доступа...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-3">
+              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center">
+                <Icon name="Shield" size={32} className="text-white" />
+              </div>
+            </div>
+            <CardTitle className="text-2xl">Вход в админку</CardTitle>
+            <CardDescription>Введите Telegram ID и пароль</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Telegram ID
+                </label>
+                <Input
+                  type="text"
+                  value={telegramId}
+                  onChange={(e) => setTelegramId(e.target.value)}
+                  placeholder="994807644"
+                  className="h-11"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Пароль
+                </label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="h-11"
+                  required
+                />
+              </div>
+              {authError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {authError}
+                </div>
+              )}
+              <Button type="submit" className="w-full h-11 text-base font-medium">
+                Войти
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
@@ -158,12 +286,18 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-4">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1 flex items-center gap-2.5">
-            <Icon name="Shield" size={28} className="text-blue-600" />
-            Панель администратора
-          </h1>
-          <p className="text-gray-600 text-base">Управление преподавателями и учениками</p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-1 flex items-center gap-2.5">
+              <Icon name="Shield" size={28} className="text-blue-600" />
+              Панель администратора
+            </h1>
+            <p className="text-gray-600 text-base">Управление преподавателями и учениками</p>
+          </div>
+          <Button onClick={handleLogout} variant="outline" className="h-10">
+            <Icon name="LogOut" size={16} className="mr-2" />
+            Выйти
+          </Button>
         </div>
 
         <div className="mb-5 flex flex-col sm:flex-row gap-3">
@@ -229,79 +363,64 @@ export default function Admin() {
               return (
                 <Card key={teacher.telegram_id} className="border border-indigo-200 shadow-sm hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-12 w-12 bg-gradient-to-br from-indigo-600 to-purple-600 ring-2 ring-indigo-500/20 shadow-sm">
-                        {teacher.photo_url && <AvatarImage src={teacher.photo_url} alt={teacherName} />}
-                        <AvatarFallback className="text-white text-base font-semibold">
-                          {teacherName.charAt(0).toUpperCase()}
+                    <div className="flex items-start gap-3">
+                      <Avatar className="w-12 h-12 border-2 border-indigo-300">
+                        <AvatarImage src={teacher.photo_url} />
+                        <AvatarFallback className="bg-indigo-100 text-indigo-700 font-semibold">
+                          {teacherName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-bold truncate">{teacherName}</CardTitle>
+                        <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
+                          {teacherName}
+                        </CardTitle>
                         {teacherUsername && (
-                          <p className="text-xs text-gray-500 truncate">{teacherUsername}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{teacherUsername}</p>
                         )}
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600">Промокод:</span>
-                      <Badge className="bg-indigo-100 text-indigo-700 font-mono text-xs font-semibold">
-                        {teacher.promocode || 'Нет'}
-                      </Badge>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Icon name="Users" size={14} className="text-blue-600 flex-shrink-0" />
+                      <span className="text-gray-700 font-medium">{teacher.students_count || 0} учеников</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600">Учеников:</span>
-                      <Badge className="bg-blue-100 text-blue-700 text-xs font-semibold">
-                        {teacher.students_count || 0}
-                      </Badge>
-                    </div>
+                    {teacher.promocode && (
+                      <div className="flex items-center gap-2">
+                        <Icon name="Tag" size={14} className="text-purple-600 flex-shrink-0" />
+                        <Badge variant="secondary" className="text-xs font-mono px-2 py-0.5">
+                          {teacher.promocode}
+                        </Badge>
+                      </div>
+                    )}
                     {teacher.phone && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Телефон:</span>
-                        <span className="text-xs text-gray-700">{teacher.phone}</span>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Icon name="Phone" size={14} className="text-green-600 flex-shrink-0" />
+                        <span className="text-gray-700">{teacher.phone}</span>
                       </div>
                     )}
                     {teacher.card_number && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Карта:</span>
-                        <span className="text-xs font-mono text-gray-700">{teacher.card_number}</span>
+                      <div className="pt-2 border-t border-gray-200">
+                        <p className="text-xs text-gray-500 mb-1">Банковская карта:</p>
+                        <p className="text-sm font-mono text-gray-900">{teacher.card_number}</p>
+                        {teacher.bank_name && (
+                          <p className="text-xs text-gray-600 mt-0.5">{teacher.bank_name}</p>
+                        )}
                       </div>
                     )}
-                    {teacher.bank_name && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Банк:</span>
-                        <span className="text-xs text-gray-700">{teacher.bank_name}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-xs text-gray-600">ID:</span>
-                      <span className="text-xs font-mono text-gray-700">{teacher.telegram_id}</span>
-                    </div>
                     <Button
                       onClick={() => setSelectedTeacher(teacher)}
                       variant="outline"
                       size="sm"
-                      className="w-full mt-2 h-9 text-xs"
+                      className="w-full mt-3 h-9 text-sm font-medium"
                     >
-                      <Icon name="Eye" size={14} className="mr-1.5" />
-                      Подробнее
+                      <Icon name="Users" size={14} className="mr-1.5" />
+                      Ученики
                     </Button>
                   </CardContent>
                 </Card>
               );
             })}
-            {filteredTeachers.length === 0 && (
-              <div className="col-span-full">
-                <Card className="border-2 border-dashed border-gray-300">
-                  <CardContent className="py-8 text-center">
-                    <Icon name="Search" size={40} className="mx-auto mb-3 text-gray-400 opacity-50" />
-                    <p className="text-gray-600 text-sm font-medium">Преподаватели не найдены</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
           </div>
         )}
 
@@ -310,276 +429,181 @@ export default function Admin() {
             {filteredStudents.map((student) => {
               const studentName = student.first_name || student.username || 'Ученик';
               const studentUsername = student.username ? `@${student.username}` : null;
-              const teacherInfo = student.teacher_id 
-                ? teachers.find(t => t.telegram_id === student.teacher_id)
-                : null;
 
               return (
                 <Card key={student.telegram_id} className="border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-12 w-12 bg-gradient-to-br from-blue-600 to-cyan-600 ring-2 ring-blue-500/20 shadow-sm">
-                        {student.photo_url && <AvatarImage src={student.photo_url} alt={studentName} />}
-                        <AvatarFallback className="text-white text-base font-semibold">
-                          {studentName.charAt(0).toUpperCase()}
+                    <div className="flex items-start gap-3">
+                      <Avatar className="w-12 h-12 border-2 border-blue-300">
+                        <AvatarImage src={student.photo_url} />
+                        <AvatarFallback className="bg-blue-100 text-blue-700 font-semibold">
+                          {studentName.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-bold truncate">{studentName}</CardTitle>
+                        <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
+                          {studentName}
+                        </CardTitle>
                         {studentUsername && (
-                          <p className="text-xs text-gray-500 truncate">{studentUsername}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{studentUsername}</p>
                         )}
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600">Преподаватель:</span>
-                      {teacherInfo ? (
-                        <Badge className="bg-green-100 text-green-700 text-xs font-semibold truncate max-w-[150px]">
-                          {teacherInfo.first_name || teacherInfo.username || 'Есть'}
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-gray-100 text-gray-600 text-xs font-semibold">
-                          Самостоятельно
-                        </Badge>
-                      )}
-                    </div>
+                  <CardContent className="space-y-2.5">
                     {student.language_level && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Уровень:</span>
-                        <Badge className="bg-purple-100 text-purple-700 text-xs font-semibold">
+                      <div className="flex items-center gap-2">
+                        <Icon name="BookOpen" size={14} className="text-blue-600 flex-shrink-0" />
+                        <Badge variant="outline" className="text-xs px-2 py-0.5">
                           {student.language_level}
                         </Badge>
                       </div>
                     )}
                     {student.timezone && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Часовой пояс:</span>
-                        <span className="text-xs text-gray-700">{student.timezone}</span>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Icon name="Clock" size={14} className="text-gray-600 flex-shrink-0" />
+                        <span className="text-gray-700">{student.timezone}</span>
                       </div>
                     )}
-                    {student.preferred_topics && student.preferred_topics.length > 0 && (
-                      <div>
-                        <span className="text-xs text-gray-600 block mb-1">Интересы:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {student.preferred_topics.slice(0, 3).map((topic, idx) => (
-                            <Badge key={idx} className="bg-blue-50 text-blue-700 text-xs">
-                              {topic}
-                            </Badge>
-                          ))}
-                          {student.preferred_topics.length > 3 && (
-                            <Badge className="bg-gray-100 text-gray-600 text-xs">
-                              +{student.preferred_topics.length - 3}
-                            </Badge>
-                          )}
-                        </div>
+                    {student.created_at && (
+                      <div className="text-xs text-gray-500 pt-2 border-t border-gray-200">
+                        Регистрация: {new Date(student.created_at).toLocaleDateString('ru-RU')}
                       </div>
                     )}
-                    <div className="flex items-center justify-between pt-1 border-t">
-                      <span className="text-xs text-gray-600">ID:</span>
-                      <span className="text-xs font-mono text-gray-700">{student.telegram_id}</span>
-                    </div>
                   </CardContent>
                 </Card>
               );
             })}
-            {filteredStudents.length === 0 && (
-              <div className="col-span-full">
-                <Card className="border-2 border-dashed border-gray-300">
-                  <CardContent className="py-8 text-center">
-                    <Icon name="Search" size={40} className="mx-auto mb-3 text-gray-400 opacity-50" />
-                    <p className="text-gray-600 text-sm font-medium">Ученики не найдены</p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
           </div>
         )}
 
-        {activeTab === 'vocabulary' && (
-          <VocabularyManager />
-        )}
+        {activeTab === 'vocabulary' && <VocabularyManager />}
 
-        {activeTab === 'proxies' && (
-          <ProxyManager />
-        )}
+        {activeTab === 'proxies' && <ProxyManager />}
 
-        {activeTab === 'analytics' && analytics && (
+        {activeTab === 'analytics' && (
           <div className="space-y-4">
-            <Card className="border border-indigo-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Icon name="Send" size={16} className="text-indigo-600" />
-                    Управление рассылкой от Ани
-                  </CardTitle>
-                  <Button
-                    onClick={runScheduler}
-                    disabled={schedulerRunning}
-                    size="sm"
-                    variant="outline"
-                    className="h-9"
-                  >
-                    {schedulerRunning ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-                        Запуск...
-                      </>
-                    ) : (
-                      <>
-                        <Icon name="Play" size={16} className="mr-2" />
-                        Запустить сейчас
-                      </>
-                    )}
-                  </Button>
-                </div>
+            <Card className="border border-green-200 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Icon name="DollarSign" size={20} className="text-green-600" />
+                  Финансовая статистика
+                </CardTitle>
               </CardHeader>
-              {schedulerResult && (
-                <CardContent>
-                  <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                    {schedulerResult.error ? (
-                      <div className="flex items-center gap-2 text-red-600">
-                        <Icon name="AlertCircle" size={20} />
-                        <span className="font-medium">{schedulerResult.error}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Отправлено сообщений:</span>
-                          <Badge className="bg-green-100 text-green-700">{schedulerResult.sent}</Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Пропущено:</span>
-                          <Badge className="bg-gray-100 text-gray-700">{schedulerResult.skipped}</Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-600">Всего студентов:</span>
-                          <Badge className="bg-blue-100 text-blue-700">{schedulerResult.total_students}</Badge>
-                        </div>
-                      </>
-                    )}
+              <CardContent>
+                {analytics ? (
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Всего преподавателей</p>
+                      <p className="text-2xl font-bold text-green-700">{analytics.total_teachers || 0}</p>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Всего учеников</p>
+                      <p className="text-2xl font-bold text-blue-700">{analytics.total_students || 0}</p>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-600 mb-1">Активных промокодов</p>
+                      <p className="text-2xl font-bold text-purple-700">{analytics.active_promocodes || 0}</p>
+                    </div>
                   </div>
-                </CardContent>
-              )}
-            </Card>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card className="border border-green-200 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Icon name="Users" size={16} className="text-green-600" />
-                    Всего подписчиков
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-green-700">{analytics.total_subscribers}</p>
-                </CardContent>
-              </Card>
-
-            <Card className="border border-blue-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Icon name="UserCheck" size={16} className="text-blue-600" />
-                  Активные подписчики
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-blue-700">{analytics.active_subscribers}</p>
+                ) : (
+                  <p className="text-gray-600">Загрузка статистики...</p>
+                )}
               </CardContent>
             </Card>
 
-            <Card className="border border-purple-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Icon name="DollarSign" size={16} className="text-purple-600" />
-                  К выплате преподавателям
+            <Card className="border border-orange-200 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Icon name="Zap" size={20} className="text-orange-600" />
+                  Планировщик практики
                 </CardTitle>
+                <CardDescription>
+                  Запускает отправку проактивных сообщений от Ани студентам
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-purple-700">{analytics.teacher_payouts.toLocaleString('ru-RU')} ₽</p>
+                <Button
+                  onClick={runScheduler}
+                  disabled={schedulerRunning}
+                  className="h-11 font-medium"
+                >
+                  {schedulerRunning ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Запуск...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="Play" size={16} className="mr-2" />
+                      Запустить сейчас
+                    </>
+                  )}
+                </Button>
+                
+                {schedulerResult && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {JSON.stringify(schedulerResult, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </CardContent>
             </Card>
-
-            <Card className="border border-emerald-200 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <Icon name="TrendingUp" size={16} className="text-emerald-600" />
-                  Прибыль
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold text-emerald-700">{analytics.profit.toLocaleString('ru-RU')} ₽</p>
-              </CardContent>
-            </Card>
-            </div>
           </div>
         )}
 
         {selectedTeacher && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setSelectedTeacher(null)}>
-            <Card className="max-w-2xl w-full max-h-[90vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-16 w-16 bg-gradient-to-br from-indigo-600 to-purple-600 ring-2 ring-indigo-500/20">
-                      {selectedTeacher.photo_url && <AvatarImage src={selectedTeacher.photo_url} />}
-                      <AvatarFallback className="text-white text-xl font-semibold">
-                        {(selectedTeacher.first_name || selectedTeacher.username || 'Т').charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-xl">{selectedTeacher.first_name || selectedTeacher.username || 'Преподаватель'}</CardTitle>
-                      {selectedTeacher.username && (
-                        <CardDescription>@{selectedTeacher.username}</CardDescription>
-                      )}
-                    </div>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-xl">
+              <CardHeader className="border-b border-gray-200 sticky top-0 bg-white z-10">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-xl">
+                      Ученики преподавателя {selectedTeacher.first_name}
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Всего: {selectedTeacher.students_count || 0}
+                    </CardDescription>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedTeacher(null)}>
-                    <Icon name="X" size={20} />
+                  <Button
+                    onClick={() => setSelectedTeacher(null)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Icon name="X" size={18} />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-sm font-medium text-gray-600">Telegram ID</span>
-                    <span className="text-sm font-mono text-gray-900">{selectedTeacher.telegram_id}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-sm font-medium text-gray-600">Промокод</span>
-                    <Badge className="bg-indigo-100 text-indigo-700 font-mono">{selectedTeacher.promocode || 'Нет'}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b">
-                    <span className="text-sm font-medium text-gray-600">Количество учеников</span>
-                    <Badge className="bg-blue-100 text-blue-700">{selectedTeacher.students_count || 0}</Badge>
-                  </div>
-                  {selectedTeacher.phone && (
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <span className="text-sm font-medium text-gray-600">Телефон</span>
-                      <a href={`tel:${selectedTeacher.phone}`} className="text-sm text-blue-600 hover:underline">
-                        {selectedTeacher.phone}
-                      </a>
-                    </div>
-                  )}
-                  {selectedTeacher.card_number && (
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <span className="text-sm font-medium text-gray-600">Номер карты</span>
-                      <span className="text-sm font-mono text-gray-900">{selectedTeacher.card_number}</span>
-                    </div>
-                  )}
-                  {selectedTeacher.bank_name && (
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <span className="text-sm font-medium text-gray-600">Банк</span>
-                      <span className="text-sm text-gray-900">{selectedTeacher.bank_name}</span>
-                    </div>
-                  )}
-                  {selectedTeacher.created_at && (
-                    <div className="flex items-center justify-between py-2">
-                      <span className="text-sm font-medium text-gray-600">Дата регистрации</span>
-                      <span className="text-sm text-gray-900">{new Date(selectedTeacher.created_at).toLocaleDateString('ru-RU')}</span>
-                    </div>
-                  )}
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {students
+                    .filter(s => s.teacher_id === selectedTeacher.telegram_id)
+                    .map(student => {
+                      const studentName = student.first_name || student.username || 'Ученик';
+                      return (
+                        <div key={student.telegram_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={student.photo_url} />
+                            <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-semibold">
+                              {studentName.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 text-sm leading-tight">{studentName}</p>
+                            {student.username && (
+                              <p className="text-xs text-gray-500 mt-0.5">@{student.username}</p>
+                            )}
+                          </div>
+                          {student.language_level && (
+                            <Badge variant="outline" className="text-xs px-2 py-0.5">
+                              {student.language_level}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </CardContent>
             </Card>
