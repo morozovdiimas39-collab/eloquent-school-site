@@ -15,6 +15,31 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def get_active_proxy_from_db() -> str:
+    """Получает случайный активный прокси из БД"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT host, port, username, password "
+        f"FROM {SCHEMA}.proxies WHERE is_active = TRUE "
+        f"ORDER BY RANDOM() LIMIT 1"
+    )
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    host, port, username, password = row
+    
+    if username and password:
+        return f"{username}:{password}@{host}:{port}"
+    else:
+        return f"{host}:{port}"
+
 def get_user(telegram_id: int):
     """Получает пользователя из БД"""
     conn = get_db_connection()
@@ -446,7 +471,12 @@ def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
 def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня и тем"""
     api_key = os.environ['GEMINI_API_KEY']
-    proxy_url = os.environ.get('PROXY_URL', '')
+    
+    # Получаем прокси из БД (приоритет) или из env как fallback
+    proxy_url = get_active_proxy_from_db()
+    if not proxy_url:
+        proxy_url = os.environ.get('PROXY_URL', '')
+        print("[DEBUG] Using PROXY_URL from env (no active proxies in DB)")
     
     # Определяем эмоциональный контекст
     emotional_mode = detect_emotional_context(user_message)

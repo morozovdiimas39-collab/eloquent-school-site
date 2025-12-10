@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
 import VocabularyManager from '@/components/admin/VocabularyManager';
+import ProxyManager from '@/components/admin/ProxyManager';
 
 interface User {
   telegram_id: number;
@@ -38,7 +39,7 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies'>('teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [schedulerRunning, setSchedulerRunning] = useState(false);
@@ -207,6 +208,14 @@ export default function Admin() {
             >
               <Icon name="BarChart3" size={16} className="mr-1.5" />
               Финансы
+            </Button>
+            <Button
+              onClick={() => setActiveTab('proxies')}
+              variant={activeTab === 'proxies' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-11 text-sm font-medium"
+            >
+              <Icon name="Globe" size={16} className="mr-1.5" />
+              Прокси
             </Button>
           </div>
         </div>
@@ -390,6 +399,10 @@ export default function Admin() {
 
         {activeTab === 'vocabulary' && (
           <VocabularyManager />
+        )}
+
+        {activeTab === 'proxies' && (
+          <ProxyManager />
         )}
 
         {activeTab === 'analytics' && analytics && (

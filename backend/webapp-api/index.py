@@ -451,6 +451,130 @@ def update_student_settings(telegram_id: int, language_level: str = None, prefer
     conn.close()
     return True
 
+def get_all_proxies() -> List[Dict[str, Any]]:
+    """Получает все прокси"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, host, port, username, password, is_active, created_at "
+        f"FROM {SCHEMA}.proxies ORDER BY created_at DESC"
+    )
+    
+    proxies = []
+    for row in cur.fetchall():
+        proxies.append({
+            'id': row[0],
+            'host': row[1],
+            'port': row[2],
+            'username': row[3],
+            'password': row[4],
+            'is_active': row[5],
+            'created_at': row[6].isoformat() if row[6] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return proxies
+
+def get_active_proxy() -> Dict[str, Any]:
+    """Получает случайный активный прокси для бота"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, host, port, username, password "
+        f"FROM {SCHEMA}.proxies WHERE is_active = TRUE "
+        f"ORDER BY RANDOM() LIMIT 1"
+    )
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    proxy = {
+        'id': row[0],
+        'host': row[1],
+        'port': row[2],
+        'username': row[3],
+        'password': row[4]
+    }
+    
+    if proxy['username'] and proxy['password']:
+        proxy['url'] = f"{proxy['username']}:{proxy['password']}@{proxy['host']}:{proxy['port']}"
+    else:
+        proxy['url'] = f"{proxy['host']}:{proxy['port']}"
+    
+    return proxy
+
+def add_proxy(host: str, port: int, username: str = None, password: str = None) -> Dict[str, Any]:
+    """Добавляет новый прокси"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    host_escaped = host.replace("'", "''")
+    
+    if username:
+        username_escaped = username.replace("'", "''")
+        username_value = f"'{username_escaped}'"
+    else:
+        username_value = 'NULL'
+    
+    if password:
+        password_escaped = password.replace("'", "''")
+        password_value = f"'{password_escaped}'"
+    else:
+        password_value = 'NULL'
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.proxies (host, port, username, password) "
+        f"VALUES ('{host_escaped}', {port}, {username_value}, {password_value}) "
+        f"ON CONFLICT (host, port) DO UPDATE SET "
+        f"username = {username_value}, password = {password_value} "
+        f"RETURNING id, host, port, username, is_active, created_at"
+    )
+    
+    row = cur.fetchone()
+    result = {
+        'id': row[0],
+        'host': row[1],
+        'port': row[2],
+        'username': row[3],
+        'is_active': row[4],
+        'created_at': row[5].isoformat() if row[5] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return result
+
+def toggle_proxy(proxy_id: int, is_active: bool) -> bool:
+    """Включает/выключает прокси"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.proxies SET is_active = {is_active} WHERE id = {proxy_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    return True
+
+def delete_proxy(proxy_id: int) -> bool:
+    """Удаляет прокси"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(f"DELETE FROM {SCHEMA}.proxies WHERE id = {proxy_id}")
+    
+    cur.close()
+    conn.close()
+    return True
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Главный обработчик WebApp API
@@ -624,6 +748,58 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_proxies':
+            proxies = get_all_proxies()
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'proxies': proxies}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_active_proxy':
+            proxy = get_active_proxy()
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'proxy': proxy}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'add_proxy':
+            host = body_data.get('host')
+            port = body_data.get('port')
+            username = body_data.get('username')
+            password = body_data.get('password')
+            proxy = add_proxy(host, port, username, password)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'proxy': proxy}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'toggle_proxy':
+            proxy_id = body_data.get('proxy_id')
+            is_active = body_data.get('is_active')
+            toggle_proxy(proxy_id, is_active)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'delete_proxy':
+            proxy_id = body_data.get('proxy_id')
+            delete_proxy(proxy_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
                 'isBase64Encoded': False
             }
         
