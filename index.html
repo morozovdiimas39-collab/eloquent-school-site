@@ -3,12 +3,18 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Поехали!</title>
-    <meta name="description" content="Poehali.dev — запусти свой сайт за минуту!"/>
-    <meta name="author" content="poehali.dev"/>
+    
+    <!-- Prevent caching -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <title>Eloquent School - Изучение английского с AI</title>
+    <meta name="description" content="Eloquent School — изучай английский с персональным AI-преподавателем"/>
+    <meta name="author" content="Eloquent School"/>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <meta property="og:title" content="Поехали!">
-    <meta property="og:description" content="Ваш личный программист, который делает сайты в 30 раз быстрее обычного.">
+    <meta property="og:title" content="Eloquent School - Изучение английского с AI">
+    <meta property="og:description" content="Практикуй английский в диалогах с AI-преподавателем, учи слова и отслеживай прогресс">
     <meta property="og:image:width" content="4800">
     <meta property="og:image:height" content="2520">
     <meta property="og:image:alt" content="Поехали! — сервис разработки сайтов с помощью ИИ">
@@ -25,6 +31,44 @@
     
     <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <!-- Force clear cache and reload if old version detected -->
+    <script>
+        (function() {
+            const CURRENT_VERSION = '2.0.0';
+            const STORED_VERSION = localStorage.getItem('app_version');
+            
+            // If old version or no version - clear everything
+            if (STORED_VERSION !== CURRENT_VERSION) {
+                console.log('[Cache] Clearing old cache, upgrading from', STORED_VERSION, 'to', CURRENT_VERSION);
+                
+                // Clear localStorage
+                localStorage.clear();
+                
+                // Clear sessionStorage
+                sessionStorage.clear();
+                
+                // Set new version
+                localStorage.setItem('app_version', CURRENT_VERSION);
+                
+                // Unregister all service workers if any
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                        for (let registration of registrations) {
+                            registration.unregister();
+                            console.log('[Cache] Service Worker unregistered');
+                        }
+                    });
+                }
+                
+                // Force reload from server (not cache)
+                if (STORED_VERSION) {
+                    console.log('[Cache] Reloading page to apply new version');
+                    window.location.reload(true);
+                }
+            }
+        })();
+    </script>
 
     <meta name="pp-name" value="eloquent-school-site">
       <script src="https://cdn.poehali.dev/intertnal/js/inspector-min.js"></script>
