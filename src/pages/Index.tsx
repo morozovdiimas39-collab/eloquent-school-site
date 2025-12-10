@@ -10,6 +10,7 @@ import TestimonialsSection from '@/components/anya/TestimonialsSection';
 import LevelSection from '@/components/anya/LevelSection';
 import TeacherSection from '@/components/anya/TeacherSection';
 import PricingSection from '@/components/anya/PricingSection';
+import BlogSection from '@/components/anya/BlogSection';
 import FAQSection from '@/components/anya/FAQSection';
 import CTASection from '@/components/anya/CTASection';
 import Footer from '@/components/anya/Footer';
@@ -32,6 +33,7 @@ export default function Index() {
       <TeacherSection />
       <TestimonialsSection />
       <PricingSection />
+      <BlogSection />
       <FAQSection />
       <CTASection />
       <Footer />
