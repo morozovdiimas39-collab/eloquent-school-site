@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="grid md:grid-cols-4 gap-8 mb-8">
           <div className="space-y-4">
             <img 
-              src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/fd6f4a32-da94-4c21-8b60-792a0f14da30.jpg" 
+              src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/931dcb0b-eec8-4c08-a674-367a1c6ecf66.jpg" 
               alt="anyaGPT" 
               className="h-10 w-auto object-contain brightness-110"
             />
