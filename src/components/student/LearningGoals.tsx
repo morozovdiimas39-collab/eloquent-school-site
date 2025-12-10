@@ -78,7 +78,12 @@ export default function LearningGoals({ studentId }: LearningGoalsProps) {
         setNewGoal('');
         await loadGoals();
       } else {
-        toast.error(data.error || 'Ошибка добавления цели');
+        const errorMsg = data.error || 'Ошибка добавления цели';
+        if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('rate limit')) {
+          toast.error('Превышен лимит запросов к Gemini API. Подождите минуту и попробуйте снова');
+        } else {
+          toast.error(errorMsg);
+        }
       }
     } catch (error) {
       console.error('Error adding goal:', error);
@@ -143,29 +148,27 @@ export default function LearningGoals({ studentId }: LearningGoalsProps) {
       </CardHeader>
       
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <Input
-            type="text"
+        <div className="space-y-2">
+          <textarea
             placeholder="Например: Поездка в Дубай"
             value={newGoal}
             onChange={(e) => setNewGoal(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && addGoal()}
-            className="flex-1 h-11 text-sm bg-white"
+            className="w-full min-h-[100px] px-4 py-3 text-base bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
           />
           <Button
             onClick={addGoal}
             disabled={adding || !newGoal.trim()}
-            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11 px-6 text-white font-semibold"
+            className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-white font-semibold text-base"
           >
             {adding ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                Добавляю...
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                Добавляю цель...
               </>
             ) : (
               <>
-                <Icon name="Plus" size={18} className="mr-2" />
-                Добавить
+                <Icon name="Plus" size={20} className="mr-2" />
+                Добавить цель
               </>
             )}
           </Button>
