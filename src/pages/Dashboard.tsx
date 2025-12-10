@@ -179,7 +179,10 @@ export default function Dashboard() {
         body: JSON.stringify({
           action: 'change_role',
           telegram_id: user.id,
-          role: newRole
+          role: newRole,
+          username: user.username || '',
+          first_name: user.first_name || '',
+          last_name: user.last_name || ''
         })
       });
       

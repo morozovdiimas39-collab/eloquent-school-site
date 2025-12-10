@@ -46,16 +46,39 @@ def get_user_info(telegram_id: int) -> Dict[str, Any]:
         }
     return None
 
-def change_user_role(telegram_id: int, new_role: str) -> bool:
-    """Изменяет роль пользователя и генерирует промокод для учителя"""
+def change_user_role(telegram_id: int, new_role: str, username: str = '', first_name: str = '', last_name: str = '') -> bool:
+    """Изменяет роль пользователя (или создает если не существует) и генерирует промокод для учителя"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    if new_role == 'teacher':
-        promocode = generate_promocode()
-        cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', promocode = '{promocode}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+    # Проверяем существует ли пользователь
+    cur.execute(f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    user_exists = cur.fetchone()
+    
+    if not user_exists:
+        # Создаем нового пользователя
+        username_escaped = username.replace("'", "''") if username else ''
+        first_name_escaped = first_name.replace("'", "''") if first_name else ''
+        last_name_escaped = last_name.replace("'", "''") if last_name else ''
+        
+        if new_role == 'teacher':
+            promocode = generate_promocode()
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role, promocode) "
+                f"VALUES ({telegram_id}, '{username_escaped}', '{first_name_escaped}', '{last_name_escaped}', '{new_role}', '{promocode}')"
+            )
+        else:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role) "
+                f"VALUES ({telegram_id}, '{username_escaped}', '{first_name_escaped}', '{last_name_escaped}', '{new_role}')"
+            )
     else:
-        cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+        # Обновляем существующего пользователя
+        if new_role == 'teacher':
+            promocode = generate_promocode()
+            cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', promocode = '{promocode}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
+        else:
+            cur.execute(f"UPDATE {SCHEMA}.users SET role = '{new_role}', updated_at = CURRENT_TIMESTAMP WHERE telegram_id = {telegram_id}")
     
     cur.close()
     conn.close()
@@ -1090,7 +1113,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'isBase64Encoded': False
                 }
             
-            change_user_role(telegram_id, new_role)
+            # Получаем данные пользователя из запроса (для создания если не существует)
+            username = body.get('username', '')
+            first_name = body.get('first_name', '')
+            last_name = body.get('last_name', '')
+            
+            change_user_role(telegram_id, new_role, username, first_name, last_name)
             updated_user = get_user_info(telegram_id)
             
             return {
