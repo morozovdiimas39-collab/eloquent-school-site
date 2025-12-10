@@ -249,14 +249,12 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
           <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-blue-200">
             <Icon name="BookOpen" size={56} className="mx-auto mb-3 text-blue-300" />
             <p className="text-base font-semibold text-gray-700 mb-1">
-              {!teacherId ? 'Начни самостоятельное обучение' : 'Пока нет слов'}
+              Начни самостоятельное обучение
             </p>
             <p className="text-sm text-gray-500 mb-4">
-              {!teacherId 
-                ? 'Бот автоматически подберет слова под твой уровень'
-                : 'Преподаватель скоро назначит слова для изучения'}
+              Бот автоматически подберет слова под твой уровень
             </p>
-            {!teacherId && (
+            {(
               <div className="flex flex-col gap-2">
                 <Button
                   onClick={generatePersonalizedWords}
@@ -293,7 +291,7 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 h-10 text-sm bg-white"
               />
-              {!teacherId && learningGoal && stats && stats.mastered === stats.total_words && stats.total_words > 0 && (
+              {learningGoal && stats && stats.mastered === stats.total_words && stats.total_words > 0 && (
                 <Button
                   onClick={generatePersonalizedWords}
                   disabled={generatingWords}
