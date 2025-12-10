@@ -640,6 +640,14 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
     conn = get_db_connection()
     cur = conn.cursor()
     
+    # Инициализируем прогресс для слов, которые еще не были в практике
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+        f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+        f"WHERE sw.student_id = {student_id} "
+        f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+    )
+    
     # Общее количество назначенных слов
     cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {student_id}")
     total_words = cur.fetchone()[0]
