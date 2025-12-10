@@ -7,7 +7,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="container mx-auto px-4 h-20 flex items-center justify-between">
         <button 
           onClick={() => navigate('/')}
           className="group flex items-center gap-2 hover:scale-105 transition-transform"
@@ -15,7 +15,7 @@ export default function Header() {
           <img 
             src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/18725014-599d-4e0d-9f9c-fda9c37e1b86.jpg" 
             alt="anyaGPT" 
-            className="h-10 w-auto object-contain"
+            className="h-12 w-auto object-contain"
           />
         </button>
 
