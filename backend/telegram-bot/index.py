@@ -602,6 +602,10 @@ IMPORTANT:
     # Формируем содержимое для Gemini (system prompt + история + новое сообщение)
     contents = []
     
+    # Если есть история - указываем что это продолжение диалога
+    if history and len(history) > 0:
+        system_prompt += "\n\n⚠️ CRITICAL: This is a CONTINUATION of an ongoing conversation. You already know this person. DO NOT greet them like it's the first meeting. Continue naturally from where you left off!"
+    
     # Добавляем системный промпт как первое сообщение пользователя
     contents.append({
         'role': 'user',
