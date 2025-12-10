@@ -6,11 +6,14 @@ export default function Footer() {
       <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-4 gap-8 mb-8">
           <div className="space-y-4">
-            <img 
-              src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/18725014-599d-4e0d-9f9c-fda9c37e1b86.jpg" 
-              alt="anyaGPT" 
-              className="h-16 w-auto object-contain brightness-110"
-            />
+            <div className="flex flex-col">
+              <span className="text-2xl font-bold text-white">
+                anyaGPT
+              </span>
+              <span className="text-xs text-gray-500">
+                ИИ-репетитор английского
+              </span>
+            </div>
             <p className="text-gray-400 text-sm">
               Твой личный ИИ-репетитор английского языка в Telegram
             </p>

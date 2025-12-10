@@ -10,13 +10,16 @@ export default function Header() {
       <div className="container mx-auto px-4 h-24 flex items-center justify-between">
         <button 
           onClick={() => navigate('/')}
-          className="group flex items-center gap-2 hover:scale-105 transition-transform"
+          className="group hover:opacity-80 transition-opacity"
         >
-          <img 
-            src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/18725014-599d-4e0d-9f9c-fda9c37e1b86.jpg" 
-            alt="anyaGPT" 
-            className="h-16 w-auto object-contain"
-          />
+          <div className="flex flex-col">
+            <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              anyaGPT
+            </span>
+            <span className="text-xs text-gray-500 -mt-1">
+              ИИ-репетитор английского
+            </span>
+          </div>
         </button>
 
         <nav className="hidden md:flex items-center gap-6">
