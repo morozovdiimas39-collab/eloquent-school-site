@@ -43,7 +43,7 @@ def generate_learning_goal_suggestions(user_input: str) -> Dict[str, Any]:
 
 Отвечай ТОЛЬКО валидным JSON, без объяснений."""
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{
@@ -116,7 +116,7 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
 
 Отвечай ТОЛЬКО валидным JSON массивом из {count} слов, без объяснений."""
     
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
     
     payload = {
         "contents": [{

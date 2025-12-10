@@ -739,8 +739,8 @@ IMPORTANT:
         except Exception as e:
             print(f"[DEBUG] Failed to list models: {e}")
     
-    # Подготавливаем запрос к Gemini REST API - используем gemini-2.0-flash-thinking-exp (15 RPM вместо 2 RPM)
-    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key={api_key}'
+    # Подготавливаем запрос к Gemini REST API - используем gemini-2.0-flash (15 RPM, stable)
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}'
     
     payload = {
         'contents': contents,
