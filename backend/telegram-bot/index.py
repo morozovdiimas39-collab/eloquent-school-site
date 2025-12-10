@@ -15,13 +15,13 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
-def get_active_proxy_from_db() -> str:
-    """Получает случайный активный прокси из БД"""
+def get_active_proxy_from_db() -> tuple:
+    """Получает случайный активный прокси из БД - возвращает (id, url)"""
     conn = get_db_connection()
     cur = conn.cursor()
     
     cur.execute(
-        f"SELECT host, port, username, password "
+        f"SELECT id, host, port, username, password "
         f"FROM {SCHEMA}.proxies WHERE is_active = TRUE "
         f"ORDER BY RANDOM() LIMIT 1"
     )
@@ -31,14 +31,71 @@ def get_active_proxy_from_db() -> str:
     conn.close()
     
     if not row:
-        return None
+        return None, None
     
-    host, port, username, password = row
+    proxy_id, host, port, username, password = row
     
     if username and password:
-        return f"{username}:{password}@{host}:{port}"
+        proxy_url = f"{username}:{password}@{host}:{port}"
     else:
-        return f"{host}:{port}"
+        proxy_url = f"{host}:{port}"
+    
+    return proxy_id, proxy_url
+
+def log_proxy_success(proxy_id: int):
+    """Логирует успешный запрос через прокси"""
+    if not proxy_id:
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.proxies SET "
+        f"total_requests = total_requests + 1, "
+        f"successful_requests = successful_requests + 1, "
+        f"last_used_at = CURRENT_TIMESTAMP "
+        f"WHERE id = {proxy_id}"
+    )
+    
+    cur.close()
+    conn.close()
+
+def log_proxy_failure(proxy_id: int, error_message: str):
+    """Логирует ошибку прокси и автоматически отключает при >5 ошибках подряд"""
+    if not proxy_id:
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    error_escaped = error_message[:500].replace("'", "''")
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.proxies SET "
+        f"total_requests = total_requests + 1, "
+        f"failed_requests = failed_requests + 1, "
+        f"last_error = '{error_escaped}', "
+        f"last_error_at = CURRENT_TIMESTAMP "
+        f"WHERE id = {proxy_id}"
+    )
+    
+    # Проверяем процент ошибок - если >80% и >3 запросов - отключаем
+    cur.execute(
+        f"SELECT total_requests, failed_requests FROM {SCHEMA}.proxies WHERE id = {proxy_id}"
+    )
+    row = cur.fetchone()
+    
+    if row:
+        total, failed = row
+        if total >= 3 and (failed / total) > 0.8:
+            cur.execute(
+                f"UPDATE {SCHEMA}.proxies SET is_active = FALSE WHERE id = {proxy_id}"
+            )
+            print(f"[WARNING] Proxy {proxy_id} auto-disabled: {failed}/{total} failures ({failed/total*100:.1f}%)")
+    
+    cur.close()
+    conn.close()
 
 def get_user(telegram_id: int):
     """Получает пользователя из БД"""
@@ -473,8 +530,9 @@ def call_gemini(user_message: str, history: List[Dict[str, str]], session_words:
     api_key = os.environ['GEMINI_API_KEY']
     
     # Получаем прокси из БД (приоритет) или из env как fallback
-    proxy_url = get_active_proxy_from_db()
+    proxy_id, proxy_url = get_active_proxy_from_db()
     if not proxy_url:
+        proxy_id = None
         proxy_url = os.environ.get('PROXY_URL', '')
         print("[DEBUG] Using PROXY_URL from env (no active proxies in DB)")
     
@@ -716,10 +774,22 @@ IMPORTANT:
         with opener.open(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Gemini success with proxy!")
+            
+            # Логируем успешный запрос через прокси
+            log_proxy_success(proxy_id)
+            
             return result['candidates'][0]['content']['parts'][0]['text']
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode('utf-8') if e.fp else 'no body'
-        print(f"[DEBUG] HTTP Error {e.code}: {error_body}")
+    except Exception as e:
+        error_message = str(e)
+        if isinstance(e, urllib.error.HTTPError):
+            error_body = e.read().decode('utf-8') if e.fp else 'no body'
+            error_message = f"HTTP {e.code}: {error_body[:200]}"
+        
+        print(f"[ERROR] Gemini API failed: {error_message}")
+        
+        # Логируем ошибку прокси
+        log_proxy_failure(proxy_id, error_message)
+        
         raise
 
 def get_reply_keyboard():

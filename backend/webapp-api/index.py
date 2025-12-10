@@ -452,12 +452,14 @@ def update_student_settings(telegram_id: int, language_level: str = None, prefer
     return True
 
 def get_all_proxies() -> List[Dict[str, Any]]:
-    """Получает все прокси"""
+    """Получает все прокси со статистикой"""
     conn = get_db_connection()
     cur = conn.cursor()
     
     cur.execute(
-        f"SELECT id, host, port, username, password, is_active, created_at "
+        f"SELECT id, host, port, username, password, is_active, created_at, "
+        f"total_requests, successful_requests, failed_requests, "
+        f"last_used_at, last_error, last_error_at "
         f"FROM {SCHEMA}.proxies ORDER BY created_at DESC"
     )
     
@@ -470,7 +472,13 @@ def get_all_proxies() -> List[Dict[str, Any]]:
             'username': row[3],
             'password': row[4],
             'is_active': row[5],
-            'created_at': row[6].isoformat() if row[6] else None
+            'created_at': row[6].isoformat() if row[6] else None,
+            'total_requests': row[7] or 0,
+            'successful_requests': row[8] or 0,
+            'failed_requests': row[9] or 0,
+            'last_used_at': row[10].isoformat() if row[10] else None,
+            'last_error': row[11],
+            'last_error_at': row[12].isoformat() if row[12] else None
         })
     
     cur.close()
@@ -570,6 +578,26 @@ def delete_proxy(proxy_id: int) -> bool:
     cur = conn.cursor()
     
     cur.execute(f"DELETE FROM {SCHEMA}.proxies WHERE id = {proxy_id}")
+    
+    cur.close()
+    conn.close()
+    return True
+
+def reset_proxy_stats(proxy_id: int) -> bool:
+    """Сбрасывает статистику прокси"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.proxies SET "
+        f"total_requests = 0, "
+        f"successful_requests = 0, "
+        f"failed_requests = 0, "
+        f"last_used_at = NULL, "
+        f"last_error = NULL, "
+        f"last_error_at = NULL "
+        f"WHERE id = {proxy_id}"
+    )
     
     cur.close()
     conn.close()
@@ -796,6 +824,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'delete_proxy':
             proxy_id = body_data.get('proxy_id')
             delete_proxy(proxy_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'reset_proxy_stats':
+            proxy_id = body_data.get('proxy_id')
+            reset_proxy_stats(proxy_id)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
