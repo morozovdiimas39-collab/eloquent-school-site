@@ -15,13 +15,15 @@ import CTASection from '@/components/anya/CTASection';
 import Footer from '@/components/anya/Footer';
 
 export default function Index() {
-  const [showDemo, setShowDemo] = useState(false);
+  const handleStartDemo = () => {
+    document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <Header />
-      <HeroSection onStartDemo={() => setShowDemo(true)} />
-      {showDemo && <DemoChat />}
+      <HeroSection onStartDemo={handleStartDemo} />
+      <DemoChat />
       <StatsSection />
       <FeaturesSection />
       <ComparisonSection />
