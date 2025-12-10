@@ -97,6 +97,7 @@ export default function HowItWorks() {
             </CardContent>
           </Card>
         </div>
+        </div>
       </div>
     </section>
   );
