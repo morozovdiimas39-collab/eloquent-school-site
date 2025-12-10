@@ -9,7 +9,7 @@ export default function Footer() {
             <img 
               src="https://cdn.poehali.dev/projects/b7f7b2d5-b36c-4ecd-924a-51eec76a70ee/files/18725014-599d-4e0d-9f9c-fda9c37e1b86.jpg" 
               alt="anyaGPT" 
-              className="h-12 w-auto object-contain brightness-110"
+              className="h-16 w-auto object-contain brightness-110"
             />
             <p className="text-gray-400 text-sm">
               Твой личный ИИ-репетитор английского языка в Telegram
