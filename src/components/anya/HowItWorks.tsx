@@ -5,22 +5,105 @@ const steps = [
   {
     icon: 'UserPlus',
     title: 'Открой бота в Telegram',
-    description: 'Просто нажми "Начать" и расскажи Ане о своём уровне английского и интересах.'
+    description: 'Найди @anyagpt_bot и нажми "Старт"',
+    visual: (
+      <div className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
+        <div className="bg-white rounded-lg shadow-sm p-3 mb-2">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold">A</div>
+            <div>
+              <div className="font-bold text-xs">Anya AI Tutor</div>
+              <div className="text-xs text-gray-500">@anyagpt_bot</div>
+            </div>
+          </div>
+          <div className="text-xs text-gray-600 mb-2">👋 Привет! Я Аня, твой ИИ-репетитор английского</div>
+          <button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold py-2 rounded-lg">
+            Старт
+          </button>
+        </div>
+      </div>
+    )
   },
   {
     icon: 'MessageSquare',
     title: 'Начни общаться',
-    description: 'Пиши Ане на английском о чём угодно. Она поддержит беседу и подскажет, если ошибёшься.'
+    description: 'Пиши на английском — Аня поддержит диалог',
+    visual: (
+      <div className="w-full bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200">
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+            <div className="bg-white rounded-xl rounded-tl-sm px-3 py-2 shadow-sm text-xs max-w-[80%]">
+              What's your hobby? 🎨
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl rounded-tr-sm px-3 py-2 shadow-sm text-xs max-w-[80%]">
+              I like to draw
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+            <div className="bg-white rounded-xl rounded-tl-sm px-3 py-2 shadow-sm text-xs max-w-[80%]">
+              Cool! What do you draw? ✏️
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   },
   {
     icon: 'BookMarked',
     title: 'Учи новые слова',
-    description: 'Встретил незнакомое слово? Аня объяснит его и добавит в твой персональный словарь.'
+    description: 'Незнакомое слово? Аня объяснит и сохранит',
+    visual: (
+      <div className="w-full bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border-2 border-green-200">
+        <div className="space-y-2">
+          <div className="flex gap-2 justify-end">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl rounded-tr-sm px-3 py-2 shadow-sm text-xs">
+              What is "gorgeous"?
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+            <div className="bg-white rounded-xl rounded-tl-sm px-3 py-2 shadow-sm text-xs">
+              <div className="font-bold text-green-700 mb-1">gorgeous</div>
+              <div className="text-gray-600 mb-1">очень красивый, великолепный</div>
+              <div className="text-xs text-gray-500">✅ Добавлено в словарь</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   },
   {
     icon: 'Trophy',
     title: 'Отслеживай прогресс',
-    description: 'Смотри статистику, выполняй упражнения и радуйся росту — английский становится лучше!'
+    description: 'Смотри статистику и радуйся росту',
+    visual: (
+      <div className="w-full bg-gradient-to-br from-orange-50 to-yellow-50 rounded-xl p-4 border-2 border-orange-200">
+        <div className="bg-white rounded-lg shadow-sm p-3">
+          <div className="text-xs font-bold mb-3 text-gray-700">📊 Твоя статистика</div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">Слов изучено</span>
+              <span className="text-sm font-bold text-blue-600">127</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1.5">
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full" style={{ width: '65%' }}></div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">Уровень</span>
+              <span className="text-sm font-bold text-green-600">B1 → B2</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600">Диалогов</span>
+              <span className="text-sm font-bold text-purple-600">43</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 ];
 
@@ -35,7 +118,7 @@ export default function HowItWorks() {
       <div className="absolute bottom-10 left-10 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
 
       <div className="container mx-auto px-4 relative z-10">
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <div className="inline-block mb-4">
               <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm text-indigo-700 font-medium text-sm border border-indigo-200 shadow-lg">
@@ -57,16 +140,21 @@ export default function HowItWorks() {
               <Card className="border-2 border-gray-200 hover:border-indigo-400 transition-all duration-300 h-full bg-white/90 backdrop-blur-sm hover:shadow-2xl hover:-translate-y-2">
                 <CardContent className="p-6 relative">
                   {/* Step number badge */}
-                  <div className="absolute -top-4 -left-4 w-12 h-12 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-bold flex items-center justify-center text-xl shadow-xl group-hover:scale-110 transition-transform">
+                  <div className="absolute -top-4 -left-4 w-12 h-12 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-bold flex items-center justify-center text-xl shadow-xl group-hover:scale-110 transition-transform z-10">
                     {idx + 1}
                   </div>
                   
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-4">
                     <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
                       <Icon name={step.icon as any} size={32} className="text-white" />
                     </div>
                     <h3 className="text-lg font-bold mb-2 text-gray-900 group-hover:text-indigo-600 transition-colors">{step.title}</h3>
-                    <p className="text-gray-600 text-sm leading-relaxed">{step.description}</p>
+                    <p className="text-gray-600 text-sm leading-relaxed mb-4">{step.description}</p>
+                    
+                    {/* Visual mockup */}
+                    <div className="animate-fade-in">
+                      {step.visual}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
