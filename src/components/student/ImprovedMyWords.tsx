@@ -43,8 +43,6 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [autoAssigning, setAutoAssigning] = useState(false);
-  const [generatingWords, setGeneratingWords] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -84,74 +82,7 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
     }
   };
 
-  const generatePersonalizedWords = async () => {
-    if (!learningGoal) {
-      toast.error('Укажите цель обучения в настройках');
-      return;
-    }
 
-    setGeneratingWords(true);
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_personalized_words',
-          student_id: studentId,
-          learning_goal: learningGoal,
-          language_level: languageLevel,
-          count: 7
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success && data.words) {
-        toast.success(`Добавлено ${data.count} персональных слов для вашей цели!`);
-        await loadData();
-      } else {
-        toast.error(data.error || 'Ошибка генерации слов');
-      }
-    } catch (error) {
-      console.error('Error generating words:', error);
-      toast.error('Ошибка генерации слов');
-    } finally {
-      setGeneratingWords(false);
-    }
-  };
-
-  const autoAssignWords = async () => {
-    setAutoAssigning(true);
-    try {
-      const defaultWords = getDefaultWordsForLevel(languageLevel);
-      
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'assign_words',
-          teacher_id: studentId,
-          student_id: studentId,
-          word_ids: defaultWords.map(w => w.id)
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        toast.success('Слова добавлены для изучения!');
-        loadData();
-      }
-    } catch (error) {
-      console.error('Ошибка автоназначения:', error);
-      toast.error('Не удалось добавить слова');
-    } finally {
-      setAutoAssigning(false);
-    }
-  };
-
-  const getDefaultWordsForLevel = (level: string) => {
-    return [];
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -249,37 +180,11 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
           <div className="text-center py-8 bg-white rounded-lg border-2 border-dashed border-blue-200">
             <Icon name="BookOpen" size={56} className="mx-auto mb-3 text-blue-300" />
             <p className="text-base font-semibold text-gray-700 mb-1">
-              Начни самостоятельное обучение
+              Пока нет слов
             </p>
-            <p className="text-sm text-gray-500 mb-4">
-              Бот автоматически подберет слова под твой уровень
+            <p className="text-sm text-gray-500">
+              Добавьте цели обучения выше, чтобы получить персональные слова
             </p>
-            {(
-              <div className="flex flex-col gap-2">
-                <Button
-                  onClick={generatePersonalizedWords}
-                  disabled={generatingWords || !learningGoal}
-                  className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-10 text-white"
-                >
-                  {generatingWords ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Генерация слов...
-                    </>
-                  ) : (
-                    <>
-                      <Icon name="Sparkles" className="mr-2 h-4 w-4" />
-                      Персональные слова для моей цели
-                    </>
-                  )}
-                </Button>
-                {!learningGoal && (
-                  <p className="text-xs text-gray-500 text-center">
-                    Укажите цель обучения в настройках
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -291,23 +196,7 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="flex-1 h-10 text-sm bg-white"
               />
-              {learningGoal && stats && stats.mastered === stats.total_words && stats.total_words > 0 && (
-                <Button
-                  onClick={generatePersonalizedWords}
-                  disabled={generatingWords}
-                  size="sm"
-                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white whitespace-nowrap"
-                >
-                  {generatingWords ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <>
-                      <Icon name="Plus" size={16} className="mr-1" />
-                      Новые слова
-                    </>
-                  )}
-                </Button>
-              )}
+
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto">

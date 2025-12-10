@@ -11,6 +11,7 @@ import StudentSettings from '@/components/student/StudentSettings';
 import ImprovedMyWords from '@/components/student/ImprovedMyWords';
 import AchievementsDialog from '@/components/student/AchievementsDialog';
 import ProgressStats from '@/components/student/ProgressStats';
+import LearningGoals from '@/components/student/LearningGoals';
 
 interface TelegramUser {
   id: number;
@@ -231,10 +232,11 @@ export default function Dashboard() {
 
         <ProgressStats studentId={user.id} />
 
+        <LearningGoals studentId={user.id} />
+
         <ImprovedMyWords
           studentId={user.id}
           languageLevel={languageLevel}
-          learningGoal={learningGoal}
         />
       </div>
 

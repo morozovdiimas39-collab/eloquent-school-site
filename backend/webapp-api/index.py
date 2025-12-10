@@ -184,6 +184,114 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
     except Exception as e:
         return {'error': str(e), 'words': []}
 
+def send_telegram_notification(telegram_id: int, message: str) -> bool:
+    """Отправляет уведомление в Telegram"""
+    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+    if not bot_token:
+        return False
+    
+    try:
+        proxies = get_proxies()
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {
+            'chat_id': telegram_id,
+            'text': message,
+            'parse_mode': 'HTML'
+        }
+        response = requests.post(url, json=payload, proxies=proxies, timeout=10)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Error sending Telegram notification: {e}")
+        return False
+
+def add_learning_goal(student_id: int, goal_text: str) -> Dict[str, Any]:
+    """Добавляет новую цель обучения и генерирует слова"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    goal_escaped = goal_text.replace("'", "''")
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.learning_goals (student_id, goal_text) "
+        f"VALUES ({student_id}, '{goal_escaped}') "
+        f"RETURNING id, goal_text, created_at"
+    )
+    row = cur.fetchone()
+    goal_id = row[0]
+    
+    cur.execute(f"SELECT language_level FROM {SCHEMA}.users WHERE telegram_id = {student_id}")
+    level_row = cur.fetchone()
+    language_level = level_row[0] if level_row else 'A1'
+    
+    cur.close()
+    conn.close()
+    
+    result = generate_personalized_words(student_id, goal_text, language_level, count=7)
+    
+    if result.get('success') and result.get('words'):
+        words_list = [f"• <b>{w['english']}</b> — {w['russian']}" for w in result['words'][:5]]
+        words_text = '\n'.join(words_list)
+        more_text = f"\n... и еще {len(result['words']) - 5} слов" if len(result['words']) > 5 else ""
+        
+        notification = f"""🎯 <b>Новая цель добавлена!</b>
+
+<i>{goal_text}</i>
+
+📚 Добавлено {result['count']} новых слов для изучения:
+
+{words_text}{more_text}
+
+Начни практиковаться прямо сейчас! 💪"""
+        
+        send_telegram_notification(student_id, notification)
+        
+        return {
+            'success': True,
+            'goal_id': goal_id,
+            'words_added': result['count']
+        }
+    
+    return {'success': False, 'error': result.get('error', 'Failed to generate words')}
+
+def get_learning_goals(student_id: int) -> List[Dict[str, Any]]:
+    """Получает все активные цели студента"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, goal_text, created_at, is_active "
+        f"FROM {SCHEMA}.learning_goals "
+        f"WHERE student_id = {student_id} AND is_active = TRUE "
+        f"ORDER BY created_at DESC"
+    )
+    
+    goals = []
+    for row in cur.fetchall():
+        goals.append({
+            'id': row[0],
+            'goal_text': row[1],
+            'created_at': row[2].isoformat() if row[2] else None,
+            'is_active': row[3]
+        })
+    
+    cur.close()
+    conn.close()
+    return goals
+
+def deactivate_learning_goal(goal_id: int) -> bool:
+    """Деактивирует цель обучения"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.learning_goals SET is_active = FALSE "
+        f"WHERE id = {goal_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    return True
+
 def get_user_info(telegram_id: int) -> Dict[str, Any]:
     """Получает информацию о пользователе (только студент)"""
     conn = get_db_connection()
@@ -958,6 +1066,37 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'reset_proxy_stats':
             proxy_id = body_data.get('proxy_id')
             reset_proxy_stats(proxy_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'add_learning_goal':
+            student_id = body_data.get('student_id')
+            goal_text = body_data.get('goal_text', '')
+            result = add_learning_goal(student_id, goal_text)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_learning_goals':
+            student_id = body_data.get('student_id')
+            goals = get_learning_goals(student_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'goals': goals}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'deactivate_learning_goal':
+            goal_id = body_data.get('goal_id')
+            deactivate_learning_goal(goal_id)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
