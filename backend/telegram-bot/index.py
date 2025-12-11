@@ -961,47 +961,91 @@ def speech_to_text(audio_data: bytes) -> str:
     result = response.json()
     return result.get('result', '')
 
-def text_to_speech(text: str) -> str:
-    """Генерирует озвучку через Yandex SpeechKit и возвращает CDN URL"""
-    api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
-    folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
+def text_to_speech_openai(text: str) -> str:
+    """Генерирует озвучку через OpenAI TTS с прокси и возвращает CDN URL"""
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        raise Exception('OPENAI_API_KEY not configured')
     
-    if not api_key or not folder_id:
-        raise Exception('Yandex Cloud credentials not configured')
+    # Получаем прокси из БД
+    proxy_id, proxy_url = get_active_proxy_from_db()
+    if not proxy_url:
+        proxy_id = None
+        proxy_url = os.environ.get('PROXY_URL', '')
+        print("[DEBUG] Using PROXY_URL from env for OpenAI TTS")
     
-    url = 'https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize'
-    headers = {'Authorization': f'Api-Key {api_key}'}
+    if not proxy_url:
+        raise Exception("PROXY_URL is required for OpenAI API access")
     
-    data = {
-        'text': text,
-        'lang': 'en-US',
-        'voice': 'lea',
-        'format': 'oggopus',
-        'speed': '1.0',
-        'folderId': folder_id
+    # OpenAI TTS API endpoint
+    url = 'https://api.openai.com/v1/audio/speech'
+    
+    payload = {
+        'model': 'tts-1',
+        'input': text,
+        'voice': 'nova',
+        'response_format': 'opus'
     }
     
-    response = requests.post(url, headers=headers, data=data, timeout=30)
-    response.raise_for_status()
+    # Используем прокси для OpenAI
+    proxy_handler = urllib.request.ProxyHandler({
+        'http': f'http://{proxy_url}',
+        'https': f'http://{proxy_url}'
+    })
+    opener = urllib.request.build_opener(proxy_handler)
     
-    # Сохраняем в S3
-    import boto3
-    s3 = boto3.client('s3',
-        endpoint_url='https://bucket.poehali.dev',
-        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
     )
     
-    file_key = f"voice/{hash(text)}.ogg"
-    s3.put_object(
-        Bucket='files',
-        Key=file_key,
-        Body=response.content,
-        ContentType='audio/ogg'
-    )
-    
-    cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{file_key}"
-    return cdn_url
+    try:
+        with opener.open(req, timeout=30) as response:
+            audio_data = response.read()
+            print(f"[DEBUG] OpenAI TTS success! Audio size: {len(audio_data)} bytes")
+            
+            # Логируем успешный запрос через прокси
+            log_proxy_success(proxy_id)
+            
+            # Сохраняем в S3
+            import boto3
+            s3 = boto3.client('s3',
+                endpoint_url='https://bucket.poehali.dev',
+                aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+                aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']
+            )
+            
+            file_key = f"voice/{hash(text)}.opus"
+            s3.put_object(
+                Bucket='files',
+                Key=file_key,
+                Body=audio_data,
+                ContentType='audio/ogg'
+            )
+            
+            cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{file_key}"
+            return cdn_url
+            
+    except Exception as e:
+        error_message = str(e)
+        if isinstance(e, urllib.error.HTTPError):
+            error_body = e.read().decode('utf-8') if e.fp else 'no body'
+            error_message = f"HTTP {e.code}: {error_body[:200]}"
+        
+        print(f"[ERROR] OpenAI TTS failed: {error_message}")
+        
+        # Логируем ошибку прокси
+        log_proxy_failure(proxy_id, error_message)
+        
+        raise
+
+def text_to_speech(text: str) -> str:
+    """Генерирует озвучку через OpenAI TTS (было Yandex)"""
+    return text_to_speech_openai(text)
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
