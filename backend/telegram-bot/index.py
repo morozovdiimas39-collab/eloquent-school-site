@@ -804,8 +804,34 @@ def get_reply_keyboard():
         'persistent': True
     }
 
+def send_chat_action(chat_id: int, action: str = 'typing'):
+    """Отправляет индикатор активности бота (печатает, отправляет фото и тд)"""
+    token = os.environ['TELEGRAM_BOT_TOKEN']
+    url = f'https://api.telegram.org/bot{token}/sendChatAction'
+    
+    payload = {
+        'chat_id': chat_id,
+        'action': action
+    }
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=3) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception as e:
+        print(f"[WARNING] Failed to send chat action: {e}")
+        pass
+
 def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode='HTML'):
     """Отправляет сообщение в Telegram"""
+    send_chat_action(chat_id, 'typing')
+    
     token = os.environ['TELEGRAM_BOT_TOKEN']
     url = f'https://api.telegram.org/bot{token}/sendMessage'
     
