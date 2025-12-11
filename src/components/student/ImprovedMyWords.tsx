@@ -76,7 +76,7 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
       console.log('📦 Words response:', wordsData);
       console.log('📊 Stats response:', statsData);
 
-      setWords(wordsData.words || []);
+      setWords(Array.isArray(wordsData) ? wordsData : []);
       setStats(statsData);
     } catch (error) {
       console.error('Ошибка загрузки слов:', error);

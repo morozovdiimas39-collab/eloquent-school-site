@@ -972,7 +972,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'success': True, 'words': words}),
+                'body': json.dumps(words),
                 'isBase64Encoded': False
             }
         
