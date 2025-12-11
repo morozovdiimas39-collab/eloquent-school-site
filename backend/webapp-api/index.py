@@ -121,13 +121,18 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
 {{
   "words": [
     {{
-      "english": "слово на английском (БЕЗ hello/yes/no/cat/dog!)",
-      "russian": "перевод на русском"
+      "english": "practical_word",
+      "russian": "перевод"
     }}
   ]
 }}
 
-КРИТИЧНО: Отвечай ТОЛЬКО валидным JSON массивом из {count} ПРАКТИЧНЫХ слов, без объяснений, БЕЗ trailing commas!"""
+КРИТИЧНО: 
+- Отвечай ТОЛЬКО валидным JSON массивом из {count} слов
+- БЕЗ комментариев в JSON
+- БЕЗ trailing commas
+- БЕЗ markdown форматирования
+- Только практичные слова для реальных разговоров!"""
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
