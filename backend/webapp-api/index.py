@@ -969,6 +969,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'get_student_words':
             student_id = body_data.get('student_id')
             words = get_student_words(student_id)
+            print(f"DEBUG get_student_words: student_id={student_id}, words_count={len(words)}")
+            if words:
+                print(f"DEBUG first word: {words[0]}")
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
