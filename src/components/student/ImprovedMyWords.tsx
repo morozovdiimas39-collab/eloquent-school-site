@@ -73,6 +73,9 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
       const wordsData = await wordsRes.json();
       const statsData = await statsRes.json();
 
+      console.log('📦 Words response:', wordsData);
+      console.log('📊 Stats response:', statsData);
+
       setWords(wordsData.words || []);
       setStats(statsData);
     } catch (error) {
