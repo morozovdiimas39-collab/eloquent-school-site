@@ -114,7 +114,7 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
   ]
 }}
 
-Отвечай ТОЛЬКО валидным JSON массивом из {count} слов, без объяснений."""
+КРИТИЧНО: Отвечай ТОЛЬКО валидным JSON массивом из {count} слов, без объяснений, БЕЗ trailing commas!"""
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
@@ -124,7 +124,8 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
         }],
         "generationConfig": {
             "temperature": 0.8,
-            "maxOutputTokens": 1000
+            "maxOutputTokens": 1000,
+            "responseMimeType": "application/json"
         }
     }
     
@@ -138,7 +139,19 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
         if 'candidates' in data and len(data['candidates']) > 0:
             text = data['candidates'][0]['content']['parts'][0]['text']
             text = text.replace('```json', '').replace('```', '').strip()
-            result = json.loads(text)
+            
+            # Удаляем trailing commas перед парсингом
+            import re
+            text = re.sub(r',\s*}', '}', text)
+            text = re.sub(r',\s*]', ']', text)
+            
+            try:
+                result = json.loads(text)
+            except json.JSONDecodeError as e:
+                # Логируем проблемный JSON для отладки
+                print(f"JSON parse error: {e}")
+                print(f"Problematic JSON (first 500 chars): {text[:500]}")
+                return {'error': f'Invalid JSON from Gemini: {str(e)}', 'words': []}
             
             if 'words' in result and len(result['words']) > 0:
                 conn = get_db_connection()
