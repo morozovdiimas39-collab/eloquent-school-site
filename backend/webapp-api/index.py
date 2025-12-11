@@ -599,7 +599,7 @@ def get_student_words(student_id: int) -> List[Dict[str, Any]]:
             'category_id': row[4],
             'assigned_at': row[5].isoformat() if row[5] else None,
             'status': row[6],
-            'mastery_score': row[7],
+            'mastery_score': float(row[7]) if row[7] is not None else 0.0,
             'attempts': row[8],
             'correct_uses': row[9],
             'progress_status': row[10]
