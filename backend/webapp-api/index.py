@@ -291,9 +291,8 @@ def add_learning_goal(student_id: int, goal_text: str) -> Dict[str, Any]:
     result = generate_personalized_words(student_id, goal_text, language_level, count=7)
     
     if result.get('success') and result.get('words'):
-        words_list = [f"• <b>{w['english']}</b> — {w['russian']}" for w in result['words'][:5]]
+        words_list = [f"• <b>{w['english']}</b> — {w['russian']}" for w in result['words']]
         words_text = '\n'.join(words_list)
-        more_text = f"\n... и еще {len(result['words']) - 5} слов" if len(result['words']) > 5 else ""
         
         notification = f"""🎯 <b>Новая цель добавлена!</b>
 
@@ -301,7 +300,7 @@ def add_learning_goal(student_id: int, goal_text: str) -> Dict[str, Any]:
 
 📚 Добавлено {result['count']} новых слов для изучения:
 
-{words_text}{more_text}
+{words_text}
 
 Начни практиковаться прямо сейчас! 💪"""
         
