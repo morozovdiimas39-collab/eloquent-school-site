@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from '@/components/anya/Header';
 import HeroSection from '@/components/anya/HeroSection';
 import DemoChat from '@/components/anya/DemoChat';
@@ -16,6 +17,16 @@ import CTASection from '@/components/anya/CTASection';
 import Footer from '@/components/anya/Footer';
 
 export default function Index() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Если открыто через Telegram WebApp - редиректим на Dashboard
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+      console.log('🔄 Telegram WebApp detected, redirecting to /app');
+      navigate('/app');
+    }
+  }, [navigate]);
+
   const handleStartDemo = () => {
     document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
   };
