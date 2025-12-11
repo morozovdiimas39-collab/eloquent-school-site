@@ -975,7 +975,7 @@ def text_to_speech(text: str) -> str:
     data = {
         'text': text,
         'lang': 'en-US',
-        'voice': 'alena',
+        'voice': 'john',
         'format': 'oggopus',
         'speed': '1.0',
         'folderId': folder_id
@@ -1163,17 +1163,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 send_telegram_message(chat_id, f'📝 Ты сказал:\n<i>{recognized_text}</i>')
                 
                 language_level = existing_user.get('language_level', 'A1')
+                preferred_topics = existing_user.get('preferred_topics', [])
                 
-                # Генерируем ответ с исправлениями
-                response_text = generate_ai_response(
-                    user['id'],
-                    recognized_text,
-                    [],
-                    None,
-                    [],
-                    language_level,
-                    0
-                )
+                # Получаем историю диалога
+                history = get_conversation_history(user['id'])
+                
+                # Генерируем ответ с исправлениями через Gemini
+                response_text = call_gemini(recognized_text, history, None, language_level, preferred_topics)
                 
                 # Генерируем голосовой ответ
                 voice_url = text_to_speech(response_text)
@@ -1185,7 +1181,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 send_telegram_voice(chat_id, voice_url, '🎤 Ответ от Ани')
                 
                 # Сохраняем в историю
-                save_conversation_history(user['id'], recognized_text, response_text)
+                save_message(user['id'], 'user', recognized_text)
+                save_message(user['id'], 'assistant', response_text)
                 
                 return {
                     'statusCode': 200,
