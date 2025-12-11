@@ -91,31 +91,43 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
     
     level_desc = level_descriptions.get(language_level, level_descriptions['A1'])
     
-    prompt = f"""Ты — эксперт по изучению английского языка. 
+    prompt = f"""Ты — эксперт по практическому изучению английского языка. 
 
 Студент изучает английский:
 - Цель обучения: {learning_goal}
 - Уровень: {language_level} ({level_desc})
 
-Твоя задача: подобрать {count} САМЫХ ВАЖНЫХ английских слов для этой цели и уровня.
+Твоя задача: подобрать {count} САМЫХ ПРАКТИЧНЫХ английских слов для РЕАЛЬНЫХ разговоров на эту тему.
 
-Требования:
-1. Слова должны быть релевантны цели обучения
-2. Сложность должна соответствовать уровню {language_level}
-3. Выбирай практичные слова, которые студент будет использовать часто
-4. Избегай редких и узкоспециализированных терминов (кроме случаев когда цель требует специальной лексики)
+⚠️ КРИТИЧЕСКИЕ ПРАВИЛА:
+
+1. НЕ ИСПОЛЬЗУЙ банальные слова: hello, yes, no, cat, dog, book, red, blue, one, two
+2. НЕ ИСПОЛЬЗУЙ слишком простые слова, которые все знают
+3. ИСПОЛЬЗУЙ глаголы, прилагательные, фразовые глаголы - то что РЕАЛЬНО нужно в разговоре
+4. ФОКУС на словах, которые студент будет использовать в диалогах по своей цели
+
+Примеры ХОРОШИХ слов для разных целей:
+
+Цель "Путешествия" → НЕ "airport, ticket", А "delay, boarding, luggage, customs, exchange rate"
+Цель "Работа" → НЕ "work, job", А "deadline, collaborate, prioritize, efficiency, feedback"
+Цель "Общение" → НЕ "talk, speak", А "suggest, clarify, hesitate, convinced, relevant"
+Цель "IT" → НЕ "computer, internet", А "implement, deploy, debugging, optimize, integrate"
+
+Если уровень A1-A2: выбирай САМЫЕ частотные глаголы (want, need, feel, think, understand, explain, prefer)
+Если уровень B1-B2: выбирай разговорные конструкции и phrasal verbs (figure out, deal with, come up with, get along)
+Если уровень C1-C2: выбирай идиомы и продвинутую лексику
 
 Формат ответа (только JSON, без markdown):
 {{
   "words": [
     {{
-      "english": "слово на английском",
+      "english": "слово на английском (БЕЗ hello/yes/no/cat/dog!)",
       "russian": "перевод на русском"
     }}
   ]
 }}
 
-КРИТИЧНО: Отвечай ТОЛЬКО валидным JSON массивом из {count} слов, без объяснений, БЕЗ trailing commas!"""
+КРИТИЧНО: Отвечай ТОЛЬКО валидным JSON массивом из {count} ПРАКТИЧНЫХ слов, без объяснений, БЕЗ trailing commas!"""
     
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     
