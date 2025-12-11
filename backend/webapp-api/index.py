@@ -172,34 +172,51 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
                 # Пытаемся починить JSON
                 try:
                     import re
-                    fixed_text = text
+                    fixed_text = text.strip()
                     
-                    # Если JSON обрезан - добавляем закрывающие символы
-                    # Случай 1: незакрытая строка (нет закрывающей кавычки)
-                    if '"russian":' in fixed_text and not fixed_text.rstrip().endswith('"'):
-                        # Ищем последнюю незакрытую строку
-                        last_colon = fixed_text.rfind(':')
-                        if last_colon != -1:
-                            after_colon = fixed_text[last_colon+1:].strip()
-                            if after_colon.startswith('"') and not after_colon.endswith('"'):
+                    # Случай 1: Обрезанная строка внутри JSON (самая частая проблема)
+                    # Ищем последнее вхождение ":" и проверяем незакрытую кавычку
+                    last_colon_idx = fixed_text.rfind(':')
+                    if last_colon_idx != -1:
+                        after_colon = fixed_text[last_colon_idx+1:].strip()
+                        # Если после двоеточия начинается строка но не закрывается
+                        if after_colon.startswith('"'):
+                            # Считаем кавычки после последнего двоеточия
+                            quotes_count = after_colon.count('"')
+                            if quotes_count % 2 == 1:  # Нечетное число = незакрытая строка
                                 fixed_text += '"'
+                                print(f"🔧 Fixed unterminated string after colon")
                     
-                    # Случай 2: незакрытый объект
+                    # Случай 2: Удаляем незавершенный последний элемент массива
+                    # Если есть последняя запятая перед концом - удаляем все после нее
+                    last_comma_idx = fixed_text.rfind(',')
+                    last_brace_idx = fixed_text.rfind('}')
+                    
+                    # Если последняя запятая идет ПОСЛЕ последней закрывающей скобки объекта
+                    # значит начался новый объект но не завершился - удаляем его
+                    if last_comma_idx > last_brace_idx and last_comma_idx != -1:
+                        fixed_text = fixed_text[:last_comma_idx]
+                        print(f"🔧 Removed incomplete trailing object after comma")
+                    
+                    # Случай 3: незакрытый объект
                     open_braces = fixed_text.count('{')
                     close_braces = fixed_text.count('}')
                     if open_braces > close_braces:
                         fixed_text += '}' * (open_braces - close_braces)
+                        print(f"🔧 Added {open_braces - close_braces} closing braces")
                     
-                    # Случай 3: незакрытый массив
+                    # Случай 4: незакрытый массив
                     open_brackets = fixed_text.count('[')
                     close_brackets = fixed_text.count(']')
                     if open_brackets > close_brackets:
                         fixed_text += ']' * (open_brackets - close_brackets)
+                        print(f"🔧 Added {open_brackets - close_brackets} closing brackets")
                     
                     result = json.loads(fixed_text)
-                    print(f"✅ Fixed JSON successfully!")
+                    print(f"✅ Fixed JSON successfully! Got {len(result.get('words', []))} words")
                 except Exception as fix_error:
                     print(f"🔴 Failed to fix JSON: {fix_error}")
+                    print(f"🔴 Attempted fixed text:\n{fixed_text if 'fixed_text' in locals() else 'N/A'}")
                     return {'error': f'Invalid JSON from Gemini: {str(e)}. Повторите попытку через минуту.', 'words': []}
             
             if 'words' in result and len(result['words']) > 0:
