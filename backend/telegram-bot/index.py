@@ -975,7 +975,7 @@ def text_to_speech(text: str) -> str:
     data = {
         'text': text,
         'lang': 'en-US',
-        'voice': 'jane',
+        'voice': 'lea',
         'format': 'oggopus',
         'speed': '1.0',
         'folderId': folder_id
