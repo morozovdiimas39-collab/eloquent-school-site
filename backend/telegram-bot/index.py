@@ -799,9 +799,9 @@ def get_reply_keyboard():
     """Возвращает актуальную клавиатуру для всех пользователей"""
     return {
         'keyboard': [
-            [{'text': '💬 Диалог'}, {'text': '✍️ Предложения'}],
-            [{'text': '📝 Контекст'}, {'text': '🎯 Ассоциации'}],
-            [{'text': '🇷🇺→🇬🇧 Перевод'}]
+            [{'text': '💬 Диалог'}, {'text': '🎤 Голосовой'}],
+            [{'text': '✍️ Предложения'}, {'text': '📝 Контекст'}],
+            [{'text': '🎯 Ассоциации'}, {'text': '🇷🇺→🇬🇧 Перевод'}]
         ],
         'resize_keyboard': True,
         'persistent': True
@@ -1119,6 +1119,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Обработка голосовых сообщений
         if voice:
+            # Проверяем режим пользователя
+            existing_user = get_user(user['id'])
+            if not existing_user:
+                create_user(user['id'], user.get('username', ''), user.get('first_name', ''), user.get('last_name', ''), 'student')
+                existing_user = {'telegram_id': user['id'], 'conversation_mode': 'voice', 'language_level': 'A1'}
+            
+            conversation_mode = existing_user.get('conversation_mode', 'dialog')
+            
+            # Голосовые работают только в режиме 'voice'
+            if conversation_mode != 'voice':
+                send_telegram_message(
+                    chat_id, 
+                    '🎤 Чтобы использовать голосовые сообщения, переключись в режим "🎤 Голосовой" на клавиатуре внизу!',
+                    get_reply_keyboard()
+                )
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
             try:
                 send_telegram_message(chat_id, '🎧 Слушаю твое сообщение...')
                 
@@ -1137,13 +1159,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'isBase64Encoded': False
                     }
                 
-                send_telegram_message(chat_id, f'📝 Распознанный текст:\n<i>{recognized_text}</i>')
-                
-                # Анализируем через Gemini
-                existing_user = get_user(user['id'])
-                if not existing_user:
-                    create_user(user['id'], user.get('username', ''), user.get('first_name', ''), user.get('last_name', ''), 'student')
-                    existing_user = {'telegram_id': user['id'], 'language_level': 'A1'}
+                send_telegram_message(chat_id, f'📝 Ты сказал:\n<i>{recognized_text}</i>')
                 
                 language_level = existing_user.get('language_level', 'A1')
                 
@@ -1181,7 +1197,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 print(f"[ERROR] Voice processing failed: {e}")
                 import traceback
                 traceback.print_exc()
-                send_telegram_message(chat_id, '❌ Ошибка обработки голосового сообщения. Попробуй написать текстом!')
+                send_telegram_message(chat_id, '❌ Ошибка обработки голосового. Проверь что говоришь на английском!')
                 return {
                     'statusCode': 200,
                     'headers': {'Content-Type': 'application/json'},
@@ -1214,9 +1230,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             )
         
         # Обработка выбора режима через Reply Keyboard
-        elif text in ['💬 Диалог', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод']:
+        elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод']:
             mode_map = {
                 '💬 Диалог': 'dialog',
+                '🎤 Голосовой': 'voice',
                 '✍️ Предложения': 'sentence',
                 '📝 Контекст': 'context',
                 '🎯 Ассоциации': 'association',
@@ -1227,6 +1244,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             mode_messages = {
                 'dialog': '💬 Режим "Диалог" активирован!\n\nТеперь просто пиши мне на английском, и я буду помогать тебе практиковать разговорную речь в естественных диалогах.',
+                'voice': '🎤 Режим "Голосовой" активирован!\n\n🎙️ Записывай голосовые сообщения на английском, и я:\n\n✅ Распознаю твою речь\n✅ Исправлю ошибки с объяснениями\n✅ Отвечу голосом от Ани\n\nГовори что угодно - начни прямо сейчас! 🚀',
                 'sentence': '✍️ Режим "Предложения" активирован!\n\nСейчас я дам тебе слово, а ты составь с ним предложение на английском.',
                 'context': '📝 Режим "Контекст" активирован!\n\nЯ буду давать предложения с пропущенными словами, а ты вставляй нужное слово.',
                 'association': '🎯 Режим "Ассоциации" активирован!\n\nЯ дам тебе три подсказки, а ты угадай слово на английском.',
@@ -1235,8 +1253,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             send_telegram_message(chat_id, mode_messages[mode], parse_mode=None)
             
-            # Если не режим диалога - даем первое упражнение
-            if mode != 'dialog':
+            # Если не режим диалога/голосовой - даем первое упражнение
+            if mode not in ['dialog', 'voice']:
                 try:
                     # Получаем уровень пользователя
                     language_level = user.get('language_level', 'A1')
@@ -1334,7 +1352,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         update_conversation_mode(user['id'], 'dialog')
                 
             else:
-                # Режим диалога - обрабатываем через Gemini
+                # Режим диалога или голосового - обрабатываем через Gemini
                 history = get_conversation_history(user['id'])
                 
                 # Если ученик - загружаем слова для практики
@@ -1376,6 +1394,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 # Отправляем ответ в Telegram с клавиатурой
                 send_telegram_message(chat_id, ai_response, get_reply_keyboard())
+                
+                # В режиме 'voice' также отправляем голосовой ответ
+                if conversation_mode == 'voice':
+                    try:
+                        voice_url = text_to_speech(ai_response)
+                        send_telegram_voice(chat_id, voice_url, '🎤 Ответ от Ани')
+                    except Exception as e:
+                        print(f"[ERROR] Failed to generate voice response: {e}")
             
             # Обновляем статистику практики (для всех режимов)
             if existing_user.get('role') == 'student':
