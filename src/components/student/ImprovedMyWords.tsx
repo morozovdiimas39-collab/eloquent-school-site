@@ -43,6 +43,7 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
   const [stats, setStats] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [playingAudio, setPlayingAudio] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -82,6 +83,47 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
       console.error('Ошибка загрузки слов:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const playAudio = async (wordId: number, text: string) => {
+    if (playingAudio === wordId) {
+      setPlayingAudio(null);
+      return;
+    }
+
+    setPlayingAudio(wordId);
+    
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate_speech',
+          text: text,
+          lang: 'en-US'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        toast.error('Ошибка генерации озвучки');
+        setPlayingAudio(null);
+        return;
+      }
+
+      const audio = new Audio(data.url);
+      audio.onended = () => setPlayingAudio(null);
+      audio.onerror = () => {
+        toast.error('Ошибка воспроизведения');
+        setPlayingAudio(null);
+      };
+      await audio.play();
+    } catch (error) {
+      console.error('Ошибка озвучки:', error);
+      toast.error('Ошибка озвучки');
+      setPlayingAudio(null);
     }
   };
 
@@ -214,6 +256,14 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
                         <h3 className="text-base font-bold text-gray-900 truncate">
                           {word.english_text}
                         </h3>
+                        <Button
+                          onClick={() => playAudio(word.id, word.english_text)}
+                          size="sm"
+                          variant="ghost"
+                          className={`h-7 w-7 p-0 ${playingAudio === word.id ? 'text-blue-600' : 'text-gray-400 hover:text-blue-600'}`}
+                        >
+                          <Icon name={playingAudio === word.id ? 'Volume2' : 'Volume1'} size={16} />
+                        </Button>
                         <Badge className={`text-xs px-2 py-0.5 border ${getStatusColor(word.progress_status)}`}>
                           {getStatusText(word.progress_status)}
                         </Badge>

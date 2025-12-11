@@ -2,6 +2,7 @@ import json
 import os
 import psycopg2
 import requests
+import boto3
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
@@ -825,6 +826,65 @@ def delete_proxy(proxy_id: int) -> bool:
     conn.close()
     return True
 
+def generate_speech(text: str, lang: str = 'en-US') -> Dict[str, Any]:
+    """Генерирует озвучку через Yandex SpeechKit с кэшированием в S3"""
+    if not text:
+        return {'error': 'Text is required'}
+    
+    # Проверяем кэш в S3
+    file_key = f"audio/{lang}/{hash(text)}.ogg"
+    
+    try:
+        s3 = boto3.client('s3',
+            endpoint_url='https://bucket.poehali.dev',
+            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']
+        )
+        
+        # Проверяем существование файла
+        try:
+            s3.head_object(Bucket='files', Key=file_key)
+            cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{file_key}"
+            return {'url': cdn_url, 'cached': True}
+        except:
+            pass
+        
+        # Генерируем новую озвучку
+        api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
+        folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
+        
+        if not api_key or not folder_id:
+            return {'error': 'Yandex Cloud credentials not configured'}
+        
+        url = 'https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize'
+        headers = {'Authorization': f'Api-Key {api_key}'}
+        
+        data = {
+            'text': text,
+            'lang': lang,
+            'voice': 'alena',
+            'format': 'oggopus',
+            'speed': '1.0',
+            'folderId': folder_id
+        }
+        
+        response = requests.post(url, headers=headers, data=data, timeout=30)
+        response.raise_for_status()
+        
+        # Сохраняем в S3
+        s3.put_object(
+            Bucket='files',
+            Key=file_key,
+            Body=response.content,
+            ContentType='audio/ogg'
+        )
+        
+        cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{file_key}"
+        return {'url': cdn_url, 'cached': False}
+        
+    except Exception as e:
+        return {'error': str(e)}
+
 def reset_proxy_stats(proxy_id: int) -> bool:
     """Сбрасывает статистику прокси"""
     conn = get_db_connection()
@@ -1031,6 +1091,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             language_level = body_data.get('language_level', 'A1')
             count = body_data.get('count', 7)
             result = generate_personalized_words(student_id, learning_goal, language_level, count)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'generate_speech':
+            text = body_data.get('text', '')
+            lang = body_data.get('lang', 'en-US')
+            result = generate_speech(text, lang)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
