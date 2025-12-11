@@ -932,6 +932,7 @@ def download_telegram_file(file_id: str) -> bytes:
 
 def speech_to_text(audio_data: bytes) -> str:
     """Распознает речь через Yandex SpeechKit"""
+    # Force redeploy to get new YANDEX_CLOUD_API_KEY secret
     api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
     folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
     
