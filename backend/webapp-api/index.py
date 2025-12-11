@@ -141,8 +141,8 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
             "parts": [{"text": prompt}]
         }],
         "generationConfig": {
-            "temperature": 0.8,
-            "maxOutputTokens": 1000,
+            "temperature": 0.7,
+            "maxOutputTokens": 2000,
             "responseMimeType": "application/json"
         }
     }
@@ -169,16 +169,37 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
                 print(f"🔴 JSON parse error: {e}")
                 print(f"🔴 Full problematic JSON:\n{text}")
                 
+                # Пытаемся починить JSON
                 try:
+                    import re
                     fixed_text = text
-                    if not fixed_text.endswith('}'):
-                        fixed_text += '"}'
-                    if not fixed_text.endswith(']}'):
-                        fixed_text = fixed_text.rstrip('}') + ']}'
+                    
+                    # Если JSON обрезан - добавляем закрывающие символы
+                    # Случай 1: незакрытая строка (нет закрывающей кавычки)
+                    if '"russian":' in fixed_text and not fixed_text.rstrip().endswith('"'):
+                        # Ищем последнюю незакрытую строку
+                        last_colon = fixed_text.rfind(':')
+                        if last_colon != -1:
+                            after_colon = fixed_text[last_colon+1:].strip()
+                            if after_colon.startswith('"') and not after_colon.endswith('"'):
+                                fixed_text += '"'
+                    
+                    # Случай 2: незакрытый объект
+                    open_braces = fixed_text.count('{')
+                    close_braces = fixed_text.count('}')
+                    if open_braces > close_braces:
+                        fixed_text += '}' * (open_braces - close_braces)
+                    
+                    # Случай 3: незакрытый массив
+                    open_brackets = fixed_text.count('[')
+                    close_brackets = fixed_text.count(']')
+                    if open_brackets > close_brackets:
+                        fixed_text += ']' * (open_brackets - close_brackets)
                     
                     result = json.loads(fixed_text)
-                    print(f"✅ Fixed JSON successfully")
-                except:
+                    print(f"✅ Fixed JSON successfully!")
+                except Exception as fix_error:
+                    print(f"🔴 Failed to fix JSON: {fix_error}")
                     return {'error': f'Invalid JSON from Gemini: {str(e)}. Повторите попытку через минуту.', 'words': []}
             
             if 'words' in result and len(result['words']) > 0:
