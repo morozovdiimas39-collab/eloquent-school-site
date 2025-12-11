@@ -5,6 +5,9 @@ import urllib.request
 import urllib.parse
 import random
 import re
+import requests
+import base64
+import tempfile
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
@@ -828,6 +831,35 @@ def send_chat_action(chat_id: int, action: str = 'typing'):
         print(f"[WARNING] Failed to send chat action: {e}")
         pass
 
+def send_telegram_voice(chat_id: int, voice_url: str, caption: str = None):
+    """Отправляет голосовое сообщение в Telegram"""
+    send_chat_action(chat_id, 'record_voice')
+    
+    token = os.environ['TELEGRAM_BOT_TOKEN']
+    url = f'https://api.telegram.org/bot{token}/sendVoice'
+    
+    payload = {
+        'chat_id': chat_id,
+        'voice': voice_url
+    }
+    
+    if caption:
+        payload['caption'] = caption
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception as e:
+        print(f"[ERROR] Failed to send voice: {e}")
+        raise
+
 def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode='HTML'):
     """Отправляет сообщение в Telegram"""
     send_chat_action(chat_id, 'typing')
@@ -882,6 +914,93 @@ def edit_telegram_message(chat_id: int, message_id: int, text: str):
     
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode('utf-8'))
+
+def download_telegram_file(file_id: str) -> bytes:
+    """Скачивает файл из Telegram"""
+    token = os.environ['TELEGRAM_BOT_TOKEN']
+    
+    # Получаем путь к файлу
+    url = f'https://api.telegram.org/bot{token}/getFile?file_id={file_id}'
+    with urllib.request.urlopen(url) as response:
+        data = json.loads(response.read().decode('utf-8'))
+        file_path = data['result']['file_path']
+    
+    # Скачиваем файл
+    file_url = f'https://api.telegram.org/file/bot{token}/{file_path}'
+    with urllib.request.urlopen(file_url) as response:
+        return response.read()
+
+def speech_to_text(audio_data: bytes) -> str:
+    """Распознает речь через Yandex SpeechKit"""
+    api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
+    folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
+    
+    if not api_key or not folder_id:
+        raise Exception('Yandex Cloud credentials not configured')
+    
+    url = 'https://stt.api.cloud.yandex.net/speech/v1/stt:recognize'
+    headers = {
+        'Authorization': f'Api-Key {api_key}'
+    }
+    params = {
+        'lang': 'en-US',
+        'folderId': folder_id,
+        'format': 'oggopus'
+    }
+    
+    response = requests.post(
+        url,
+        headers=headers,
+        params=params,
+        data=audio_data,
+        timeout=30
+    )
+    response.raise_for_status()
+    
+    result = response.json()
+    return result.get('result', '')
+
+def text_to_speech(text: str) -> str:
+    """Генерирует озвучку через Yandex SpeechKit и возвращает CDN URL"""
+    api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
+    folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
+    
+    if not api_key or not folder_id:
+        raise Exception('Yandex Cloud credentials not configured')
+    
+    url = 'https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize'
+    headers = {'Authorization': f'Api-Key {api_key}'}
+    
+    data = {
+        'text': text,
+        'lang': 'en-US',
+        'voice': 'alena',
+        'format': 'oggopus',
+        'speed': '1.0',
+        'folderId': folder_id
+    }
+    
+    response = requests.post(url, headers=headers, data=data, timeout=30)
+    response.raise_for_status()
+    
+    # Сохраняем в S3
+    import boto3
+    s3 = boto3.client('s3',
+        endpoint_url='https://bucket.poehali.dev',
+        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']
+    )
+    
+    file_key = f"voice/{hash(text)}.ogg"
+    s3.put_object(
+        Bucket='files',
+        Key=file_key,
+        Body=response.content,
+        ContentType='audio/ogg'
+    )
+    
+    cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{file_key}"
+    return cdn_url
 
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -996,6 +1115,79 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         chat_id = message['chat']['id']
         user = message['from']
         text = message.get('text', '')
+        voice = message.get('voice')
+        
+        # Обработка голосовых сообщений
+        if voice:
+            try:
+                send_telegram_message(chat_id, '🎧 Слушаю твое сообщение...')
+                
+                # Скачиваем аудио
+                audio_data = download_telegram_file(voice['file_id'])
+                
+                # Распознаем речь
+                recognized_text = speech_to_text(audio_data)
+                
+                if not recognized_text:
+                    send_telegram_message(chat_id, '❌ Не удалось распознать речь. Попробуй еще раз!')
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True}),
+                        'isBase64Encoded': False
+                    }
+                
+                send_telegram_message(chat_id, f'📝 Распознанный текст:\n<i>{recognized_text}</i>')
+                
+                # Анализируем через Gemini
+                existing_user = get_user(user['id'])
+                if not existing_user:
+                    create_user(user['id'], user.get('username', ''), user.get('first_name', ''), user.get('last_name', ''), 'student')
+                    existing_user = {'telegram_id': user['id'], 'language_level': 'A1'}
+                
+                language_level = existing_user.get('language_level', 'A1')
+                
+                # Генерируем ответ с исправлениями
+                response_text = generate_ai_response(
+                    user['id'],
+                    recognized_text,
+                    [],
+                    None,
+                    [],
+                    language_level,
+                    0
+                )
+                
+                # Генерируем голосовой ответ
+                voice_url = text_to_speech(response_text)
+                
+                # Отправляем текстовый ответ
+                send_telegram_message(chat_id, response_text, get_reply_keyboard())
+                
+                # Отправляем голосовой ответ
+                send_telegram_voice(chat_id, voice_url, '🎤 Ответ от Ани')
+                
+                # Сохраняем в историю
+                save_conversation_history(user['id'], recognized_text, response_text)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+                
+            except Exception as e:
+                print(f"[ERROR] Voice processing failed: {e}")
+                import traceback
+                traceback.print_exc()
+                send_telegram_message(chat_id, '❌ Ошибка обработки голосового сообщения. Попробуй написать текстом!')
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
         
         # Команда /start
         if text == '/start':
