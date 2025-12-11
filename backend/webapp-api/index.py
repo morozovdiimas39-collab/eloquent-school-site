@@ -858,6 +858,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         body_data = json.loads(event.get('body', '{}'))
         action = body_data.get('action')
+        print(f"🔥 WEBAPP API: Received action={action}")
         
         if action == 'get_user':
             telegram_id = body_data.get('telegram_id')
