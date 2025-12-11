@@ -976,13 +976,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
-        elif action == 'get_progress_stats':
+        elif action == 'get_progress_stats' or action == 'get_student_progress_stats':
             student_id = body_data.get('student_id')
             stats = get_student_progress_stats(student_id)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'success': True, 'stats': stats}),
+                'body': json.dumps(stats),
                 'isBase64Encoded': False
             }
         
