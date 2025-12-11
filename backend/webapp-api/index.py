@@ -148,10 +148,20 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
             try:
                 result = json.loads(text)
             except json.JSONDecodeError as e:
-                # Логируем проблемный JSON для отладки
-                print(f"JSON parse error: {e}")
-                print(f"Problematic JSON (first 500 chars): {text[:500]}")
-                return {'error': f'Invalid JSON from Gemini: {str(e)}', 'words': []}
+                print(f"🔴 JSON parse error: {e}")
+                print(f"🔴 Full problematic JSON:\n{text}")
+                
+                try:
+                    fixed_text = text
+                    if not fixed_text.endswith('}'):
+                        fixed_text += '"}'
+                    if not fixed_text.endswith(']}'):
+                        fixed_text = fixed_text.rstrip('}') + ']}'
+                    
+                    result = json.loads(fixed_text)
+                    print(f"✅ Fixed JSON successfully")
+                except:
+                    return {'error': f'Invalid JSON from Gemini: {str(e)}. Повторите попытку через минуту.', 'words': []}
             
             if 'words' in result and len(result['words']) > 0:
                 conn = get_db_connection()
