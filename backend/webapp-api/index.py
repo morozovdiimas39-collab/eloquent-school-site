@@ -174,9 +174,9 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
                     word_id = cur.fetchone()[0]
                     
                     cur.execute(
-                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id) "
-                        f"VALUES ({student_id}, {word_id}) "
-                        f"ON CONFLICT DO NOTHING"
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                        f"VALUES ({student_id}, {word_id}, {student_id}) "
+                        f"ON CONFLICT (student_id, word_id) DO NOTHING"
                     )
                     
                     added_words.append({
