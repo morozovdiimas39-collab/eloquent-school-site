@@ -1832,9 +1832,23 @@ B2: words=["perspective", "consequence", "innovation", "sustainability", "divers
                     'isBase64Encoded': False
                 }
         
-        # Команда /start
+        # Команда /start - ВСЕГДА СБРАСЫВАЕМ СОСТОЯНИЕ
         if text == '/start':
             existing_user = get_user(user['id'])
+            
+            # Сбрасываем состояние пользователя если он застрял
+            if existing_user:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET "
+                    f"conversation_mode = 'awaiting_goal', "
+                    f"test_phrases = NULL, "
+                    f"learning_plan = NULL "
+                    f"WHERE telegram_id = {user['id']}"
+                )
+                cur.close()
+                conn.close()
             
             if not existing_user:
                 # Регистрируем нового пользователя как ученика по умолчанию
