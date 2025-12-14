@@ -1529,25 +1529,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             ]
                         }
                         
-                        token = os.environ['TELEGRAM_BOT_TOKEN']
-                        url = f'https://api.telegram.org/bot{token}/sendMessage'
-                        
-                        payload = {
-                            'chat_id': chat_id,
-                            'text': goal_text,
-                            'reply_markup': keyboard,
-                            'parse_mode': 'HTML'
-                        }
-                        
-                        req = urllib.request.Request(
-                            url,
-                            data=json.dumps(payload).encode('utf-8'),
-                            headers={'Content-Type': 'application/json'},
-                            method='POST'
-                        )
-                        
-                        with urllib.request.urlopen(req) as response:
-                            json.loads(response.read().decode('utf-8'))
+                        send_telegram_message(chat_id, goal_text, keyboard, parse_mode='HTML')
                         
                         # Переводим в режим проверки уровня
                         update_conversation_mode(user['id'], 'awaiting_level_selection')
