@@ -1097,17 +1097,15 @@ def text_to_speech(text: str) -> str:
     """Генерирует озвучку через OpenAI TTS (было Yandex)"""
     return text_to_speech_openai(text)
 
-def generate_full_monthly_plan(student_id: int, learning_goal: str, language_level: str, preferred_topics: List[Dict[str, str]]) -> Dict[str, Any]:
+def generate_plan_batch(student_id: int, learning_goal: str, language_level: str, preferred_topics: List[Dict[str, str]], batch_num: int) -> Dict[str, Any]:
     """
-    Генерирует ПОЛНЫЙ месячный план обучения со всеми материалами:
-    - Темы для разговоров на 4 недели
-    - Слова, фразы, устойчивые выражения для каждой недели
-    - Конкретные действия на каждую неделю
+    Генерирует ОДНУ ПАРТИЮ плана (2 недели).
+    batch_num: 1 (недели 1-2) или 2 (недели 3-4)
     
-    ВАЖНО: Разбивает генерацию на 2 запроса (недели 1-2 + недели 3-4) чтобы не превысить таймаут
+    Возвращает: {'success': True, 'weeks': [...], 'words_added': N}
     """
     try:
-        print(f"[DEBUG] generate_full_monthly_plan STARTED")
+        print(f"[DEBUG] generate_plan_batch STARTED: batch={batch_num}")
         api_key = os.environ['GEMINI_API_KEY']
         proxy_id, proxy_url = get_active_proxy_from_db()
         if not proxy_url:
@@ -1118,16 +1116,12 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
-        # РАЗБИВАЕМ НА 2 ЗАПРОСА: недели 1-2 и недели 3-4
-        all_weeks = []
+        week_start = (batch_num - 1) * 2 + 1
+        week_end = batch_num * 2
         
-        for batch_num in range(1, 3):  # 2 запроса
-            week_start = (batch_num - 1) * 2 + 1
-            week_end = batch_num * 2
-            
-            print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
-            
-            prompt = f'''Create a 2-week English learning plan (weeks {week_start}-{week_end}) with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
+        print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
+        
+        prompt = f'''Create a 2-week English learning plan (weeks {week_start}-{week_end}) with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
 
 Student: Level {language_level}, Topics: {topics_display}
 
@@ -1173,65 +1167,60 @@ Example for Gaming + B1:
 vocabulary: [{{"english": "gameplay", "russian": "игровой процесс", "topic": "gaming"}}]
 phrases: [{{"english": "level up", "russian": "повысить уровень", "topic": "gaming"}}]
 expressions: [{{"english": "let\'s team up", "russian": "давай объединимся", "context": "inviting to play together"}}]'''
-            
-            payload = {
-                'contents': [{'parts': [{'text': prompt}]}],
-                'generationConfig': {
-                    'temperature': 0.7, 
-                    'maxOutputTokens': 8000,
-                    'topP': 0.95,
-                    'topK': 40
-                }
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {
+                'temperature': 0.7, 
+                'maxOutputTokens': 8000,
+                'topP': 0.95,
+                'topK': 40
             }
-            
-            proxy_handler = urllib.request.ProxyHandler({
-                'http': f'http://{proxy_url}',
-                'https': f'http://{proxy_url}'
-            })
-            opener = urllib.request.build_opener(proxy_handler)
-            
-            req = urllib.request.Request(
-                gemini_url,
-                data=json.dumps(payload).encode('utf-8'),
-                headers={'Content-Type': 'application/json'}
-            )
-            
-            print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=25s)")
-            try:
-                with opener.open(req, timeout=25) as response:
-                    print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
-                    gemini_result = json.loads(response.read().decode('utf-8'))
-                    plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                    
-                    # Очистка JSON
-                    plan_text = plan_text.replace('```json', '').replace('```', '').strip()
-                    start_idx = plan_text.find('{')
-                    end_idx = plan_text.rfind('}')
-                    if start_idx != -1 and end_idx != -1:
-                        plan_text = plan_text[start_idx:end_idx+1]
-                    
-                    print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
-                    batch_data = json.loads(plan_text)
-                    batch_weeks = batch_data.get('plan', [])
-                    
-                    if not batch_weeks:
-                        print(f"[ERROR] Empty plan for weeks {week_start}-{week_end}")
-                        return {'success': False, 'error': f'Empty plan for weeks {week_start}-{week_end}'}
-                    
-                    all_weeks.extend(batch_weeks)
-                    print(f"[DEBUG] Added {len(batch_weeks)} weeks. Total now: {len(all_weeks)}")
-                    
-                    log_proxy_success(proxy_id)
-                    
-            except Exception as api_error:
-                print(f"[ERROR] Gemini API call failed for weeks {week_start}-{week_end}: {api_error}")
-                log_proxy_failure(proxy_id, str(api_error))
-                return {'success': False, 'error': f'Gemini API error on weeks {week_start}-{week_end}: {str(api_error)}'}
+        }
         
-        plan_weeks = all_weeks
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
         
-        if not plan_weeks or len(plan_weeks) < 4:
-            return {'success': False, 'error': f'Incomplete plan: only {len(plan_weeks)} weeks generated'}
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+            
+        print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=25s)")
+        try:
+            with opener.open(req, timeout=25) as response:
+                print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
+                gemini_result = json.loads(response.read().decode('utf-8'))
+                plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                
+                # Очистка JSON
+                plan_text = plan_text.replace('```json', '').replace('```', '').strip()
+                start_idx = plan_text.find('{')
+                end_idx = plan_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    plan_text = plan_text[start_idx:end_idx+1]
+                
+                print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
+                batch_data = json.loads(plan_text)
+                batch_weeks = batch_data.get('plan', [])
+                
+                if not batch_weeks:
+                    print(f"[ERROR] Empty plan for weeks {week_start}-{week_end}")
+                    return {'success': False, 'error': f'Empty plan for weeks {week_start}-{week_end}'}
+                
+                log_proxy_success(proxy_id)
+                print(f"[DEBUG] Generated {len(batch_weeks)} weeks successfully")
+                
+        except Exception as api_error:
+            print(f"[ERROR] Gemini API call failed for weeks {week_start}-{week_end}: {api_error}")
+            log_proxy_failure(proxy_id, str(api_error))
+            return {'success': False, 'error': f'Gemini API error on weeks {week_start}-{week_end}: {str(api_error)}'}
+        
+        plan_weeks = batch_weeks
         
         # Сохраняем ВСЕ слова и фразы в БД
         print(f"[DEBUG] Saving {len(plan_weeks)} weeks to DB...")
@@ -1380,13 +1369,12 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
         
         plan_message += "❓ Тебе подходит этот план?"
         
-        print(f"[DEBUG] Plan message formatted ({len(plan_message)} chars). Total {len(plan_weeks)} weeks, {total_words_added} words.")
+        print(f"[DEBUG] Batch {batch_num} complete: {len(plan_weeks)} weeks, {total_words_added} words added")
         
         return {
             'success': True,
-            'plan_message': plan_message,
-            'plan_data': plan_weeks,
-            'words_count': total_words_added
+            'weeks': plan_weeks,
+            'words_added': total_words_added
         }
         
     except Exception as e:
@@ -1851,31 +1839,88 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.close()
                     conn.close()
                     
-                    # Генерируем план асинхронно (отправим отдельным сообщением)
+                    # Генерируем ПЕРВУЮ ПАРТИЮ (недели 1-2)
                     try:
-                        print(f"[DEBUG] STARTING PLAN GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
-                        # Вызываем генерацию плана
-                        plan_result = generate_full_monthly_plan(user['id'], learning_goal, language_level, preferred_topics)
-                        print(f"[DEBUG] PLAN GENERATION FINISHED: success={plan_result.get('success')}")
+                        print(f"[DEBUG] STARTING BATCH 1 GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
+                        batch1_result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=1)
+                        print(f"[DEBUG] BATCH 1 FINISHED: success={batch1_result.get('success')}")
                         
-                        if plan_result.get('success'):
+                        if not batch1_result.get('success'):
                             send_telegram_message(
                                 chat_id,
-                                plan_result['plan_message'],
-                                {
-                                    'inline_keyboard': [
-                                        [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                        [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                    ]
-                                },
+                                f'❌ Ошибка генерации плана: {batch1_result.get("error", "Unknown error")}\n\nПопробуй /start',
                                 parse_mode=None
                             )
                         else:
-                            send_telegram_message(
-                                chat_id,
-                                f'❌ Не удалось сгенерировать план: {plan_result.get("error", "Unknown error")}\n\nПопробуй еще раз через /start',
-                                parse_mode=None
+                            # Сохраняем первую партию в поле learning_plan_batch1
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            batch1_json = json.dumps(batch1_result['weeks'], ensure_ascii=False).replace("'", "''")
+                            cur.execute(
+                                f"UPDATE {SCHEMA}.users SET learning_plan_batch1 = '{batch1_json}'::jsonb WHERE telegram_id = {user['id']}"
                             )
+                            cur.close()
+                            conn.close()
+                            
+                            print(f"[DEBUG] Batch 1 saved. Now generating batch 2...")
+                            
+                            # Генерируем ВТОРУЮ ПАРТИЮ (недели 3-4)
+                            batch2_result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=2)
+                            print(f"[DEBUG] BATCH 2 FINISHED: success={batch2_result.get('success')}")
+                            
+                            if not batch2_result.get('success'):
+                                send_telegram_message(
+                                    chat_id,
+                                    f'❌ Ошибка при генерации недель 3-4: {batch2_result.get("error")}\n\nПопробуй /start',
+                                    parse_mode=None
+                                )
+                            else:
+                                # Объединяем обе партии
+                                all_weeks = batch1_result['weeks'] + batch2_result['weeks']
+                                total_words = batch1_result['words_added'] + batch2_result['words_added']
+                                
+                                # Сохраняем полный план
+                                conn = get_db_connection()
+                                cur = conn.cursor()
+                                plan_json = json.dumps(all_weeks, ensure_ascii=False).replace("'", "''")
+                                cur.execute(
+                                    f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user['id']}"
+                                )
+                                cur.close()
+                                conn.close()
+                                
+                                # Форматируем сообщение
+                                plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА МЕСЯЦ\n\n"
+                                plan_message += f"🎯 Цель: {learning_goal}\n"
+                                plan_message += f"📊 Уровень: {language_level}\n"
+                                plan_message += f"💡 Темы: {topics_display}\n"
+                                plan_message += f"📚 Всего материалов: {total_words} слов и фраз\n\n"
+                                plan_message += "━━━━━━━━━━━━━━━━━━━\n\n"
+                                
+                                for week_data in all_weeks[:2]:  # Показываем первые 2 недели
+                                    week_num = week_data.get('week', 1)
+                                    focus = week_data.get('focus', 'Обучение')
+                                    vocab = week_data.get('vocabulary', [])
+                                    phrases = week_data.get('phrases', [])
+                                    
+                                    plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n"
+                                    plan_message += f"📖 Слова: {len(vocab)} шт\n"
+                                    plan_message += f"💭 Фразы: {len(phrases)} шт\n\n"
+                                
+                                plan_message += f"... и еще 2 недели!\n\n"
+                                plan_message += "❓ Тебе подходит этот план?"
+                                
+                                send_telegram_message(
+                                    chat_id,
+                                    plan_message,
+                                    {
+                                        'inline_keyboard': [
+                                            [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                            [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                        ]
+                                    },
+                                    parse_mode=None
+                                )
                     except Exception as e:
                         print(f"[ERROR] Failed to generate plan: {e}")
                         import traceback
