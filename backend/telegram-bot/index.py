@@ -1585,10 +1585,36 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     if 'error' in result:
                         send_telegram_message(chat_id, f'❌ Ошибка при анализе цели: {result["error"]}', parse_mode=None)
                     else:
+                        # Сохраняем цель в БД
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        
+                        goal_escaped = result.get('goal', text).replace("'", "''")
+                        timeline = result.get('timeline', '')
+                        timeline_escaped = timeline.replace("'", "''") if timeline else ''
+                        
+                        if timeline:
+                            details = f"Срок: {timeline}"
+                            details_escaped = details.replace("'", "''")
+                            cur.execute(
+                                f"UPDATE {SCHEMA}.users SET "
+                                f"learning_goal = '{goal_escaped}', "
+                                f"learning_goal_details = '{details_escaped}' "
+                                f"WHERE telegram_id = {user['id']}"
+                            )
+                        else:
+                            cur.execute(
+                                f"UPDATE {SCHEMA}.users SET "
+                                f"learning_goal = '{goal_escaped}' "
+                                f"WHERE telegram_id = {user['id']}"
+                            )
+                        
+                        cur.close()
+                        conn.close()
+                        
                         # Подтверждаем цель
                         goal_text = f"✅ Понял! Твоя цель: <b>{result.get('goal')}</b>"
                         
-                        timeline = result.get('timeline')
                         if timeline:
                             goal_text += f"\n⏰ Срок: {timeline}"
                         
@@ -1612,6 +1638,140 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 except Exception as e:
                     print(f"[ERROR] Failed to analyze goal: {e}")
                     send_telegram_message(chat_id, '❌ Не удалось проанализировать цель. Попробуй еще раз или напиши /start', parse_mode=None)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
+            # Проверяем - ждем ли мы описание интересов/тем от пользователя
+            elif conversation_mode == 'awaiting_topics':
+                # Пользователь описал свои интересы - парсим через Gemini и сохраняем
+                send_telegram_message(chat_id, '⏳ Анализирую твои интересы и подбираю слова...', parse_mode=None)
+                
+                try:
+                    # Парсим интересы через Gemini
+                    api_key = os.environ['GEMINI_API_KEY']
+                    proxy_id, proxy_url = get_active_proxy_from_db()
+                    if not proxy_url:
+                        proxy_url = os.environ.get('PROXY_URL', '')
+                    
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                    
+                    prompt = f'''Студент описал свои интересы: "{text}"
+
+Извлеки из текста темы в формате JSON массива объектов.
+
+Формат ответа (только JSON, без markdown):
+{{
+  "topics": [
+    {{"topic": "Игры", "emoji": "🎮"}},
+    {{"topic": "Маркетинг", "emoji": "📊"}}
+  ]
+}}
+
+Важно:
+- topic = краткое название темы (1-2 слова)
+- emoji = подходящий эмодзи
+- Извлекай ВСЕ упомянутые темы (работа, хобби, интересы)
+
+Отвечай ТОЛЬКО валидным JSON.'''
+                    
+                    payload = {
+                        'contents': [{'parts': [{'text': prompt}]}],
+                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 500}
+                    }
+                    
+                    proxy_handler = urllib.request.ProxyHandler({
+                        'http': f'http://{proxy_url}',
+                        'https': f'http://{proxy_url}'
+                    })
+                    opener = urllib.request.build_opener(proxy_handler)
+                    
+                    req = urllib.request.Request(
+                        gemini_url,
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    
+                    with opener.open(req, timeout=30) as response:
+                        gemini_result = json.loads(response.read().decode('utf-8'))
+                        topics_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        topics_text = topics_text.replace('```json', '').replace('```', '').strip()
+                        topics_data = json.loads(topics_text)
+                        topics_list = topics_data.get('topics', [])
+                    
+                    # Сохраняем темы в БД
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    topics_json = json.dumps(topics_list, ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"preferred_topics = '{topics_json}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    
+                    # Получаем цель и уровень для генерации слов
+                    cur.execute(f"SELECT learning_goal, language_level FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    row = cur.fetchone()
+                    learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
+                    language_level = row[1] if row and row[1] else 'A1'
+                    
+                    cur.close()
+                    conn.close()
+                    
+                    # Генерируем персональные слова через webapp-api
+                    webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                    words_response = requests.post(
+                        webapp_api_url,
+                        json={
+                            'action': 'generate_personalized_words',
+                            'student_id': user['id'],
+                            'learning_goal': learning_goal,
+                            'language_level': language_level,
+                            'count': 7
+                        },
+                        timeout=30
+                    )
+                    words_result = words_response.json()
+                    
+                    # Формируем приветственное сообщение
+                    topics_display = ', '.join([f"{t['emoji']} {t['topic']}" for t in topics_list[:5]])
+                    
+                    welcome_msg = f"✅ Отлично! Теперь я знаю о тебе:\n\n"
+                    welcome_msg += f"📊 Уровень: {language_level}\n"
+                    welcome_msg += f"🎯 Цель: {learning_goal}\n"
+                    welcome_msg += f"💡 Темы: {topics_display}\n\n"
+                    
+                    if words_result.get('success') and words_result.get('words'):
+                        welcome_msg += f"📚 Я подготовил {len(words_result['words'])} персональных слов для тебя!\n\n"
+                    
+                    welcome_msg += "Давай начнем практиковаться? Просто напиши мне что-угодно на английском, и я помогу тебе учиться! 💬\n\n"
+                    welcome_msg += "Используй кнопки внизу, чтобы менять режимы обучения 👇"
+                    
+                    # Переключаем в режим диалога
+                    update_conversation_mode(user['id'], 'dialog')
+                    
+                    # Отправляем приветствие с клавиатурой режимов
+                    send_telegram_message(chat_id, welcome_msg, get_reply_keyboard(), parse_mode=None)
+                    
+                except Exception as e:
+                    print(f"[ERROR] Failed to process topics: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
+                    # Даже если ошибка - запускаем диалог с дефолтными словами
+                    update_conversation_mode(user['id'], 'dialog')
+                    send_telegram_message(
+                        chat_id,
+                        '✅ Отлично! Давай начнем практиковаться?\n\n'
+                        'Просто напиши мне что-угодно на английском! 💬',
+                        get_reply_keyboard(),
+                        parse_mode=None
+                    )
                 
                 return {
                     'statusCode': 200,
