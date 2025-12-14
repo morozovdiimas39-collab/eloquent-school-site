@@ -69,7 +69,7 @@ def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
         }],
         "generationConfig": {
             "temperature": 0.8,
-            "maxOutputTokens": 1000
+            "maxOutputTokens": 2000
         }
     }
     
@@ -85,9 +85,37 @@ def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
             print(f"🔍 Raw Gemini response: {text}")
             text = text.replace('```json', '').replace('```', '').strip()
             print(f"🔍 Cleaned text: {text}")
-            result = json.loads(text)
-            print(f"✅ Parsed JSON: {result}")
-            return result
+            
+            try:
+                result = json.loads(text)
+                print(f"✅ Parsed JSON: {result}")
+                return result
+            except json.JSONDecodeError as e:
+                print(f"🔴 JSON parse error: {e}")
+                
+                import re
+                last_comma = text.rfind(',')
+                last_brace = text.rfind('}')
+                
+                if last_comma > last_brace:
+                    text = text[:last_comma]
+                    print(f"🔧 Removed incomplete item after last comma")
+                
+                if text.count('{') > text.count('}'):
+                    text += '}' * (text.count('{') - text.count('}'))
+                    print(f"🔧 Added missing closing braces")
+                
+                if text.count('[') > text.count(']'):
+                    text += ']' * (text.count('[') - text.count(']'))
+                    print(f"🔧 Added missing closing brackets")
+                
+                try:
+                    result = json.loads(text)
+                    print(f"✅ Fixed and parsed JSON: {result}")
+                    return result
+                except:
+                    print(f"🔴 Failed to fix JSON")
+                    return {'error': f'Invalid JSON: {str(e)}', 'subtopics': []}
         
         return {'error': 'No response from Gemini', 'subtopics': []}
     
