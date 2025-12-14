@@ -1161,7 +1161,7 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 4000,
+                'maxOutputTokens': 8000,
                 'topP': 0.95,
                 'topK': 40
             }
@@ -2453,11 +2453,15 @@ Return short JSON:
                                 
                                 print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}, attempt={attempt+1}): {next_text[:200]}")
                                 
-                                # Fallback слова по уровням (НО ПРОВЕРЯЕМ ЧТО НЕ ПОВТОРЯЮТСЯ)
-                                all_fallbacks = ['book', 'home', 'time', 'work', 'life', 'world', 'day', 'night', 'friend', 'teacher']
-                                fallback_word = [w for w in all_fallbacks if w not in used_words][0] if any(w not in used_words for w in all_fallbacks) else 'new'
+                                # НЕТ fallback - если Gemini вернул битый JSON, это ошибка!
+                                candidate_item = safe_json_parse(next_text, None)
                                 
-                                candidate_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
+                                # Проверяем что Gemini вернул валидное слово
+                                if not candidate_item or 'english' not in candidate_item:
+                                    print(f"[ERROR] Gemini returned invalid JSON on attempt {attempt+1}: {next_text[:200]}")
+                                    if attempt == 2:
+                                        raise Exception(f"Gemini failed to generate valid JSON after 3 attempts")
+                                    continue
                                 
                                 # Проверяем что слово не повторяется
                                 if candidate_item['english'] not in used_words:
