@@ -1841,88 +1841,60 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.close()
                     conn.close()
                     
-                    # Генерируем ПЕРВУЮ ПАРТИЮ (недели 1-2)
+                    # Генерируем план на 2 недели
                     try:
-                        print(f"[DEBUG] STARTING BATCH 1 GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
-                        batch1_result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=1)
-                        print(f"[DEBUG] BATCH 1 FINISHED: success={batch1_result.get('success')}")
+                        print(f"[DEBUG] STARTING PLAN GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
+                        result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=1)
+                        print(f"[DEBUG] PLAN GENERATION FINISHED: success={result.get('success')}")
                         
-                        if not batch1_result.get('success'):
+                        if not result.get('success'):
                             send_telegram_message(
                                 chat_id,
-                                f'❌ Ошибка генерации плана: {batch1_result.get("error", "Unknown error")}\n\nПопробуй /start',
+                                f'❌ Ошибка генерации плана: {result.get("error", "Unknown error")}\n\nПопробуй /start',
                                 parse_mode=None
                             )
                         else:
-                            # Сохраняем первую партию в поле learning_plan_batch1
+                            # Сохраняем план
                             conn = get_db_connection()
                             cur = conn.cursor()
-                            batch1_json = json.dumps(batch1_result['weeks'], ensure_ascii=False).replace("'", "''")
+                            plan_json = json.dumps(result['weeks'], ensure_ascii=False).replace("'", "''")
                             cur.execute(
-                                f"UPDATE {SCHEMA}.users SET learning_plan_batch1 = '{batch1_json}'::jsonb WHERE telegram_id = {user['id']}"
+                                f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user['id']}"
                             )
                             cur.close()
                             conn.close()
                             
-                            print(f"[DEBUG] Batch 1 saved. Now generating batch 2...")
+                            # Форматируем сообщение
+                            plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА 2 НЕДЕЛИ\n\n"
+                            plan_message += f"🎯 Цель: {learning_goal}\n"
+                            plan_message += f"📊 Уровень: {language_level}\n"
+                            plan_message += f"💡 Темы: {topics_display}\n"
+                            plan_message += f"📚 Всего материалов: {result['words_added']} слов и фраз\n\n"
+                            plan_message += "━━━━━━━━━━━━━━━━━━━\n\n"
                             
-                            # Генерируем ВТОРУЮ ПАРТИЮ (недели 3-4)
-                            batch2_result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=2)
-                            print(f"[DEBUG] BATCH 2 FINISHED: success={batch2_result.get('success')}")
+                            for week_data in result['weeks']:
+                                week_num = week_data.get('week', 1)
+                                focus = week_data.get('focus', 'Обучение')
+                                vocab = week_data.get('vocabulary', [])
+                                phrases = week_data.get('phrases', [])
+                                
+                                plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n"
+                                plan_message += f"📖 Слова: {len(vocab)} шт\n"
+                                plan_message += f"💭 Фразы: {len(phrases)} шт\n\n"
                             
-                            if not batch2_result.get('success'):
-                                send_telegram_message(
-                                    chat_id,
-                                    f'❌ Ошибка при генерации недель 3-4: {batch2_result.get("error")}\n\nПопробуй /start',
-                                    parse_mode=None
-                                )
-                            else:
-                                # Объединяем обе партии
-                                all_weeks = batch1_result['weeks'] + batch2_result['weeks']
-                                total_words = batch1_result['words_added'] + batch2_result['words_added']
-                                
-                                # Сохраняем полный план
-                                conn = get_db_connection()
-                                cur = conn.cursor()
-                                plan_json = json.dumps(all_weeks, ensure_ascii=False).replace("'", "''")
-                                cur.execute(
-                                    f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user['id']}"
-                                )
-                                cur.close()
-                                conn.close()
-                                
-                                # Форматируем сообщение
-                                plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА МЕСЯЦ\n\n"
-                                plan_message += f"🎯 Цель: {learning_goal}\n"
-                                plan_message += f"📊 Уровень: {language_level}\n"
-                                plan_message += f"💡 Темы: {topics_display}\n"
-                                plan_message += f"📚 Всего материалов: {total_words} слов и фраз\n\n"
-                                plan_message += "━━━━━━━━━━━━━━━━━━━\n\n"
-                                
-                                for week_data in all_weeks[:2]:  # Показываем первые 2 недели
-                                    week_num = week_data.get('week', 1)
-                                    focus = week_data.get('focus', 'Обучение')
-                                    vocab = week_data.get('vocabulary', [])
-                                    phrases = week_data.get('phrases', [])
-                                    
-                                    plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n"
-                                    plan_message += f"📖 Слова: {len(vocab)} шт\n"
-                                    plan_message += f"💭 Фразы: {len(phrases)} шт\n\n"
-                                
-                                plan_message += f"... и еще 2 недели!\n\n"
-                                plan_message += "❓ Тебе подходит этот план?"
-                                
-                                send_telegram_message(
-                                    chat_id,
-                                    plan_message,
-                                    {
-                                        'inline_keyboard': [
-                                            [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                            [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                        ]
-                                    },
-                                    parse_mode=None
-                                )
+                            plan_message += "❓ Тебе подходит этот план?"
+                            
+                            send_telegram_message(
+                                chat_id,
+                                plan_message,
+                                {
+                                    'inline_keyboard': [
+                                        [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                        [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                    ]
+                                },
+                                parse_mode=None
+                            )
                     except Exception as e:
                         print(f"[ERROR] Failed to generate plan: {e}")
                         import traceback
