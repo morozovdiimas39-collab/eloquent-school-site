@@ -96,6 +96,72 @@ def analyze_goal_for_plan(goal: str) -> Dict[str, Any]:
     except Exception as e:
         return {'error': str(e)}
 
+def check_student_level(claimed_level: str, answer: str) -> Dict[str, Any]:
+    """Проверяет реальный уровень студента по его ответу"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found'}
+    
+    prompt = f"""Студент утверждает что его уровень английского: {claimed_level}.
+Вот его ответ на проверочный вопрос: "{answer}"
+
+Твоя задача: определить РЕАЛЬНЫЙ уровень по ответу.
+
+Критерии оценки:
+- A1: Очень простые слова, много ошибок, короткие фразы
+- A2: Базовые конструкции, встречаются ошибки, простая лексика
+- B1: Связные предложения, разнообразная лексика, грамматика в целом правильная
+- B2: Сложные конструкции, богатая лексика, минимум ошибок
+- C1: Естественная речь, идиомы, практически без ошибок
+
+Формат ответа (только JSON, без markdown):
+{{
+  "actual_level": "A1/A2/B1/B2/C1",
+  "is_correct": true/false,
+  "reasoning": "Краткое объяснение на русском (1-2 предложения)"
+}}
+
+⚠️ ВАЖНО:
+- actual_level = реальный уровень по ответу
+- is_correct = совпадает ли с claimed_level (±1 уровень считается правильным)
+- reasoning = почему ты так решил
+
+Отвечай ТОЛЬКО валидным JSON, без объяснений."""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 500
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            
+            try:
+                result = json.loads(text)
+                return result
+            except json.JSONDecodeError as e:
+                return {'error': f'Invalid JSON: {str(e)}', 'actual_level': claimed_level, 'is_correct': True}
+        
+        return {'error': 'No response from Gemini', 'actual_level': claimed_level, 'is_correct': True}
+    
+    except Exception as e:
+        return {'error': str(e), 'actual_level': claimed_level, 'is_correct': True}
+
 def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
     """Анализирует срочную цель и предлагает конкретные темы для подготовки через Gemini"""
     api_key = os.environ.get('GEMINI_API_KEY')
@@ -1410,6 +1476,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'analyze_goal':
             goal = body_data.get('goal', '')
             result = analyze_goal_for_plan(goal)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'check_level':
+            claimed_level = body_data.get('claimed_level', 'A2')
+            answer = body_data.get('answer', '')
+            result = check_student_level(claimed_level, answer)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},

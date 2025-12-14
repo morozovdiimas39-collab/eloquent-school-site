@@ -1096,6 +1096,40 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     f'Теперь просто пишите мне вопросы, и я буду отвечать прямо здесь в чате!'
                 )
             
+            elif data.startswith('check_level_'):
+                level = data.replace('check_level_', '')
+                
+                # Генерируем проверочные вопросы для уровня
+                level_questions = {
+                    'A1': "What is your name? Where do you live?",
+                    'A2': "Tell me about your typical day. What do you usually do in the morning?",
+                    'B1': "What are your hobbies? Why do you enjoy them?",
+                    'B2': "Describe a memorable experience from your past. What made it special?",
+                    'C1': "What's your opinion on the impact of technology on modern society?"
+                }
+                
+                question = level_questions.get(level, level_questions['A2'])
+                
+                edit_telegram_message(
+                    chat_id,
+                    message_id,
+                    f'Отлично! Давай проверим уровень {level} 📝\n\n'
+                    f'Ответь на вопрос на английском:\n\n'
+                    f'<b>{question}</b>',
+                )
+                
+                # Сохраняем выбранный уровень для проверки
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET "
+                    f"conversation_mode = 'checking_level_{level}', "
+                    f"language_level = '{level}' "
+                    f"WHERE telegram_id = {user['id']}"
+                )
+                cur.close()
+                conn.close()
+            
             elif data.startswith('mode_'):
                 mode = data.replace('mode_', '')
                 update_conversation_mode(user['id'], mode)
@@ -1399,8 +1433,66 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             language_level = existing_user.get('language_level', 'A1')
             used_word_ids = []  # Инициализируем для использования в статистике
             
+            # Проверяем - проверяем ли уровень пользователя
+            if conversation_mode.startswith('checking_level_'):
+                claimed_level = conversation_mode.replace('checking_level_', '')
+                
+                # Отправляем ответ в Gemini для проверки уровня
+                send_telegram_message(chat_id, '⏳ Анализирую твой ответ...', parse_mode=None)
+                
+                try:
+                    webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                    response = requests.post(
+                        webapp_api_url,
+                        json={
+                            'action': 'check_level',
+                            'claimed_level': claimed_level,
+                            'answer': text
+                        },
+                        timeout=30
+                    )
+                    result = response.json()
+                    
+                    if 'error' in result:
+                        send_telegram_message(chat_id, f'❌ Ошибка: {result["error"]}', parse_mode=None)
+                    else:
+                        actual_level = result.get('actual_level', claimed_level)
+                        is_correct = result.get('is_correct', True)
+                        
+                        if is_correct:
+                            response_text = f"✅ Отлично! Твой уровень действительно {actual_level}\n\n"
+                        else:
+                            response_text = f"📊 Я оценил твой уровень как {actual_level}\n\n"
+                        
+                        response_text += "Теперь выбери темы, на которые хочешь практиковаться 🎯"
+                        
+                        send_telegram_message(chat_id, response_text, parse_mode=None)
+                        
+                        # Обновляем уровень и переводим в режим выбора тем
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET "
+                            f"language_level = '{actual_level}', "
+                            f"conversation_mode = 'awaiting_topics' "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                except Exception as e:
+                    print(f"[ERROR] Failed to check level: {e}")
+                    send_telegram_message(chat_id, '❌ Не удалось проверить уровень. Попробуй /start', parse_mode=None)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
             # Проверяем - ждем ли мы описание цели от пользователя
-            if conversation_mode == 'awaiting_goal':
+            elif conversation_mode == 'awaiting_goal':
                 # Пользователь ввел свою цель - отправляем в Gemini для анализа
                 send_telegram_message(chat_id, '⏳ Анализирую твою цель и составляю план обучения...', parse_mode=None)
                 
@@ -1424,12 +1516,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         if timeline:
                             goal_text += f"\n⏰ Срок: {timeline}"
                         
-                        goal_text += "\n\nТеперь давай проверим твой уровень английского 📊"
+                        goal_text += "\n\nТеперь давай проверим твой уровень английского 📊\n\nКак думаешь, какой у тебя сейчас уровень?"
                         
-                        send_telegram_message(chat_id, goal_text, parse_mode='HTML')
+                        # Клавиатура с уровнями
+                        keyboard = {
+                            'inline_keyboard': [
+                                [{'text': 'A1 - Начинаю учить', 'callback_data': 'check_level_A1'}],
+                                [{'text': 'A2 - Базовые фразы', 'callback_data': 'check_level_A2'}],
+                                [{'text': 'B1 - Могу поддержать разговор', 'callback_data': 'check_level_B1'}],
+                                [{'text': 'B2 - Уверенно общаюсь', 'callback_data': 'check_level_B2'}],
+                                [{'text': 'C1 - Свободно владею', 'callback_data': 'check_level_C1'}]
+                            ]
+                        }
+                        
+                        send_message(chat_id, goal_text, keyboard)
                         
                         # Переводим в режим проверки уровня
-                        update_conversation_mode(user['id'], 'awaiting_level_check')
+                        update_conversation_mode(user['id'], 'awaiting_level_selection')
                 except Exception as e:
                     print(f"[ERROR] Failed to analyze goal: {e}")
                     send_telegram_message(chat_id, '❌ Не удалось проанализировать цель. Попробуй еще раз или напиши /start', parse_mode=None)
