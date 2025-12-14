@@ -82,8 +82,11 @@ def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
         
         if 'candidates' in data and len(data['candidates']) > 0:
             text = data['candidates'][0]['content']['parts'][0]['text']
+            print(f"🔍 Raw Gemini response: {text}")
             text = text.replace('```json', '').replace('```', '').strip()
+            print(f"🔍 Cleaned text: {text}")
             result = json.loads(text)
+            print(f"✅ Parsed JSON: {result}")
             return result
         
         return {'error': 'No response from Gemini', 'subtopics': []}
