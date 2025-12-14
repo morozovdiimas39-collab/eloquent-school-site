@@ -1389,26 +1389,29 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     prompt = f'''Ты — методист английского языка. Студент выбрал уровень {level}.
 
-Твоя задача: составить 5 фраз/предложений на английском для проверки уровня {level}.
+Твоя задача: составить 10 слов и фраз на английском для проверки уровня {level}.
 
 Требования:
-- Фразы должны соответствовать уровню {level}
-- Каждая фраза — это законченная мысль (не отдельные слова!)
-- Фразы должны быть разнообразными (не только про одну тему)
-- Студент будет переводить их на русский
+- 5 слов + 5 фраз соответствующих уровню {level}
+- Слова - это КОНКРЕТНАЯ лексика уровня (не hello, cat, dog)
+- Фразы - это устойчивые выражения и фразовые глаголы
+- Студент будет переводить их с АНГЛИЙСКОГО на РУССКИЙ
+
+Примеры для {level}:
+A1: words=["family", "water", "friend", "book", "work"], phrases=["How are you?", "Nice to meet you", "See you later", "I don't know", "Thank you very much"]
+A2: words=["travel", "weather", "meeting", "hobby", "language"], phrases=["I'd like to", "It depends on", "I'm interested in", "Could you help me?", "I'm sorry to hear that"]
+B1: words=["experience", "opportunity", "challenge", "environment", "knowledge"], phrases=["figure out", "deal with", "come up with", "get along with", "look forward to"]
+B2: words=["perspective", "consequence", "innovation", "sustainability", "diversity"], phrases=["take into account", "as far as I know", "from my point of view", "to be honest with you", "in the long run"]
 
 Формат ответа (только JSON, без markdown):
 {{
-  "phrases": [
-    "English phrase 1",
-    "English phrase 2",
-    "English phrase 3",
-    "English phrase 4",
-    "English phrase 5"
+  "items": [
+    {{"english": "word1", "type": "word"}},
+    {{"english": "phrase example", "type": "phrase"}}
   ]
 }}
 
-ВАЖНО: Отвечай ТОЛЬКО валидным JSON.'''
+ВАЖНО: Отвечай ТОЛЬКО валидным JSON с 10 элементами (5 words + 5 phrases).'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': prompt}]}],
@@ -1429,20 +1432,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     with opener.open(req, timeout=30) as response:
                         gemini_result = json.loads(response.read().decode('utf-8'))
-                        phrases_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                        phrases_text = phrases_text.replace('```json', '').replace('```', '').strip()
-                        phrases_data = json.loads(phrases_text)
-                        phrases_list = phrases_data.get('phrases', [])
+                        items_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        items_text = items_text.replace('```json', '').replace('```', '').strip()
+                        items_data = json.loads(items_text)
+                        items_list = items_data.get('items', [])
                     
-                    if len(phrases_list) < 5:
-                        raise Exception('Got less than 5 phrases')
+                    if len(items_list) < 10:
+                        raise Exception(f'Got only {len(items_list)} items, expected 10')
                     
                     # Форматируем тест
-                    test_message = f'Отлично! Давай проверим уровень {level} 📝\n\n'
-                    test_message += 'Переведи эти фразы на русский:\n\n'
-                    for i, phrase in enumerate(phrases_list, 1):
-                        test_message += f'{i}. <b>{phrase}</b>\n'
-                    test_message += '\nОтправь переводы списком (каждый с новой строки)'
+                    test_message = f'Отлично! Давай проверим твой уровень {level} 📝\n\n'
+                    test_message += '🎯 <b>Переведи эти слова и фразы с английского на русский:</b>\n\n'
+                    for i, item in enumerate(items_list, 1):
+                        emoji = '📖' if item.get('type') == 'word' else '💬'
+                        test_message += f'{i}. {emoji} <b>{item["english"]}</b>\n'
+                    test_message += '\n✍️ Отправь переводы списком (каждый с новой строки)'
                     
                     edit_telegram_message(chat_id, message_id, test_message)
                     
@@ -1450,12 +1454,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     conn = get_db_connection()
                     cur = conn.cursor()
                     
-                    phrases_json = json.dumps(phrases_list, ensure_ascii=False).replace("'", "''")
+                    items_json = json.dumps(items_list, ensure_ascii=False).replace("'", "''")
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'checking_level_{level}', "
                         f"language_level = '{level}', "
-                        f"test_phrases = '{phrases_json}'::jsonb "
+                        f"test_phrases = '{items_json}'::jsonb "
                         f"WHERE telegram_id = {user['id']}"
                     )
                     cur.close()
@@ -1466,20 +1470,90 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     import traceback
                     traceback.print_exc()
                     
-                    # Fallback - используем простой текстовый вопрос
-                    edit_telegram_message(
-                        chat_id,
-                        message_id,
-                        f'Отлично! Давай проверим уровень {level} 📝\n\n'
-                        f'Напиши несколько предложений на английском о себе или своих увлечениях.'
-                    )
+                    # Fallback - используем дефолтные слова и фразы
+                    default_items_by_level = {
+                        'A1': [
+                            {'english': 'family', 'type': 'word'},
+                            {'english': 'water', 'type': 'word'},
+                            {'english': 'friend', 'type': 'word'},
+                            {'english': 'book', 'type': 'word'},
+                            {'english': 'work', 'type': 'word'},
+                            {'english': 'How are you?', 'type': 'phrase'},
+                            {'english': 'Nice to meet you', 'type': 'phrase'},
+                            {'english': 'See you later', 'type': 'phrase'},
+                            {'english': "I don't know", 'type': 'phrase'},
+                            {'english': 'Thank you', 'type': 'phrase'}
+                        ],
+                        'A2': [
+                            {'english': 'travel', 'type': 'word'},
+                            {'english': 'weather', 'type': 'word'},
+                            {'english': 'meeting', 'type': 'word'},
+                            {'english': 'hobby', 'type': 'word'},
+                            {'english': 'language', 'type': 'word'},
+                            {'english': "I'd like to", 'type': 'phrase'},
+                            {'english': 'It depends on', 'type': 'phrase'},
+                            {'english': "I'm interested in", 'type': 'phrase'},
+                            {'english': 'Could you help me?', 'type': 'phrase'},
+                            {'english': "I'm sorry to hear that", 'type': 'phrase'}
+                        ],
+                        'B1': [
+                            {'english': 'experience', 'type': 'word'},
+                            {'english': 'opportunity', 'type': 'word'},
+                            {'english': 'challenge', 'type': 'word'},
+                            {'english': 'environment', 'type': 'word'},
+                            {'english': 'knowledge', 'type': 'word'},
+                            {'english': 'figure out', 'type': 'phrase'},
+                            {'english': 'deal with', 'type': 'phrase'},
+                            {'english': 'come up with', 'type': 'phrase'},
+                            {'english': 'get along with', 'type': 'phrase'},
+                            {'english': 'look forward to', 'type': 'phrase'}
+                        ],
+                        'B2': [
+                            {'english': 'perspective', 'type': 'word'},
+                            {'english': 'consequence', 'type': 'word'},
+                            {'english': 'innovation', 'type': 'word'},
+                            {'english': 'sustainability', 'type': 'word'},
+                            {'english': 'diversity', 'type': 'word'},
+                            {'english': 'take into account', 'type': 'phrase'},
+                            {'english': 'as far as I know', 'type': 'phrase'},
+                            {'english': 'from my point of view', 'type': 'phrase'},
+                            {'english': 'to be honest', 'type': 'phrase'},
+                            {'english': 'in the long run', 'type': 'phrase'}
+                        ],
+                        'C1': [
+                            {'english': 'resilience', 'type': 'word'},
+                            {'english': 'ambiguity', 'type': 'word'},
+                            {'english': 'implementation', 'type': 'word'},
+                            {'english': 'discrepancy', 'type': 'word'},
+                            {'english': 'comprehend', 'type': 'word'},
+                            {'english': 'beat around the bush', 'type': 'phrase'},
+                            {'english': 'get to the point', 'type': 'phrase'},
+                            {'english': 'by and large', 'type': 'phrase'},
+                            {'english': 'for the sake of', 'type': 'phrase'},
+                            {'english': 'on second thought', 'type': 'phrase'}
+                        ]
+                    }
+                    
+                    fallback_items = default_items_by_level.get(level, default_items_by_level['A1'])
+                    
+                    test_message = f'Отлично! Давай проверим твой уровень {level} 📝\n\n'
+                    test_message += '🎯 <b>Переведи эти слова и фразы с английского на русский:</b>\n\n'
+                    for i, item in enumerate(fallback_items, 1):
+                        emoji = '📖' if item['type'] == 'word' else '💬'
+                        test_message += f"{i}. {emoji} <b>{item['english']}</b>\n"
+                    test_message += '\n✍️ Отправь переводы списком (каждый с новой строки)'
+                    
+                    edit_telegram_message(chat_id, message_id, test_message)
                     
                     conn = get_db_connection()
                     cur = conn.cursor()
+                    
+                    items_json = json.dumps(fallback_items, ensure_ascii=False).replace("'", "''")
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'checking_level_{level}', "
-                        f"language_level = '{level}' "
+                        f"language_level = '{level}', "
+                        f"test_phrases = '{items_json}'::jsonb "
                         f"WHERE telegram_id = {user['id']}"
                     )
                     cur.close()
@@ -1967,37 +2041,50 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         
                         gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                         
-                        phrases_str = '\n'.join([f"{i+1}. {p}" for i, p in enumerate(test_phrases)])
+                        # Формируем список слов и фраз для проверки
+                        items_str = ''
+                        for i, item in enumerate(test_phrases, 1):
+                            emoji = '📖' if item.get('type') == 'word' else '💬'
+                            items_str += f"{i}. {emoji} {item['english']}\n"
                         
-                        prompt = f'''Ты — эксперт по оценке уровня английского языка.
+                        prompt = f'''Ты — эксперт по оценке знания английских слов и фраз.
 
-Студент утверждает что его уровень: {claimed_level}
+Студент заявил уровень: {claimed_level}
 
-Я дал ему 5 фраз на английском для перевода на русский:
-{phrases_str}
+Я дал ему 10 слов и фраз на английском для перевода на русский:
+{items_str}
 
 Его переводы:
 {text}
 
-Твоя задача: определить РЕАЛЬНЫЙ уровень студента по качеству переводов.
+Твоя задача: определить РЕАЛЬНЫЙ уровень студента по качеству переводов КОНКРЕТНЫХ слов и фраз.
 
-Критерии:
-- A1: Очень слабый перевод, много ошибок, не понимает базовых слов
-- A2: Перевод с ошибками, понимает базовые слова но путается в деталях
-- B1: Хороший перевод, понимает смысл, небольшие неточности
-- B2: Отличный перевод, точный смысл, минимум ошибок
-- C1: Идеальный перевод, все нюансы переданы
+Критерии оценки:
+- A1: Не знает базовых слов (family, water, friend) и простых фраз (How are you?)
+- A2: Знает базовую лексику, но путается в фразах и значениях
+- B1: Хорошо переводит бытовую лексику и фразовые глаголы
+- B2: Знает профессиональную лексику и устойчивые выражения
+- C1: Отлично переводит сложную лексику и идиомы
+
+⚠️ КРИТИЧНО:
+- Оценивай ТОЛЬКО знание КОНКРЕТНЫХ слов и фраз из списка
+- НЕ оценивай грамматику или стиль - только точность перевода
+- Если студент перевел 7-10 правильно → уровень подтвержден
+- Если 4-6 правильно → на уровень ниже
+- Если 0-3 правильно → на 2 уровня ниже
 
 Формат ответа (только JSON, без markdown):
 {{
   "actual_level": "A1/A2/B1/B2/C1",
   "is_correct": true/false,
-  "reasoning": "Краткое объяснение на русском"
+  "correct_count": 7,
+  "reasoning": "Перевел X из 10. Краткое объяснение."
 }}
 
 ВАЖНО:
 - actual_level = реальный уровень по переводам
-- is_correct = совпадает ли с {claimed_level} (±1 уровень считается правильным)
+- is_correct = совпадает ли с {claimed_level} (±1 уровень = true)
+- correct_count = сколько слов/фраз перевел правильно (0-10)
 - Отвечай ТОЛЬКО валидным JSON.'''
                         
                         payload = {
@@ -2025,6 +2112,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         
                         actual_level = result.get('actual_level', claimed_level)
                         is_correct = result.get('is_correct', True)
+                        correct_count = result.get('correct_count', 0)
+                        reasoning = result.get('reasoning', '')
                         
                     except Exception as e:
                         print(f"[ERROR] Failed to check translations: {e}")
@@ -2032,14 +2121,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         traceback.print_exc()
                         actual_level = claimed_level
                         is_correct = True
+                        correct_count = 7
+                        reasoning = ''
                 
                 # Показываем результат и просим выбрать интересы
                 if is_correct:
-                    response_text = f"✅ Отлично! Твой уровень действительно {actual_level}\n\n"
+                    response_text = f"✅ Отлично! Твой уровень: <b>{actual_level}</b>\n\n"
+                    response_text += f"📊 Правильных переводов: {correct_count}/10\n"
+                    if reasoning:
+                        response_text += f"💡 {reasoning}\n"
+                    response_text += "\n"
                 else:
-                    response_text = f"📊 Я оценил твой уровень как {actual_level}\n\n"
+                    response_text = f"📊 Твой реальный уровень: <b>{actual_level}</b>\n\n"
+                    response_text += f"📈 Правильных переводов: {correct_count}/10\n"
+                    if reasoning:
+                        response_text += f"💡 {reasoning}\n"
+                    response_text += f"\n🎯 Не переживай! Мы подберем материалы под твой уровень.\n\n"
                 
-                response_text += "Теперь выбери темы, которые тебе интересны:\n\n💡 Мы будем разговаривать на эти темы!"
+                response_text += "Теперь выбери темы, которые тебе интересны:\n\n💬 Мы будем разговаривать на эти темы!"
                 
                 # Кнопки с интересами
                 topics_keyboard = {
@@ -2053,7 +2152,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     ]
                 }
                 
-                send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode=None)
+                send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode='HTML')
                 
                 # Обновляем уровень и очищаем test_phrases
                 conn = get_db_connection()
