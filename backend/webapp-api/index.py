@@ -23,6 +23,91 @@ def get_proxies():
         }
     return None
 
+def analyze_goal_for_plan(goal: str) -> Dict[str, Any]:
+    """Анализирует цель пользователя и возвращает персонализированный план обучения"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found'}
+    
+    prompt = f"""Студент хочет учить английский. Его цель: "{goal}".
+
+Твоя задача: проанализировать цель и создать персонализированный план обучения.
+
+Формат ответа (только JSON, без markdown):
+{{
+  "goal": "Краткое описание цели (1 предложение)",
+  "timeline": "Сроки (например: '1 месяц', '3 месяца', 'без срока')",
+  "level": "Нужный уровень (A1/A2/B1/B2/C1/C2)",
+  "schedule": "Рекомендуемый график занятий",
+  "subtopics": [
+    {{
+      "id": "topic_id",
+      "title": "Название темы",
+      "description": "Что входит в тему"
+    }}
+  ]
+}}
+
+⚠️ ВАЖНО:
+- goal = понятная формулировка цели студента
+- timeline = извлеки срок из его описания или напиши "без срока"
+- level = какой уровень нужен для этой цели (реалистично!)
+- schedule = сколько раз в неделю заниматься (3-4 раза оптимально)
+- subtopics = 5-7 КОНКРЕТНЫХ тем для его цели
+
+Отвечай ТОЛЬКО валидным JSON, без объяснений."""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 2000
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            
+            try:
+                result = json.loads(text)
+                return result
+            except json.JSONDecodeError as e:
+                # Пытаемся починить JSON
+                last_comma = text.rfind(',')
+                last_brace = text.rfind('}')
+                
+                if last_comma > last_brace:
+                    text = text[:last_comma]
+                
+                if text.count('{') > text.count('}'):
+                    text += '}' * (text.count('{') - text.count('}'))
+                
+                if text.count('[') > text.count(']'):
+                    text += ']' * (text.count('[') - text.count(']'))
+                
+                try:
+                    result = json.loads(text)
+                    return result
+                except:
+                    return {'error': f'Invalid JSON: {str(e)}'}
+        
+        return {'error': 'No response from Gemini'}
+    
+    except Exception as e:
+        return {'error': str(e)}
+
 def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
     """Анализирует срочную цель и предлагает конкретные темы для подготовки через Gemini"""
     api_key = os.environ.get('GEMINI_API_KEY')
@@ -1331,6 +1416,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'analyze_goal':
+            goal = body_data.get('goal', '')
+            result = analyze_goal_for_plan(goal)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         
