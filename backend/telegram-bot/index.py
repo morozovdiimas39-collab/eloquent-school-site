@@ -1865,10 +1865,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 
                                 print(f"[DEBUG] Week data: vocab={len(vocab)}, phrases={len(phrases)}, expr={len(expressions)}")
                                 
+                                # Создаем topics_display из preferred_topics
+                                topics_text = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else selected_topic
+                                
                                 plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
                                 plan_message += f"🎯 Цель: {learning_goal}\n"
                                 plan_message += f"📊 Уровень: {language_level}\n"
-                                plan_message += f"💡 Темы: {topics_display}\n\n"
+                                plan_message += f"💡 Темы: {topics_text}\n\n"
                                 plan_message += f"📖 Слова: {len(vocab)} шт\n"
                                 plan_message += f"💭 Фразы: {len(phrases)} шт\n"
                                 plan_message += f"✨ Выражения: {len(expressions)} шт\n\n"
