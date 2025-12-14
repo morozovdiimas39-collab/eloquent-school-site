@@ -1181,11 +1181,16 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             headers={'Content-Type': 'application/json'}
         )
         
-        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=45s)")
-        with opener.open(req, timeout=45) as response:
-            print(f"[DEBUG] Gemini API responded! Reading data...")
-            gemini_result = json.loads(response.read().decode('utf-8'))
-            plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=30s)")
+        try:
+            with opener.open(req, timeout=30) as response:
+                print(f"[DEBUG] Gemini API responded! Reading data...")
+                gemini_result = json.loads(response.read().decode('utf-8'))
+                plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+        except Exception as api_error:
+            print(f"[ERROR] Gemini API call failed: {api_error}")
+            log_proxy_failure(proxy_id, str(api_error))
+            return {'success': False, 'error': f'Gemini API timeout or error: {str(api_error)}'}
             
             # Логируем сырой ответ для отладки
             print(f"[DEBUG] Gemini raw response length: {len(plan_text)}")
