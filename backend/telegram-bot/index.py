@@ -22,8 +22,13 @@ def clean_gemini_json(text: str) -> str:
     start_idx = text.find('{')
     end_idx = text.rfind('}')
     
-    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-        text = text[start_idx:end_idx+1]
+    # Если не нашли закрывающую скобку - добавляем её
+    if start_idx != -1:
+        if end_idx == -1 or end_idx < start_idx:
+            # JSON не закрыт - добавляем закрывающую скобку
+            text = text[start_idx:] + '}'
+        else:
+            text = text[start_idx:end_idx+1]
     
     # Убираем все переносы строк и лишние пробелы внутри JSON
     # Это агрессивный подход, но работает для простых структур
@@ -2228,7 +2233,8 @@ IMPORTANT: "expected" field MUST be in RUSSIAN (not English!)'''
                     expected = check_data.get('expected', '???')
                     
                     # КРИТИЧНО: Проверяем что expected на русском (не латиница)
-                    if expected and all(ord(c) < 128 for c in expected.replace(' ', '').replace('-', '')):
+                    # Игнорируем "???" - это fallback от safe_json_parse
+                    if expected and expected != '???' and all(ord(c) < 128 for c in expected.replace(' ', '').replace('-', '')):
                         # expected содержит только латиницу - это английское слово!
                         print(f"[ERROR] Gemini returned English as 'expected': {expected}. Asking for Russian translation...")
                         
@@ -2406,7 +2412,7 @@ IMPORTANT:
                     payload = {
                         'contents': [{'parts': [{'text': next_prompt}]}],
                         'generationConfig': {
-                            'temperature': 0.9,  # Повышаем для разнообразия
+                            'temperature': 0.7,  # Баланс между разнообразием и послушанием
                             'maxOutputTokens': 200,
                             'topP': 0.95,
                             'topK': 40
@@ -2419,22 +2425,38 @@ IMPORTANT:
                         headers={'Content-Type': 'application/json'}
                     )
                     
-                    with opener.open(req, timeout=30) as response:
-                        next_result = json.loads(response.read().decode('utf-8'))
-                        next_text = next_result['candidates'][0]['content']['parts'][0]['text']
-                        
-                        print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}): {next_text[:200]}")
-                        
-                        # Fallback слова по уровням (чтобы не было "word")
-                        fallback_words = {
-                            'A1': 'cat', 'A2': 'travel', 'B1': 'experience', 
-                            'B2': 'perspective', 'C1': 'hypothesis', 'C2': 'resilience'
-                        }
-                        fallback_word = fallback_words.get(next_level, 'vocabulary')
-                        
-                        next_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
-                        
-                        print(f"[DEBUG] Parsed next_item: {next_item}")
+                    # Пытаемся сгенерировать уникальное слово (максимум 3 попытки)
+                    next_item = None
+                    for attempt in range(3):
+                        with opener.open(req, timeout=30) as response:
+                            next_result = json.loads(response.read().decode('utf-8'))
+                            next_text = next_result['candidates'][0]['content']['parts'][0]['text']
+                            
+                            print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}, attempt={attempt+1}): {next_text[:200]}")
+                            
+                            # Fallback слова по уровням (чтобы не было "word")
+                            fallback_words = {
+                                'A1': 'cat', 'A2': 'travel', 'B1': 'experience', 
+                                'B2': 'perspective', 'C1': 'hypothesis', 'C2': 'resilience'
+                            }
+                            fallback_word = fallback_words.get(next_level, 'vocabulary')
+                            
+                            candidate_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
+                            
+                            # Проверяем что слово не повторяется
+                            if candidate_item['english'] not in used_words:
+                                next_item = candidate_item
+                                print(f"[DEBUG] Accepted unique word: {next_item['english']}")
+                                break
+                            else:
+                                print(f"[WARNING] Word '{candidate_item['english']}' already used, retrying...")
+                    
+                    # Если после 3 попыток не получили уникальное слово - используем последний результат
+                    if not next_item:
+                        next_item = candidate_item
+                        print(f"[WARNING] Could not generate unique word after 3 attempts, using: {next_item['english']}")
+                    
+                    print(f"[DEBUG] Final next_item: {next_item}")
                     
                     # Отправляем следующий вопрос
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
