@@ -1138,8 +1138,22 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         with opener.open(req, timeout=45) as response:
             gemini_result = json.loads(response.read().decode('utf-8'))
             plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+            
+            # Логируем сырой ответ для отладки
+            print(f"[DEBUG] Gemini raw response length: {len(plan_text)}")
+            print(f"[DEBUG] Gemini raw response (first 500 chars): {plan_text[:500]}")
+            
+            # Очищаем от markdown
             plan_text = plan_text.replace('```json', '').replace('```', '').strip()
-            plan_data = json.loads(plan_text)
+            
+            # Пытаемся парсить JSON
+            try:
+                plan_data = json.loads(plan_text)
+            except json.JSONDecodeError as e:
+                print(f"[ERROR] JSON decode error at position {e.pos}: {e.msg}")
+                print(f"[ERROR] Problematic text around position {max(0, e.pos-50)}:{min(len(plan_text), e.pos+50)}: {plan_text[max(0, e.pos-50):min(len(plan_text), e.pos+50)]}")
+                raise Exception(f'Invalid JSON from Gemini: {e.msg} at position {e.pos}')
+            
             plan_weeks = plan_data.get('plan', [])
         
         if not plan_weeks:
