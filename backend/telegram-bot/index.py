@@ -2264,6 +2264,16 @@ Example: {{"russian": "путешествие"}}'''
                             print(f"[WARNING] Failed to get Russian translation: {e}")
                             expected = '(перевод не определен)'
                     
+                    # ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Сравниваем строки напрямую (fallback если Gemini ошибся)
+                    # Убираем пробелы, приводим к нижнему регистру
+                    user_answer_clean = text.strip().lower()
+                    expected_clean = expected.strip().lower()
+                    
+                    # Если ответы практически идентичны - считаем правильным
+                    if user_answer_clean == expected_clean:
+                        print(f"[DEBUG] Strings match exactly: '{user_answer_clean}' == '{expected_clean}' - overriding is_correct to True")
+                        is_correct = True
+                    
                     # Сохраняем результат в историю
                     history.append({
                         'level': current_item.get('level', 'A1'),
