@@ -1612,16 +1612,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             user = callback['from']
             callback_id = callback['id']
             
-            # КРИТИЧНО: СРАЗУ отвечаем на callback чтобы Telegram не ретраил
-            # БЕЗ try/except - если не ответим, будут бесконечные ретраи!
-            token = os.environ['TELEGRAM_BOT_TOKEN']
-            answer_url = f'https://api.telegram.org/bot{token}/answerCallbackQuery'
-            answer_payload = json.dumps({'callback_query_id': callback_id}).encode('utf-8')
-            
-            answer_req = urllib.request.Request(answer_url, data=answer_payload, headers={'Content-Type': 'application/json'}, method='POST')
-            with urllib.request.urlopen(answer_req, timeout=10) as resp:
-                answer_result = json.loads(resp.read().decode('utf-8'))
-                print(f"[DEBUG] answerCallbackQuery success: {answer_result.get('ok')}")
+            # Отвечаем на callback (если упадёт - продолжаем работу)
+            try:
+                token = os.environ['TELEGRAM_BOT_TOKEN']
+                answer_url = f'https://api.telegram.org/bot{token}/answerCallbackQuery'
+                answer_payload = json.dumps({'callback_query_id': callback_id}).encode('utf-8')
+                
+                answer_req = urllib.request.Request(answer_url, data=answer_payload, headers={'Content-Type': 'application/json'}, method='POST')
+                with urllib.request.urlopen(answer_req, timeout=5) as resp:
+                    answer_result = json.loads(resp.read().decode('utf-8'))
+                    print(f"[DEBUG] answerCallbackQuery success: {answer_result.get('ok')}")
+            except Exception as e:
+                print(f"[ERROR] answerCallbackQuery failed: {e} - continuing anyway")
             
             if data.startswith('goal_'):
                 goal_type = data.replace('goal_', '')
