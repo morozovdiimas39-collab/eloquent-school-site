@@ -1103,6 +1103,8 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
     - Темы для разговоров на 4 недели
     - Слова, фразы, устойчивые выражения для каждой недели
     - Конкретные действия на каждую неделю
+    
+    ВАЖНО: Разбивает генерацию на 2 запроса (недели 1-2 + недели 3-4) чтобы не превысить таймаут
     """
     try:
         print(f"[DEBUG] generate_full_monthly_plan STARTED")
@@ -1116,7 +1118,16 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
-        prompt = f'''Create a 4-week English learning plan with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
+        # РАЗБИВАЕМ НА 2 ЗАПРОСА: недели 1-2 и недели 3-4
+        all_weeks = []
+        
+        for batch_num in range(1, 3):  # 2 запроса
+            week_start = (batch_num - 1) * 2 + 1
+            week_end = batch_num * 2
+            
+            print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
+            
+            prompt = f'''Create a 2-week English learning plan (weeks {week_start}-{week_end}) with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
 
 Student: Level {language_level}, Topics: {topics_display}
 
@@ -1125,7 +1136,7 @@ IMPORTANT: ALL words/phrases MUST be from these topics at {language_level} diffi
 {{
   "plan": [
     {{
-      "week": 1,
+      "week": {week_start},
       "focus": "Topic basics",
       "conversation_topics": ["Topic1", "Topic2"],
       "vocabulary": [
@@ -1141,12 +1152,16 @@ IMPORTANT: ALL words/phrases MUST be from these topics at {language_level} diffi
         ... (7 expressions total - 1 per day)
       ],
       "actions": ["Action1", "Action2"]
+    }},
+    {{
+      "week": {week_end},
+      ... (same structure)
     }}
   ]
 }}
 
 Requirements:
-- Exactly 4 weeks
+- Exactly 2 weeks (weeks {week_start} and {week_end})
 - 49 vocabulary words per week (7 per day) from topics: {topics_display}
 - 14 phrases per week (2 per day) from topics: {topics_display}
 - 7 expressions per week (1 per day) from topics: {topics_display}
@@ -1158,69 +1173,65 @@ Example for Gaming + B1:
 vocabulary: [{{"english": "gameplay", "russian": "игровой процесс", "topic": "gaming"}}]
 phrases: [{{"english": "level up", "russian": "повысить уровень", "topic": "gaming"}}]
 expressions: [{{"english": "let\'s team up", "russian": "давай объединимся", "context": "inviting to play together"}}]'''
-        
-        payload = {
-            'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {
-                'temperature': 0.7, 
-                'maxOutputTokens': 16000,
-                'topP': 0.95,
-                'topK': 40
+            
+            payload = {
+                'contents': [{'parts': [{'text': prompt}]}],
+                'generationConfig': {
+                    'temperature': 0.7, 
+                    'maxOutputTokens': 8000,
+                    'topP': 0.95,
+                    'topK': 40
+                }
             }
-        }
-        
-        proxy_handler = urllib.request.ProxyHandler({
-            'http': f'http://{proxy_url}',
-            'https': f'http://{proxy_url}'
-        })
-        opener = urllib.request.build_opener(proxy_handler)
-        
-        req = urllib.request.Request(
-            gemini_url,
-            data=json.dumps(payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=60s)")
-        try:
-            with opener.open(req, timeout=60) as response:
-                print(f"[DEBUG] Gemini API responded! Reading data...")
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-        except Exception as api_error:
-            print(f"[ERROR] Gemini API call failed: {api_error}")
-            log_proxy_failure(proxy_id, str(api_error))
-            return {'success': False, 'error': f'Gemini API timeout or error: {str(api_error)}'}
             
-            # Логируем сырой ответ для отладки
-            print(f"[DEBUG] Gemini raw response length: {len(plan_text)}")
-            print(f"[DEBUG] Gemini raw response (first 500 chars): {plan_text[:500]}")
+            proxy_handler = urllib.request.ProxyHandler({
+                'http': f'http://{proxy_url}',
+                'https': f'http://{proxy_url}'
+            })
+            opener = urllib.request.build_opener(proxy_handler)
             
-            # Агрессивная очистка JSON для сложных структур
-            # 1. Убираем markdown
-            plan_text = plan_text.replace('```json', '').replace('```', '').strip()
+            req = urllib.request.Request(
+                gemini_url,
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'}
+            )
             
-            # 2. Ищем первый { и последний }
-            start_idx = plan_text.find('{')
-            end_idx = plan_text.rfind('}')
-            
-            if start_idx != -1 and end_idx != -1:
-                plan_text = plan_text[start_idx:end_idx+1]
-            
-            # 3. Пытаемся распарсить JSON напрямую (без regex fallback - он не умеет массивы)
-            print(f"[DEBUG] Parsing JSON plan...")
+            print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=25s)")
             try:
-                plan_data = json.loads(plan_text)
-                print(f"[DEBUG] JSON parsed successfully! Plan has {len(plan_data.get('plan', []))} weeks")
-            except json.JSONDecodeError as e:
-                print(f"[ERROR] JSON parse failed: {e}")
-                print(f"[ERROR] Problematic JSON (first 1000 chars): {plan_text[:1000]}")
-                return {'success': False, 'error': f'Invalid JSON from Gemini: {str(e)}'}
-            
-            plan_weeks = plan_data.get('plan', [])
+                with opener.open(req, timeout=25) as response:
+                    print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
+                    gemini_result = json.loads(response.read().decode('utf-8'))
+                    plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                    
+                    # Очистка JSON
+                    plan_text = plan_text.replace('```json', '').replace('```', '').strip()
+                    start_idx = plan_text.find('{')
+                    end_idx = plan_text.rfind('}')
+                    if start_idx != -1 and end_idx != -1:
+                        plan_text = plan_text[start_idx:end_idx+1]
+                    
+                    print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
+                    batch_data = json.loads(plan_text)
+                    batch_weeks = batch_data.get('plan', [])
+                    
+                    if not batch_weeks:
+                        print(f"[ERROR] Empty plan for weeks {week_start}-{week_end}")
+                        return {'success': False, 'error': f'Empty plan for weeks {week_start}-{week_end}'}
+                    
+                    all_weeks.extend(batch_weeks)
+                    print(f"[DEBUG] Added {len(batch_weeks)} weeks. Total now: {len(all_weeks)}")
+                    
+                    log_proxy_success(proxy_id)
+                    
+            except Exception as api_error:
+                print(f"[ERROR] Gemini API call failed for weeks {week_start}-{week_end}: {api_error}")
+                log_proxy_failure(proxy_id, str(api_error))
+                return {'success': False, 'error': f'Gemini API error on weeks {week_start}-{week_end}: {str(api_error)}'}
         
-        if not plan_weeks:
-            return {'success': False, 'error': 'Empty plan generated'}
+        plan_weeks = all_weeks
+        
+        if not plan_weeks or len(plan_weeks) < 4:
+            return {'success': False, 'error': f'Incomplete plan: only {len(plan_weeks)} weeks generated'}
         
         # Сохраняем ВСЕ слова и фразы в БД
         print(f"[DEBUG] Saving {len(plan_weeks)} weeks to DB...")
@@ -1369,7 +1380,7 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
         
         plan_message += "❓ Тебе подходит этот план?"
         
-        print(f"[DEBUG] Plan message formatted ({len(plan_message)} chars). Returning result...")
+        print(f"[DEBUG] Plan message formatted ({len(plan_message)} chars). Total {len(plan_weeks)} weeks, {total_words_added} words.")
         
         return {
             'success': True,
