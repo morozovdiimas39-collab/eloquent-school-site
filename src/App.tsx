@@ -14,6 +14,7 @@ import Pricing from "./pages/webapp/Pricing";
 import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
+import GoalTest from "./pages/GoalTest";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/game" element={<AngryBirdsGame />} />
           <Route path="/system-test" element={<SystemTest />} />
           <Route path="/timezone-setup" element={<TimezoneSetup />} />
+          <Route path="/test" element={<GoalTest />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
