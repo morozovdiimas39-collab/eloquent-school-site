@@ -1187,9 +1187,24 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             print(f"[DEBUG] Gemini raw response length: {len(plan_text)}")
             print(f"[DEBUG] Gemini raw response (first 500 chars): {plan_text[:500]}")
             
-            # Используем safe_json_parse вместо прямого json.loads
-            # Это защитит от незакрытых строк и других ошибок
-            plan_data = safe_json_parse(plan_text, {'plan': []})
+            # Агрессивная очистка JSON для сложных структур
+            # 1. Убираем markdown
+            plan_text = plan_text.replace('```json', '').replace('```', '').strip()
+            
+            # 2. Ищем первый { и последний }
+            start_idx = plan_text.find('{')
+            end_idx = plan_text.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1:
+                plan_text = plan_text[start_idx:end_idx+1]
+            
+            # 3. Пытаемся распарсить JSON напрямую (без regex fallback - он не умеет массивы)
+            try:
+                plan_data = json.loads(plan_text)
+            except json.JSONDecodeError as e:
+                print(f"[ERROR] JSON parse failed: {e}")
+                print(f"[ERROR] Problematic JSON (first 1000 chars): {plan_text[:1000]}")
+                return {'success': False, 'error': f'Invalid JSON from Gemini: {str(e)}'}
             
             plan_weeks = plan_data.get('plan', [])
         
@@ -1657,7 +1672,7 @@ IMPORTANT:
                     # Отправляем первый вопрос
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
                     emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
-                    question_message = f'{emoji} <b>Вопрос 1/7</b>\n\n'
+                    question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
                     question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
                     
                     send_telegram_message(chat_id, question_message)
@@ -1687,7 +1702,7 @@ IMPORTANT:
                     # Fallback - отправляем простой первый вопрос
                     send_telegram_message(
                         chat_id,
-                        f'📖 <b>Вопрос 1/7</b>\n\nПереведи на русский:\n<b>family</b>'
+                        f'📖 <b>Вопрос 1/10</b>\n\nПереведи на русский:\n<b>family</b>'
                     )
                     
                     conn = get_db_connection()
@@ -2288,14 +2303,14 @@ Example: {{"russian": "путешествие"}}'''
                         'correct': is_correct
                     })
                     
-                    # Если 7 вопросов - завершаем тест и определяем уровень
-                    if question_num >= 7:
+                    # Если 10 вопросов - завершаем тест и определяем уровень
+                    if question_num >= 10:
                         # Финальный анализ уровня
                         history_str = '\n'.join([f"{i+1}. [{h['level']}] {h['item']} → {h['answer']} ({'✅' if h['correct'] else '❌'})" for i, h in enumerate(history)])
                         
                         final_prompt = f'''Analyze student's English level based on test results.
 
-Test history (7 questions from different levels):
+Test history (10 questions from different levels):
 {history_str}
 
 Determine real level. Return ONLY JSON:
@@ -2334,7 +2349,7 @@ Levels:
                         send_telegram_message(chat_id, feedback, parse_mode=None)
                         
                         response_text = f"\n📊 РЕЗУЛЬТАТЫ ТЕСТА\n\n"
-                        response_text += f"✅ Правильных ответов: {correct_count}/7\n"
+                        response_text += f"✅ Правильных ответов: {correct_count}/10\n"
                         response_text += f"🎯 Твой уровень: <b>{actual_level}</b>\n\n"
                         response_text += f"💡 {reasoning}\n\n"
                         response_text += "Теперь выбери темы, которые тебе интересны:"
@@ -2392,30 +2407,33 @@ Levels:
                     used_words = [h['item'] for h in history]
                     used_words_str = ', '.join(used_words)
                     
-                    next_prompt = f'''Generate ONE {chosen_type} for English level {next_level} testing.
+                    next_prompt = f'''You are testing English level. Generate ONE {chosen_type} for level {next_level}.
+
+CRITICAL: You MUST NOT use any of these already-used words: {used_words_str}
 
 Type: {chosen_type}
-- word: single vocabulary word (e.g. "achieve", "perspective")
-- phrase: common phrase (e.g. "take care", "piece of cake")
-- expression: idiom or collocation (e.g. "break the ice", "hit the nail on the head")
+- word: single vocabulary word (e.g. "achieve", "perspective", "curious")
+- phrase: common phrase (e.g. "take care", "piece of cake", "hang out")
+- expression: idiom/collocation (e.g. "break the ice", "hit the nail on the head")
 
-Return ONLY valid JSON:
-{{"english": "{'word' if chosen_type == 'word' else 'phrase/expression'}", "type": "{chosen_type}", "level": "{next_level}"}}
+Level guidelines:
+- A1: basic words (food, family, colors)
+- A2: everyday words (travel, hobby, weather)
+- B1: abstract words (experience, decision, opportunity)
+- B2+: sophisticated vocabulary, idioms, collocations
+- C1+: advanced/academic vocabulary, complex idioms
+- C2: native-level expressions, subtle nuances
 
-IMPORTANT: 
-- DO NOT USE these words (already used): {used_words_str}
-- Generate a DIFFERENT word/phrase each time
-- For B2+: use sophisticated vocabulary, idioms, collocations
-- For C1+: use advanced/academic vocabulary, complex idioms
-- For C2: use native-level expressions, subtle nuances'''
+Return ONLY valid JSON (no markdown):
+{{"english": "unique_{chosen_type}_here", "type": "{chosen_type}", "level": "{next_level}"}}'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': next_prompt}]}],
                         'generationConfig': {
-                            'temperature': 0.7,  # Баланс между разнообразием и послушанием
+                            'temperature': 0.85,  # Высокая температура для разнообразия
                             'maxOutputTokens': 200,
                             'topP': 0.95,
-                            'topK': 40
+                            'topK': 50
                         }
                     }
                     
@@ -2462,7 +2480,7 @@ IMPORTANT:
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
                     emoji = type_emojis.get(next_item.get('type', 'word'), '📖')
                     
-                    question_message = f'{emoji} <b>Вопрос {question_num + 1}/7</b>\n\n'
+                    question_message = f'{emoji} <b>Вопрос {question_num + 1}/10</b>\n\n'
                     question_message += f'Переведи на русский:\n<b>{next_item["english"]}</b>'
                     
                     send_telegram_message(chat_id, question_message)
