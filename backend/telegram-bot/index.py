@@ -1762,6 +1762,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.')
             
             elif data.startswith('topic_'):
+                print(f"[DEBUG] TOPIC CALLBACK RECEIVED: {data}")
                 topic_type = data.replace('topic_', '')
                 
                 topic_texts = {
@@ -1825,8 +1826,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     # Генерируем план асинхронно (отправим отдельным сообщением)
                     try:
+                        print(f"[DEBUG] STARTING PLAN GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
                         # Вызываем генерацию плана
                         plan_result = generate_full_monthly_plan(user['id'], learning_goal, language_level, preferred_topics)
+                        print(f"[DEBUG] PLAN GENERATION FINISHED: success={plan_result.get('success')}")
                         
                         if plan_result.get('success'):
                             send_telegram_message(
