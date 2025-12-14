@@ -155,7 +155,44 @@ def check_student_level(claimed_level: str, answer: str) -> Dict[str, Any]:
                 result = json.loads(text)
                 return result
             except json.JSONDecodeError as e:
-                return {'error': f'Invalid JSON: {str(e)}', 'actual_level': claimed_level, 'is_correct': True}
+                print(f"🔴 JSON parse error in check_level: {e}")
+                print(f"🔴 Problematic JSON:\n{text}")
+                
+                try:
+                    import re
+                    fixed_text = text.strip()
+                    
+                    # Случай 1: Незакрытая строка после двоеточия
+                    last_colon_idx = fixed_text.rfind(':')
+                    if last_colon_idx != -1:
+                        after_colon = fixed_text[last_colon_idx+1:].strip()
+                        if after_colon.startswith('"'):
+                            quotes_count = after_colon.count('"')
+                            if quotes_count % 2 == 1:
+                                fixed_text += '"'
+                                print(f"🔧 Fixed unterminated string after colon")
+                    
+                    # Случай 2: Удаляем незавершенный последний элемент
+                    last_comma_idx = fixed_text.rfind(',')
+                    last_brace_idx = fixed_text.rfind('}')
+                    
+                    if last_comma_idx > last_brace_idx and last_comma_idx != -1:
+                        fixed_text = fixed_text[:last_comma_idx]
+                        print(f"🔧 Removed incomplete trailing item")
+                    
+                    # Случай 3: Закрываем незакрытые скобки
+                    open_braces = fixed_text.count('{')
+                    close_braces = fixed_text.count('}')
+                    if open_braces > close_braces:
+                        fixed_text += '}' * (open_braces - close_braces)
+                        print(f"🔧 Added {open_braces - close_braces} closing braces")
+                    
+                    result = json.loads(fixed_text)
+                    print(f"✅ Fixed JSON successfully!")
+                    return result
+                except Exception as fix_error:
+                    print(f"🔴 Failed to fix JSON: {fix_error}")
+                    return {'error': f'Invalid JSON: {str(e)}', 'actual_level': claimed_level, 'is_correct': True}
         
         return {'error': 'No response from Gemini', 'actual_level': claimed_level, 'is_correct': True}
     
