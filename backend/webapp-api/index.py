@@ -23,6 +23,74 @@ def get_proxies():
         }
     return None
 
+def analyze_urgent_goal(goal: str) -> Dict[str, Any]:
+    """Анализирует срочную цель и предлагает конкретные темы для подготовки через Gemini"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found', 'subtopics': []}
+    
+    prompt = f"""Студент едет/идет куда-то срочно и ему нужен английский. Его задача: "{goal}".
+
+Твоя задача: предложить 3-5 КОНКРЕТНЫХ тем, которые ему понадобятся для этой ситуации.
+
+Примеры:
+- Если едет в Лондон → "В аэропорту", "Заселение в отель", "Заказ такси", "В ресторане", "Спросить дорогу"
+- Если собеседование → "Рассказ о себе", "Описание опыта", "Обсуждение зарплаты", "Вопросы работодателю"
+
+Формат ответа (только JSON, без markdown):
+{{
+  "subtopics": [
+    {{
+      "id": "airport",
+      "title": "В аэропорту",
+      "description": "Регистрация, паспортный контроль, багаж"
+    }},
+    {{
+      "id": "hotel",
+      "title": "Заселение в отель",
+      "description": "Бронирование, check-in, вопросы о номере"
+    }}
+  ]
+}}
+
+⚠️ ВАЖНО:
+- id = латиница, без пробелов (например: "airport", "job_interview")
+- title = русский, короткий (2-4 слова)
+- description = русский, что конкретно входит (5-8 слов)
+- Темы должны быть ПРАКТИЧНЫЕ и КОНКРЕТНЫЕ для его ситуации
+
+Отвечай ТОЛЬКО валидным JSON, без объяснений."""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 1000
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            result = json.loads(text)
+            return result
+        
+        return {'error': 'No response from Gemini', 'subtopics': []}
+    
+    except Exception as e:
+        return {'error': str(e), 'subtopics': []}
+
 def generate_learning_goal_suggestions(user_input: str) -> Dict[str, Any]:
     """Генерирует рекомендации по детализации цели обучения через Gemini"""
     api_key = os.environ.get('GEMINI_API_KEY')
@@ -1126,6 +1194,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'analyze_urgent_goal':
+            goal = body_data.get('goal', '')
+            result = analyze_urgent_goal(goal)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         

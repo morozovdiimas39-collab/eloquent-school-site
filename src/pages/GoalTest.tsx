@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import Icon from '@/components/ui/icon';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,12 +15,22 @@ interface Topic {
   title: string;
 }
 
+interface SuggestedSubtopic {
+  id: string;
+  title: string;
+  description: string;
+}
+
 export default function GoalTest() {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   
   const [approach, setApproach] = useState<Approach>('methodical');
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [urgentGoal, setUrgentGoal] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [suggestedSubtopics, setSuggestedSubtopics] = useState<SuggestedSubtopic[]>([]);
+  const [selectedSubtopics, setSelectedSubtopics] = useState<string[]>([]);
 
   const approaches = [
     {
@@ -51,7 +63,7 @@ export default function GoalTest() {
     { id: 'health', emoji: '💪', title: 'Здоровье' },
     { id: 'nature', emoji: '🌿', title: 'Природа' },
     { id: 'pets', emoji: '🐶', title: 'Питомцы' },
-    { id: 'cars', emoji: '🚗', title: 'Автомобили' }
+    { id: 'cars', emoji: '🚗', title: 'Авто' }
   ];
 
   const handleTopicToggle = (topicId: string) => {
@@ -64,12 +76,72 @@ export default function GoalTest() {
     );
   };
 
+  const handleSubtopicToggle = (subtopicId: string) => {
+    setSelectedSubtopics(prev => 
+      prev.includes(subtopicId) 
+        ? prev.filter(t => t !== subtopicId)
+        : [...prev, subtopicId]
+    );
+  };
+
+  const analyzeUrgentGoal = async () => {
+    if (!urgentGoal.trim()) return;
+    
+    setIsAnalyzing(true);
+
+    try {
+      const response = await fetch('https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'analyze_urgent_goal',
+          goal: urgentGoal
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.subtopics && data.subtopics.length > 0) {
+        setSuggestedSubtopics(data.subtopics);
+        setSelectedSubtopics(data.subtopics.map((s: SuggestedSubtopic) => s.id));
+      } else {
+        setSuggestedSubtopics([
+          { id: 'general', title: 'Общая подготовка', description: 'Базовые фразы и выражения' }
+        ]);
+        setSelectedSubtopics(['general']);
+      }
+    } catch (error) {
+      console.error('Failed to analyze goal:', error);
+      setSuggestedSubtopics([
+        { id: 'general', title: 'Общая подготовка', description: 'Базовые фразы и выражения' }
+      ]);
+      setSelectedSubtopics(['general']);
+    }
+
+    setIsAnalyzing(false);
+  };
+
   const handleNext = () => {
     if (step === 1) {
       setStep(2);
-    } else if (step === 2 && selectedTopics.length >= 2) {
-      setStep(3);
+    } else if (step === 2) {
+      if (approach === 'methodical' && selectedTopics.length >= 2) {
+        setStep(3);
+      } else if (approach === 'urgent' && selectedSubtopics.length >= 1) {
+        setStep(3);
+      }
     }
+  };
+
+  const canProceed = () => {
+    if (step === 2) {
+      if (approach === 'methodical') {
+        return selectedTopics.length >= 2;
+      } else {
+        return selectedSubtopics.length >= 1 && suggestedSubtopics.length > 0;
+      }
+    }
+    return true;
   };
 
   return (
@@ -146,7 +218,7 @@ export default function GoalTest() {
           </Card>
         )}
 
-        {step === 2 && (
+        {step === 2 && approach === 'methodical' && (
           <Card className="shadow-sm border-0">
             <CardHeader className="pb-4">
               <CardTitle className="text-xl">Какие темы тебе интересны?</CardTitle>
@@ -165,19 +237,19 @@ export default function GoalTest() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-4 gap-2">
                 {topics.map((topic) => (
                   <button
                     key={topic.id}
                     onClick={() => handleTopicToggle(topic.id)}
-                    className={`flex flex-col items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                    className={`flex flex-col items-center justify-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
                       selectedTopics.includes(topic.id)
                         ? 'border-[#3390ec] bg-[#e8f4fd]'
                         : 'border-gray-200 bg-white hover:border-gray-300'
                     }`}
                   >
-                    <span className="text-3xl mb-2">{topic.emoji}</span>
-                    <span className="text-sm font-medium text-gray-900">{topic.title}</span>
+                    <span className="text-2xl mb-1">{topic.emoji}</span>
+                    <span className="text-xs font-medium text-gray-900 text-center leading-tight">{topic.title}</span>
                   </button>
                 ))}
               </div>
@@ -200,6 +272,119 @@ export default function GoalTest() {
                   <Icon name="Check" size={20} className="ml-2" />
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 2 && approach === 'urgent' && (
+          <Card className="shadow-sm border-0">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl">Что тебе нужно?</CardTitle>
+              <CardDescription className="text-gray-600">
+                Опиши свою срочную задачу, и я подберу нужные темы
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Textarea
+                  placeholder="Например: Я еду в Лондон через 2 недели..."
+                  value={urgentGoal}
+                  onChange={(e) => setUrgentGoal(e.target.value)}
+                  className="min-h-[100px] resize-none"
+                />
+              </div>
+
+              {suggestedSubtopics.length === 0 && (
+                <Button
+                  onClick={analyzeUrgentGoal}
+                  disabled={!urgentGoal.trim() || isAnalyzing}
+                  className="w-full bg-[#3390ec] hover:bg-[#2a7dd4]"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Icon name="Loader2" size={20} className="mr-2 animate-spin" />
+                      Анализирую...
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="Sparkles" size={20} className="mr-2" />
+                      Подобрать темы
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {suggestedSubtopics.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">
+                        Рекомендованные темы:
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {selectedSubtopics.length} выбрано
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {suggestedSubtopics.map((subtopic) => (
+                        <label
+                          key={subtopic.id}
+                          className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                            selectedSubtopics.includes(subtopic.id)
+                              ? 'border-[#3390ec] bg-[#e8f4fd]'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <Checkbox
+                            checked={selectedSubtopics.includes(subtopic.id)}
+                            onCheckedChange={() => handleSubtopicToggle(subtopic.id)}
+                            className="mt-0.5"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900 text-sm">{subtopic.title}</div>
+                            <div className="text-xs text-gray-600 mt-0.5">{subtopic.description}</div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-2">
+                    <Button
+                      onClick={() => {
+                        setStep(1);
+                        setSuggestedSubtopics([]);
+                        setSelectedSubtopics([]);
+                        setUrgentGoal('');
+                      }}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Icon name="ChevronLeft" size={16} className="mr-2" />
+                      Назад
+                    </Button>
+                    <Button
+                      onClick={handleNext}
+                      disabled={!canProceed()}
+                      className="flex-1 bg-[#3390ec] hover:bg-[#2a7dd4]"
+                    >
+                      Готово
+                      <Icon name="Check" size={20} className="ml-2" />
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {suggestedSubtopics.length === 0 && (
+                <Button
+                  onClick={() => setStep(1)}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Icon name="ChevronLeft" size={16} className="mr-2" />
+                  Назад
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
@@ -228,12 +413,17 @@ export default function GoalTest() {
                       {approaches.find(a => a.id === approach)?.title}
                     </span>
                   </div>
+                  {approach === 'urgent' && urgentGoal && (
+                    <p className="text-sm text-gray-600 italic ml-9">"{urgentGoal}"</p>
+                  )}
                 </div>
                 
                 <div className="pt-2 border-t border-gray-200">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Твои темы:</div>
+                  <div className="text-sm font-medium text-gray-700 mb-2">
+                    {approach === 'methodical' ? 'Твои темы:' : 'Выбранные темы для подготовки:'}
+                  </div>
                   <div className="flex flex-wrap gap-2">
-                    {selectedTopics.map((topicId) => {
+                    {approach === 'methodical' && selectedTopics.map((topicId) => {
                       const topic = topics.find(t => t.id === topicId);
                       return (
                         <div
@@ -242,6 +432,17 @@ export default function GoalTest() {
                         >
                           <span>{topic?.emoji}</span>
                           <span className="font-medium text-gray-900">{topic?.title}</span>
+                        </div>
+                      );
+                    })}
+                    {approach === 'urgent' && selectedSubtopics.map((subtopicId) => {
+                      const subtopic = suggestedSubtopics.find(s => s.id === subtopicId);
+                      return (
+                        <div
+                          key={subtopicId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm"
+                        >
+                          <span className="font-medium text-gray-900">{subtopic?.title}</span>
                         </div>
                       );
                     })}
@@ -254,7 +455,12 @@ export default function GoalTest() {
                   <Icon name="Info" size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-gray-700">
                     <p className="font-semibold mb-1">Что дальше?</p>
-                    <p>Аня начнет общаться с тобой на эти темы и органически узнает твои более детальные интересы прямо в диалогах 😊</p>
+                    <p>
+                      {approach === 'methodical' 
+                        ? 'Аня начнет общаться с тобой на эти темы и органически узнает твои более детальные интересы прямо в диалогах 😊'
+                        : 'Аня сфокусируется на этих темах и поможет тебе быстро подготовиться к твоей поездке! 🚀'
+                      }
+                    </p>
                   </div>
                 </div>
               </div>
@@ -264,6 +470,9 @@ export default function GoalTest() {
                   onClick={() => {
                     setStep(1);
                     setSelectedTopics([]);
+                    setSuggestedSubtopics([]);
+                    setSelectedSubtopics([]);
+                    setUrgentGoal('');
                   }}
                   variant="outline"
                   className="flex-1"
