@@ -6,59 +6,122 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import Icon from '@/components/ui/icon';
 import { useNavigate } from 'react-router-dom';
 
-type GoalType = 'sequential' | 'urgent' | 'professional';
+type Approach = 'methodical' | 'urgent';
+type Context = 'professional' | 'travel' | 'academic' | 'conversational' | 'media' | 'hobbies';
 type Intensity = 'relaxed' | 'normal' | 'intensive';
+type FocusSkill = 'speaking' | 'reading' | 'writing' | 'listening' | null;
+
+interface ContextDetails {
+  [key: string]: string;
+}
 
 export default function GoalTest() {
   const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [goalText, setGoalText] = useState('');
-  const [goalType, setGoalType] = useState<GoalType>('sequential');
-  const [intensity, setIntensity] = useState<Intensity>('normal');
+  
+  const [approach, setApproach] = useState<Approach>('methodical');
+  const [selectedContexts, setSelectedContexts] = useState<Context[]>([]);
+  const [contextDetails, setContextDetails] = useState<ContextDetails>({});
   const [deadline, setDeadline] = useState('');
-  const [domain, setDomain] = useState('');
+  const [intensity, setIntensity] = useState<Intensity>('normal');
+  const [focusSkill, setFocusSkill] = useState<FocusSkill>(null);
+  
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [generatedWords, setGeneratedWords] = useState<Array<{ english: string; russian: string }>>([]);
 
-  const goalTypes = [
+  const approaches = [
     {
-      id: 'sequential' as GoalType,
-      icon: 'BookOpen',
-      title: 'Методичное изучение',
-      description: 'Последовательное освоение языка с нуля или продолжение обучения',
+      id: 'methodical' as Approach,
       emoji: '📚',
-      color: 'from-blue-500 to-cyan-500'
+      title: 'Методичное обучение',
+      description: 'Последовательное долгосрочное изучение'
     },
     {
-      id: 'urgent' as GoalType,
-      icon: 'Clock',
-      title: 'Срочная цель',
-      description: 'Подготовка к поездке, собеседованию или важному событию',
+      id: 'urgent' as Approach,
       emoji: '⚡',
-      color: 'from-orange-500 to-red-500'
-    },
-    {
-      id: 'professional' as GoalType,
-      icon: 'Briefcase',
-      title: 'Профессиональный',
-      description: 'Изучение терминологии и языка для работы в конкретной сфере',
-      emoji: '💼',
-      color: 'from-purple-500 to-pink-500'
+      title: 'Срочная подготовка',
+      description: 'Быстрая подготовка к дедлайну'
     }
   ];
 
-  const domains = [
-    { value: 'it', label: 'IT / Программирование', icon: '💻' },
-    { value: 'business', label: 'Бизнес / Менеджмент', icon: '📊' },
-    { value: 'travel', label: 'Путешествия / Туризм', icon: '✈️' },
-    { value: 'medical', label: 'Медицина / Здоровье', icon: '🏥' },
-    { value: 'design', label: 'Дизайн / Творчество', icon: '🎨' },
-    { value: 'education', label: 'Образование / Наука', icon: '🎓' },
-    { value: 'sales', label: 'Продажи / Маркетинг', icon: '📈' },
-    { value: 'other', label: 'Другое', icon: '🎯' }
+  const contexts = [
+    {
+      id: 'professional' as Context,
+      emoji: '💼',
+      title: 'Профессиональный',
+      description: 'Работа, карьера, бизнес',
+      subOptions: [
+        { value: 'it', label: 'IT / Разработка' },
+        { value: 'business', label: 'Бизнес / Менеджмент' },
+        { value: 'medical', label: 'Медицина' },
+        { value: 'design', label: 'Дизайн' },
+        { value: 'engineering', label: 'Инженерия' },
+        { value: 'education', label: 'Образование' }
+      ]
+    },
+    {
+      id: 'travel' as Context,
+      emoji: '✈️',
+      title: 'Путешествия',
+      description: 'Туризм, поездки, общение за границей',
+      subOptions: [
+        { value: 'tourism', label: 'Туризм' },
+        { value: 'relocation', label: 'Переезд' },
+        { value: 'business_trip', label: 'Командировки' }
+      ]
+    },
+    {
+      id: 'academic' as Context,
+      emoji: '🎓',
+      title: 'Академический',
+      description: 'Учеба, экзамены, научная работа',
+      subOptions: [
+        { value: 'university', label: 'Университет' },
+        { value: 'ielts', label: 'IELTS' },
+        { value: 'toefl', label: 'TOEFL' },
+        { value: 'research', label: 'Научная работа' }
+      ]
+    },
+    {
+      id: 'conversational' as Context,
+      emoji: '💬',
+      title: 'Разговорный',
+      description: 'Повседневное общение, друзья',
+      subOptions: [
+        { value: 'everyday', label: 'Повседневное' },
+        { value: 'friends', label: 'С друзьями' },
+        { value: 'dating', label: 'Знакомства' }
+      ]
+    },
+    {
+      id: 'media' as Context,
+      emoji: '🎬',
+      title: 'Медиа',
+      description: 'Фильмы, сериалы, книги, новости',
+      subOptions: [
+        { value: 'movies', label: 'Фильмы/сериалы' },
+        { value: 'books', label: 'Книги' },
+        { value: 'news', label: 'Новости' },
+        { value: 'podcasts', label: 'Подкасты' }
+      ]
+    },
+    {
+      id: 'hobbies' as Context,
+      emoji: '🎯',
+      title: 'Хобби',
+      description: 'Увлечения, спорт, творчество',
+      subOptions: [
+        { value: 'sports', label: 'Спорт' },
+        { value: 'music', label: 'Музыка' },
+        { value: 'art', label: 'Искусство' },
+        { value: 'gaming', label: 'Игры' }
+      ]
+    }
   ];
 
   const intensityLevels = [
@@ -67,46 +130,70 @@ export default function GoalTest() {
       icon: 'Coffee',
       title: 'Спокойный',
       words: '+7 слов/неделю',
-      time: '15 мин/день',
-      color: 'border-green-300 bg-green-50'
+      time: '15 мин/день'
     },
     {
       id: 'normal' as Intensity,
       icon: 'Target',
       title: 'Обычный',
       words: '+12 слов/неделю',
-      time: '30 мин/день',
-      color: 'border-blue-300 bg-blue-50'
+      time: '30 мин/день'
     },
     {
       id: 'intensive' as Intensity,
       icon: 'Zap',
       title: 'Интенсивный',
       words: '+20 слов/неделю',
-      time: '60 мин/день',
-      color: 'border-orange-300 bg-orange-50'
+      time: '60 мин/день'
     }
   ];
 
+  const focusSkills = [
+    { id: 'speaking' as FocusSkill, emoji: '🗣️', title: 'Говорение' },
+    { id: 'reading' as FocusSkill, emoji: '📖', title: 'Чтение' },
+    { id: 'writing' as FocusSkill, emoji: '✍️', title: 'Письмо' },
+    { id: 'listening' as FocusSkill, emoji: '👂', title: 'Аудирование' }
+  ];
+
+  const handleContextToggle = (contextId: Context) => {
+    setSelectedContexts(prev => 
+      prev.includes(contextId) 
+        ? prev.filter(c => c !== contextId)
+        : [...prev, contextId]
+    );
+  };
+
   const handleAnalyzeGoal = async () => {
     if (!goalText.trim()) return;
-    
     setIsAnalyzing(true);
     
-    // Имитация анализа через AI
     setTimeout(() => {
-      // Автоопределение типа цели
       const text = goalText.toLowerCase();
-      if (text.includes('поездка') || text.includes('путешеств') || text.includes('через')) {
-        setGoalType('urgent');
+      
+      if (text.includes('срочно') || text.includes('через') || text.includes('скоро')) {
+        setApproach('urgent');
         setIntensity('intensive');
-      } else if (text.includes('работа') || text.includes('документаци') || text.includes('терминолог')) {
-        setGoalType('professional');
-        setIntensity('normal');
       } else {
-        setGoalType('sequential');
+        setApproach('methodical');
         setIntensity('normal');
       }
+      
+      const detectedContexts: Context[] = [];
+      if (text.includes('работ') || text.includes('програм') || text.includes('it')) {
+        detectedContexts.push('professional');
+        setContextDetails({ professional: 'it' });
+      }
+      if (text.includes('поездк') || text.includes('путеш') || text.includes('за границ')) {
+        detectedContexts.push('travel');
+      }
+      if (text.includes('фильм') || text.includes('сериал') || text.includes('книг')) {
+        detectedContexts.push('media');
+      }
+      if (text.includes('общ') || text.includes('друзь')) {
+        detectedContexts.push('conversational');
+      }
+      
+      setSelectedContexts(detectedContexts.length > 0 ? detectedContexts : ['conversational']);
       
       setIsAnalyzing(false);
       setStep(2);
@@ -116,40 +203,38 @@ export default function GoalTest() {
   const handleGenerateWords = async () => {
     setIsAnalyzing(true);
     
-    // Имитация генерации слов
     setTimeout(() => {
-      // Примеры слов в зависимости от типа
       let words: Array<{ english: string; russian: string }> = [];
       
-      if (goalType === 'urgent' && domain === 'travel') {
-        words = [
-          { english: 'boarding pass', russian: 'посадочный талон' },
-          { english: 'delayed flight', russian: 'задержка рейса' },
-          { english: 'baggage claim', russian: 'выдача багажа' },
-          { english: 'customs', russian: 'таможня' },
-          { english: 'check-in', russian: 'регистрация на рейс' },
-          { english: 'gate', russian: 'выход на посадку' },
-          { english: 'connecting flight', russian: 'стыковочный рейс' }
-        ];
-      } else if (goalType === 'professional' && domain === 'it') {
+      if (selectedContexts.includes('professional') && contextDetails.professional === 'it') {
         words = [
           { english: 'deploy', russian: 'развертывать' },
           { english: 'debug', russian: 'отлаживать' },
           { english: 'refactor', russian: 'рефакторить' },
-          { english: 'legacy code', russian: 'устаревший код' },
-          { english: 'deprecated', russian: 'устаревший (метод)' },
-          { english: 'rollback', russian: 'откатить изменения' },
-          { english: 'backward compatible', russian: 'обратно совместимый' }
+          { english: 'merge', russian: 'объединить' },
+          { english: 'implement', russian: 'реализовать' },
+          { english: 'optimize', russian: 'оптимизировать' },
+          { english: 'integrate', russian: 'интегрировать' }
+        ];
+      } else if (selectedContexts.includes('travel')) {
+        words = [
+          { english: 'boarding pass', russian: 'посадочный талон' },
+          { english: 'check-in', russian: 'регистрация' },
+          { english: 'departure', russian: 'вылет' },
+          { english: 'arrival', russian: 'прилет' },
+          { english: 'customs', russian: 'таможня' },
+          { english: 'accommodation', russian: 'жилье' },
+          { english: 'itinerary', russian: 'маршрут' }
         ];
       } else {
         words = [
-          { english: 'think', russian: 'думать' },
-          { english: 'feel', russian: 'чувствовать' },
+          { english: 'communicate', russian: 'общаться' },
           { english: 'understand', russian: 'понимать' },
+          { english: 'express', russian: 'выражать' },
+          { english: 'discuss', russian: 'обсуждать' },
           { english: 'explain', russian: 'объяснять' },
-          { english: 'decide', russian: 'решать' },
-          { english: 'believe', russian: 'верить' },
-          { english: 'remember', russian: 'помнить' }
+          { english: 'describe', russian: 'описывать' },
+          { english: 'suggest', russian: 'предлагать' }
         ];
       }
       
@@ -158,9 +243,6 @@ export default function GoalTest() {
       setStep(3);
     }, 2000);
   };
-
-  const selectedGoalType = goalTypes.find(g => g.id === goalType);
-  const selectedIntensity = intensityLevels.find(i => i.id === intensity);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-6 px-4">
@@ -175,7 +257,6 @@ export default function GoalTest() {
           Назад
         </Button>
 
-        {/* Прогресс-бар */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">
@@ -183,7 +264,7 @@ export default function GoalTest() {
             </span>
             <span className="text-sm text-gray-500">
               {step === 1 && 'Опиши цель'}
-              {step === 2 && 'Настрой параметры'}
+              {step === 2 && 'Комбинируй параметры'}
               {step === 3 && 'Готово!'}
             </span>
           </div>
@@ -195,13 +276,12 @@ export default function GoalTest() {
           </div>
         </div>
 
-        {/* Шаг 1: Описание цели */}
         {step === 1 && (
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl">Какая у тебя цель?</CardTitle>
               <CardDescription>
-                Опиши что хочешь выучить или для чего нужен английский
+                Опиши зачем нужен английский. Можно несколько причин сразу
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -209,31 +289,14 @@ export default function GoalTest() {
                 <Label htmlFor="goal">Моя цель</Label>
                 <Textarea
                   id="goal"
-                  placeholder="Например: Хочу поехать в Лондон через 2 месяца..."
+                  placeholder="Например: Работаю программистом и планирую переезд в Лондон через полгода..."
                   value={goalText}
                   onChange={(e) => setGoalText(e.target.value)}
                   className="min-h-[120px] mt-2"
                 />
                 <p className="text-sm text-gray-500 mt-2">
-                  💡 Чем подробнее опишешь, тем лучше я подберу программу
+                  💡 Можешь указать работу, увлечения, планы на будущее
                 </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                {goalTypes.map((type) => (
-                  <button
-                    key={type.id}
-                    onClick={() => setGoalText(
-                      type.id === 'sequential' ? 'Хочу систематически изучать английский с нуля' :
-                      type.id === 'urgent' ? 'Мне нужен английский для поездки через 2 месяца' :
-                      'Хочу читать техническую документацию на английском для работы'
-                    )}
-                    className="p-3 border-2 border-gray-200 rounded-lg hover:border-indigo-500 transition-all text-center"
-                  >
-                    <div className="text-2xl mb-1">{type.emoji}</div>
-                    <div className="text-xs text-gray-700 font-medium">{type.title.split(' ')[0]}</div>
-                  </button>
-                ))}
               </div>
 
               <Button
@@ -257,37 +320,34 @@ export default function GoalTest() {
           </Card>
         )}
 
-        {/* Шаг 2: Настройка параметров */}
         {step === 2 && (
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl">Настрой программу</CardTitle>
+              <CardTitle className="text-2xl">Настрой параметры</CardTitle>
               <CardDescription>
-                Я подобрал параметры под твою цель, можешь изменить
+                Комбинируй подход, контексты и интенсивность под себя
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Тип цели */}
+              
               <div>
-                <Label className="text-base font-semibold mb-3 block">Тип обучения</Label>
-                <RadioGroup value={goalType} onValueChange={(v) => setGoalType(v as GoalType)}>
-                  <div className="space-y-3">
-                    {goalTypes.map((type) => (
+                <Label className="text-base font-semibold mb-3 block">1. Базовый подход</Label>
+                <RadioGroup value={approach} onValueChange={(v) => setApproach(v as Approach)}>
+                  <div className="grid gap-3">
+                    {approaches.map((app) => (
                       <label
-                        key={type.id}
-                        className={`flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          goalType === type.id
+                        key={app.id}
+                        className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          approach === app.id
                             ? 'border-indigo-500 bg-indigo-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <RadioGroupItem value={type.id} className="mt-1" />
+                        <RadioGroupItem value={app.id} />
+                        <span className="text-2xl">{app.emoji}</span>
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xl">{type.emoji}</span>
-                            <span className="font-semibold">{type.title}</span>
-                          </div>
-                          <p className="text-sm text-gray-600">{type.description}</p>
+                          <div className="font-semibold">{app.title}</div>
+                          <div className="text-sm text-gray-600">{app.description}</div>
                         </div>
                       </label>
                     ))}
@@ -295,12 +355,11 @@ export default function GoalTest() {
                 </RadioGroup>
               </div>
 
-              {/* Дополнительные поля для urgent */}
-              {goalType === 'urgent' && (
+              {approach === 'urgent' && (
                 <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
                   <Label htmlFor="deadline" className="flex items-center gap-2 mb-2">
                     <Icon name="Calendar" size={16} />
-                    Когда нужно быть готовым?
+                    Дедлайн
                   </Label>
                   <Input
                     id="deadline"
@@ -312,34 +371,60 @@ export default function GoalTest() {
                 </div>
               )}
 
-              {/* Дополнительные поля для professional */}
-              {goalType === 'professional' && (
-                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-                  <Label htmlFor="domain" className="flex items-center gap-2 mb-2">
-                    <Icon name="Briefcase" size={16} />
-                    Сфера деятельности
-                  </Label>
-                  <Select value={domain} onValueChange={setDomain}>
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="Выбери сферу" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {domains.map((d) => (
-                        <SelectItem key={d.value} value={d.value}>
-                          <span className="flex items-center gap-2">
-                            <span>{d.icon}</span>
-                            <span>{d.label}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {/* Интенсивность */}
               <div>
-                <Label className="text-base font-semibold mb-3 block">Интенсивность обучения</Label>
+                <Label className="text-base font-semibold mb-3 block">
+                  2. Контексты использования
+                  <span className="text-sm font-normal text-gray-500 ml-2">(можно несколько)</span>
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {contexts.map((ctx) => (
+                    <div key={ctx.id}>
+                      <label
+                        className={`flex items-start gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          selectedContexts.includes(ctx.id)
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <Checkbox
+                          checked={selectedContexts.includes(ctx.id)}
+                          onCheckedChange={() => handleContextToggle(ctx.id)}
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xl">{ctx.emoji}</span>
+                            <span className="font-semibold text-sm">{ctx.title}</span>
+                          </div>
+                          <p className="text-xs text-gray-600">{ctx.description}</p>
+                        </div>
+                      </label>
+                      
+                      {selectedContexts.includes(ctx.id) && ctx.subOptions && (
+                        <div className="mt-2 ml-4">
+                          <Select 
+                            value={contextDetails[ctx.id] || ''} 
+                            onValueChange={(v) => setContextDetails({ ...contextDetails, [ctx.id]: v })}
+                          >
+                            <SelectTrigger className="bg-white text-sm">
+                              <SelectValue placeholder="Уточни..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ctx.subOptions.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-base font-semibold mb-3 block">3. Интенсивность</Label>
                 <RadioGroup value={intensity} onValueChange={(v) => setIntensity(v as Intensity)}>
                   <div className="grid gap-3">
                     {intensityLevels.map((level) => (
@@ -347,7 +432,7 @@ export default function GoalTest() {
                         key={level.id}
                         className={`flex items-center gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all ${
                           intensity === level.id
-                            ? level.color.replace('bg-', 'bg-') + ' border-current'
+                            ? 'border-indigo-500 bg-indigo-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
@@ -363,6 +448,29 @@ export default function GoalTest() {
                 </RadioGroup>
               </div>
 
+              <div>
+                <Label className="text-base font-semibold mb-3 block">
+                  4. Фокус на навыке
+                  <span className="text-sm font-normal text-gray-500 ml-2">(опционально)</span>
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {focusSkills.map((skill) => (
+                    <label
+                      key={skill.id}
+                      className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                        focusSkill === skill.id
+                          ? 'border-indigo-500 bg-indigo-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => setFocusSkill(focusSkill === skill.id ? null : skill.id)}
+                    >
+                      <span className="text-xl">{skill.emoji}</span>
+                      <span className="font-medium text-sm">{skill.title}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <Button
                   onClick={() => setStep(1)}
@@ -374,7 +482,7 @@ export default function GoalTest() {
                 </Button>
                 <Button
                   onClick={handleGenerateWords}
-                  disabled={isAnalyzing || (goalType === 'professional' && !domain)}
+                  disabled={isAnalyzing || selectedContexts.length === 0}
                   className="flex-1"
                 >
                   {isAnalyzing ? (
@@ -394,7 +502,6 @@ export default function GoalTest() {
           </Card>
         )}
 
-        {/* Шаг 3: Результат */}
         {step === 3 && (
           <div className="space-y-4">
             <Card className="shadow-lg border-2 border-green-500">
@@ -406,33 +513,54 @@ export default function GoalTest() {
                   <div>
                     <CardTitle className="text-2xl">Цель создана!</CardTitle>
                     <CardDescription>
-                      Я подобрал первые слова для тебя
+                      План составлен с учетом твоих параметров
                     </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">{selectedGoalType?.emoji}</span>
-                    <span className="font-semibold">{selectedGoalType?.title}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 mb-3">{goalText}</p>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
-                    <div className="flex items-center gap-1">
-                      <Icon name={selectedIntensity?.icon as any} size={16} />
-                      <span>{selectedIntensity?.title}</span>
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">{approaches.find(a => a.id === approach)?.emoji}</span>
+                      <span className="font-semibold">{approaches.find(a => a.id === approach)?.title}</span>
                     </div>
-                    {goalType === 'urgent' && deadline && (
-                      <div className="flex items-center gap-1">
-                        <Icon name="Calendar" size={16} />
-                        <span>{new Date(deadline).toLocaleDateString('ru-RU')}</span>
+                    <p className="text-sm text-gray-700 mb-3">{goalText}</p>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Icon name="Target" size={16} />
+                      <span className="font-medium">Контексты:</span>
+                      <span>
+                        {selectedContexts.map((ctx) => {
+                          const ctxData = contexts.find(c => c.id === ctx);
+                          const detail = contextDetails[ctx];
+                          const subOpt = ctxData?.subOptions?.find(s => s.value === detail);
+                          return `${ctxData?.emoji} ${ctxData?.title}${subOpt ? ` (${subOpt.label})` : ''}`;
+                        }).join(', ')}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Icon name={intensityLevels.find(i => i.id === intensity)?.icon as any} size={16} />
+                      <span className="font-medium">Интенсивность:</span>
+                      <span>{intensityLevels.find(i => i.id === intensity)?.title}</span>
+                    </div>
+                    
+                    {focusSkill && (
+                      <div className="flex items-center gap-2 text-gray-700">
+                        <span className="text-lg">{focusSkills.find(s => s.id === focusSkill)?.emoji}</span>
+                        <span className="font-medium">Фокус:</span>
+                        <span>{focusSkills.find(s => s.id === focusSkill)?.title}</span>
                       </div>
                     )}
-                    {goalType === 'professional' && domain && (
-                      <div className="flex items-center gap-1">
-                        <Icon name="Briefcase" size={16} />
-                        <span>{domains.find(d => d.value === domain)?.label}</span>
+                    
+                    {deadline && (
+                      <div className="flex items-center gap-2 text-gray-700">
+                        <Icon name="Calendar" size={16} />
+                        <span className="font-medium">Дедлайн:</span>
+                        <span>{new Date(deadline).toLocaleDateString('ru-RU')}</span>
                       </div>
                     )}
                   </div>
@@ -440,7 +568,7 @@ export default function GoalTest() {
 
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold">Твои первые слова ({generatedWords.length})</h3>
+                    <h3 className="font-semibold">Первые слова ({generatedWords.length})</h3>
                     <Icon name="BookOpen" size={20} className="text-indigo-600" />
                   </div>
                   <div className="space-y-2">
@@ -464,6 +592,8 @@ export default function GoalTest() {
                     onClick={() => {
                       setStep(1);
                       setGoalText('');
+                      setSelectedContexts([]);
+                      setContextDetails({});
                       setGeneratedWords([]);
                     }}
                     variant="outline"
@@ -473,7 +603,7 @@ export default function GoalTest() {
                     Новая цель
                   </Button>
                   <Button
-                    onClick={() => alert('Сохранено! Теперь открой бота в Telegram и начни практиковаться 🚀')}
+                    onClick={() => alert('Сохранено! Теперь открой бота и начни практиковаться 🚀')}
                     className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500"
                   >
                     <Icon name="Send" size={16} className="mr-2" />
@@ -488,8 +618,8 @@ export default function GoalTest() {
                 <div className="flex items-start gap-3">
                   <Icon name="Info" size={20} className="text-blue-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-gray-700">
-                    <p className="font-semibold mb-1">Что дальше?</p>
-                    <p>Открой бота в Telegram и начни практиковаться! Я буду автоматически добавлять новые слова по твоей цели каждую неделю.</p>
+                    <p className="font-semibold mb-1">Как это работает?</p>
+                    <p>Я буду генерировать слова с учетом всех твоих контекстов и подстраиваться под интенсивность. Если указал фокус на навыке — буду особенно следить за его развитием.</p>
                   </div>
                 </div>
               </CardContent>
