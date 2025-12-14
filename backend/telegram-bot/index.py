@@ -981,11 +981,21 @@ def download_telegram_file(file_id: str) -> bytes:
         return response.read()
 
 def speech_to_text(audio_data: bytes) -> str:
-    """Распознает речь через OpenAI Whisper"""
+    """Распознает речь через OpenAI Whisper с прокси"""
     openai_api_key = os.environ.get('OPENAI_API_KEY')
     
     if not openai_api_key:
         raise Exception('OpenAI API key not configured')
+    
+    # Получаем прокси из БД
+    proxy_id, proxy_url = get_active_proxy_from_db()
+    if not proxy_url:
+        proxy_id = None
+        proxy_url = os.environ.get('PROXY_URL', '')
+        print("[DEBUG] Using PROXY_URL from env for Whisper")
+    
+    if not proxy_url:
+        raise Exception("PROXY_URL is required for OpenAI API access")
     
     # Сохраняем audio_data во временный файл (Whisper требует файл)
     with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_audio:
@@ -993,28 +1003,41 @@ def speech_to_text(audio_data: bytes) -> str:
         temp_audio_path = temp_audio.name
     
     try:
-        # Whisper API требует multipart/form-data
         url = 'https://api.openai.com/v1/audio/transcriptions'
-        headers = {
-            'Authorization': f'Bearer {openai_api_key}'
+        
+        # Настройка прокси для requests
+        proxies = {
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
         }
         
         with open(temp_audio_path, 'rb') as audio_file:
             files = {
-                'file': ('voice.ogg', audio_file, 'audio/ogg'),
-                'model': (None, 'whisper-1'),
-                'language': (None, 'en')
+                'file': ('voice.ogg', audio_file, 'audio/ogg')
+            }
+            data = {
+                'model': 'whisper-1',
+                'language': 'en'
+            }
+            headers = {
+                'Authorization': f'Bearer {openai_api_key}'
             }
             
             response = requests.post(
                 url,
                 headers=headers,
                 files=files,
+                data=data,
+                proxies=proxies,
                 timeout=30
             )
         
         response.raise_for_status()
         result = response.json()
+        
+        # Логируем успешный запрос через прокси
+        log_proxy_success(proxy_id)
+        
         return result.get('text', '')
     
     finally:
