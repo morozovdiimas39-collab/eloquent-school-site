@@ -2220,7 +2220,7 @@ IMPORTANT: "expected" must be RUSSIAN!'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': check_prompt}]}],
-                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 80}
+                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 200}
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
@@ -2471,13 +2471,9 @@ Return short JSON:
                             if attempt == 2:  # Последняя попытка
                                 raise
                     
-                    # Если после 3 попыток не получили уникальное слово - используем fallback
+                    # Если после 3 попыток не получили - ОШИБКА (НЕ используем fallback базу)
                     if not next_item:
-                        # Берем уникальное слово из списка базовых
-                        all_basics = ['home', 'book', 'time', 'work', 'life', 'world', 'help', 'friend', 'food', 'water', 'love', 'happy', 'good', 'new', 'old']
-                        unique_basic = next((w for w in all_basics if w not in used_words), 'word')
-                        next_item = {'english': unique_basic, 'type': chosen_type, 'level': next_level}
-                        print(f"[WARNING] Could not generate unique word after 3 attempts, using fallback: {next_item['english']}")
+                        raise Exception(f"Failed to generate unique {chosen_type} for level {next_level} after 3 attempts. Used words: {used_words}")
                     
                     print(f"[DEBUG] Final next_item: {next_item}")
                     
