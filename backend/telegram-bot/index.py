@@ -12,6 +12,51 @@ from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
+def clean_gemini_json(text: str) -> str:
+    """Очищает ответ Gemini от markdown и фиксит невалидный JSON"""
+    # Удаляем markdown блоки
+    text = text.replace('```json', '').replace('```', '').strip()
+    
+    # Пытаемся найти JSON объект в тексте
+    # Ищем первую { и последнюю }
+    start_idx = text.find('{')
+    end_idx = text.rfind('}')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        text = text[start_idx:end_idx+1]
+    
+    # Убираем все переносы строк и лишние пробелы внутри JSON
+    # Это агрессивный подход, но работает для простых структур
+    text = ' '.join(text.split())
+    
+    return text.strip()
+
+def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
+    """Безопасный парсинг JSON с fallback на regex извлечение"""
+    try:
+        cleaned = clean_gemini_json(text)
+        return json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        print(f"[WARNING] JSON parse failed: {e}, trying regex extraction...")
+        
+        # Fallback: извлекаем поля через regex
+        result = fallback_fields.copy() if fallback_fields else {}
+        
+        # Извлекаем строковые поля: "key": "value"
+        string_pattern = r'"(\w+)"\s*:\s*"([^"]*)"'
+        for match in re.finditer(string_pattern, text):
+            key, value = match.groups()
+            result[key] = value
+        
+        # Извлекаем boolean поля: "key": true/false
+        bool_pattern = r'"(\w+)"\s*:\s*(true|false)'
+        for match in re.finditer(bool_pattern, text):
+            key, value = match.groups()
+            result[key] = value == 'true'
+        
+        print(f"[WARNING] Extracted fields via regex: {result}")
+        return result
+
 def get_db_connection():
     """Создает подключение к БД"""
     conn = psycopg2.connect(os.environ['DATABASE_URL'])
@@ -1589,8 +1634,7 @@ Rules:
                     with opener.open(req, timeout=30) as response:
                         gemini_result = json.loads(response.read().decode('utf-8'))
                         first_item_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                        first_item_text = first_item_text.replace('```json', '').replace('```', '').strip()
-                        first_item = json.loads(first_item_text)
+                        first_item = safe_json_parse(first_item_text, {'english': 'family', 'type': 'word', 'level': level})
                     
                     # Отправляем первый вопрос
                     emoji = '📖' if first_item.get('type') == 'word' else '💬'
@@ -2159,8 +2203,7 @@ Return ONLY JSON:
                     with opener.open(req, timeout=30) as response:
                         check_result = json.loads(response.read().decode('utf-8'))
                         check_text = check_result['candidates'][0]['content']['parts'][0]['text']
-                        check_text = check_text.replace('```json', '').replace('```', '').strip()
-                        check_data = json.loads(check_text)
+                        check_data = safe_json_parse(check_text, {'correct': False, 'expected': current_item['english']})
                     
                     is_correct = check_data.get('correct', False)
                     expected = check_data.get('expected', '')
@@ -2200,8 +2243,7 @@ Determine real level. Return ONLY JSON:
                         with opener.open(req, timeout=30) as response:
                             final_result = json.loads(response.read().decode('utf-8'))
                             final_text = final_result['candidates'][0]['content']['parts'][0]['text']
-                            final_text = final_text.replace('```json', '').replace('```', '').strip()
-                            final_data = json.loads(final_text)
+                            final_data = safe_json_parse(final_text, {'level': 'A2', 'reasoning': 'Базовый уровень'})
                         
                         actual_level = final_data.get('level', 'A1')
                         reasoning = final_data.get('reasoning', '')
@@ -2280,8 +2322,7 @@ Return ONLY valid JSON:
                     with opener.open(req, timeout=30) as response:
                         next_result = json.loads(response.read().decode('utf-8'))
                         next_text = next_result['candidates'][0]['content']['parts'][0]['text']
-                        next_text = next_text.replace('```json', '').replace('```', '').strip()
-                        next_item = json.loads(next_text)
+                        next_item = safe_json_parse(next_text, {'english': 'word', 'type': 'word', 'level': next_level})
                     
                     # Отправляем следующий вопрос
                     emoji = '📖' if next_item.get('type') == 'word' else '💬'
