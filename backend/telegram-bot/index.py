@@ -1410,7 +1410,7 @@ Return ONLY short JSON:
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.9 + (attempt * 0.05),
-                'maxOutputTokens': 150,
+                'maxOutputTokens': 300,
                 'topP': 0.95,
                 'topK': 50
             }
