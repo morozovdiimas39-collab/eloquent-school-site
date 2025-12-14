@@ -1595,6 +1595,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             chat_id = callback['message']['chat']['id']
             message_id = callback['message']['message_id']
             user = callback['from']
+            callback_id = callback['id']
+            
+            # КРИТИЧНО: Сразу отвечаем на callback чтобы Telegram не ретраил
+            token = os.environ['TELEGRAM_BOT_TOKEN']
+            answer_url = f'https://api.telegram.org/bot{token}/answerCallbackQuery'
+            answer_payload = json.dumps({'callback_query_id': callback_id}).encode('utf-8')
+            try:
+                answer_req = urllib.request.Request(answer_url, data=answer_payload, headers={'Content-Type': 'application/json'}, method='POST')
+                urllib.request.urlopen(answer_req, timeout=5)
+            except:
+                pass  # Не критично если не отвечено
             
             if data.startswith('goal_'):
                 goal_type = data.replace('goal_', '')
