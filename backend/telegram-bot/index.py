@@ -981,35 +981,46 @@ def download_telegram_file(file_id: str) -> bytes:
         return response.read()
 
 def speech_to_text(audio_data: bytes) -> str:
-    """Распознает речь через Yandex SpeechKit"""
-    # Force redeploy to get new YANDEX_CLOUD_API_KEY secret
-    api_key = os.environ.get('YANDEX_CLOUD_API_KEY')
-    folder_id = os.environ.get('YANDEX_CLOUD_FOLDER_ID')
+    """Распознает речь через OpenAI Whisper"""
+    openai_api_key = os.environ.get('OPENAI_API_KEY')
     
-    if not api_key or not folder_id:
-        raise Exception('Yandex Cloud credentials not configured')
+    if not openai_api_key:
+        raise Exception('OpenAI API key not configured')
     
-    url = 'https://stt.api.cloud.yandex.net/speech/v1/stt:recognize'
-    headers = {
-        'Authorization': f'Api-Key {api_key}'
-    }
-    params = {
-        'lang': 'en-US',
-        'folderId': folder_id,
-        'format': 'oggopus'
-    }
+    # Сохраняем audio_data во временный файл (Whisper требует файл)
+    with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_audio:
+        temp_audio.write(audio_data)
+        temp_audio_path = temp_audio.name
     
-    response = requests.post(
-        url,
-        headers=headers,
-        params=params,
-        data=audio_data,
-        timeout=30
-    )
-    response.raise_for_status()
+    try:
+        # Whisper API требует multipart/form-data
+        url = 'https://api.openai.com/v1/audio/transcriptions'
+        headers = {
+            'Authorization': f'Bearer {openai_api_key}'
+        }
+        
+        with open(temp_audio_path, 'rb') as audio_file:
+            files = {
+                'file': ('voice.ogg', audio_file, 'audio/ogg'),
+                'model': (None, 'whisper-1'),
+                'language': (None, 'en')
+            }
+            
+            response = requests.post(
+                url,
+                headers=headers,
+                files=files,
+                timeout=30
+            )
+        
+        response.raise_for_status()
+        result = response.json()
+        return result.get('text', '')
     
-    result = response.json()
-    return result.get('result', '')
+    finally:
+        # Удаляем временный файл
+        if os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
 
 def text_to_speech_openai(text: str) -> str:
     """Генерирует озвучку через OpenAI TTS с прокси и возвращает CDN URL"""
