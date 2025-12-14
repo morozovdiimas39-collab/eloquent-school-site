@@ -1121,58 +1121,46 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         
         print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
         
-        prompt = f'''Create a 2-week English learning plan (weeks {week_start}-{week_end}) with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
+        prompt = f'''Create a minimal English learning set. Return ONLY valid JSON, no markdown.
 
 Student: Level {language_level}, Topics: {topics_display}
-
-IMPORTANT: ALL words/phrases MUST be from these topics at {language_level} difficulty!
 
 {{
   "plan": [
     {{
-      "week": {week_start},
-      "focus": "Topic basics",
-      "conversation_topics": ["Topic1", "Topic2"],
+      "week": 1,
+      "focus": "Getting started",
+      "conversation_topics": ["{topics_display}"],
       "vocabulary": [
         {{"english": "word1", "russian": "слово1", "topic": "gaming"}},
-        ... (49 words total - 7 per day)
+        ... (5 words total)
       ],
       "phrases": [
         {{"english": "phrase1", "russian": "фраза1", "topic": "gaming"}},
-        ... (14 phrases total - 2 per day)
+        ... (5 phrases total)
       ],
       "expressions": [
         {{"english": "expression1", "russian": "выражение1", "context": "when..."}},
-        ... (7 expressions total - 1 per day)
+        {{"english": "expression2", "russian": "выражение2", "context": "when..."}}
       ],
-      "actions": ["Action1", "Action2"]
-    }},
-    {{
-      "week": {week_end},
-      ... (same structure)
+      "actions": ["Practice daily", "Review vocabulary"]
     }}
   ]
 }}
 
 Requirements:
-- Exactly 2 weeks (weeks {week_start} and {week_end})
-- 49 vocabulary words per week (7 per day) from topics: {topics_display}
-- 14 phrases per week (2 per day) from topics: {topics_display}
-- 7 expressions per week (1 per day) from topics: {topics_display}
-- 2 actions per week
+- Exactly 1 week
+- 5 vocabulary words from topics: {topics_display}
+- 5 phrases from topics: {topics_display}
+- 2 expressions
 - Difficulty level: {language_level}
-- ONLY valid JSON, no comments
-
-Example for Gaming + B1:
-vocabulary: [{{"english": "gameplay", "russian": "игровой процесс", "topic": "gaming"}}]
-phrases: [{{"english": "level up", "russian": "повысить уровень", "topic": "gaming"}}]
-expressions: [{{"english": "let\'s team up", "russian": "давай объединимся", "context": "inviting to play together"}}]'''
+- ONLY valid JSON, no comments'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 8000,
+                'maxOutputTokens': 1000,
                 'topP': 0.95,
                 'topK': 40
             }
@@ -1865,24 +1853,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             conn.close()
                             
                             # Форматируем сообщение
-                            plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА 2 НЕДЕЛИ\n\n"
+                            vocab = result['weeks'][0].get('vocabulary', [])
+                            phrases = result['weeks'][0].get('phrases', [])
+                            expressions = result['weeks'][0].get('expressions', [])
+                            
+                            plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
                             plan_message += f"🎯 Цель: {learning_goal}\n"
                             plan_message += f"📊 Уровень: {language_level}\n"
-                            plan_message += f"💡 Темы: {topics_display}\n"
-                            plan_message += f"📚 Всего материалов: {result['words_added']} слов и фраз\n\n"
-                            plan_message += "━━━━━━━━━━━━━━━━━━━\n\n"
-                            
-                            for week_data in result['weeks']:
-                                week_num = week_data.get('week', 1)
-                                focus = week_data.get('focus', 'Обучение')
-                                vocab = week_data.get('vocabulary', [])
-                                phrases = week_data.get('phrases', [])
-                                
-                                plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n"
-                                plan_message += f"📖 Слова: {len(vocab)} шт\n"
-                                plan_message += f"💭 Фразы: {len(phrases)} шт\n\n"
-                            
-                            plan_message += "❓ Тебе подходит этот план?"
+                            plan_message += f"💡 Темы: {topics_display}\n\n"
+                            plan_message += f"📖 Слова: {len(vocab)} шт\n"
+                            plan_message += f"💭 Фразы: {len(phrases)} шт\n"
+                            plan_message += f"✨ Выражения: {len(expressions)} шт\n\n"
+                            plan_message += "Начинаем практику!"
                             
                             send_telegram_message(
                                 chat_id,
