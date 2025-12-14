@@ -1626,7 +1626,12 @@ IMPORTANT:
                     
                     payload = {
                         'contents': [{'parts': [{'text': prompt}]}],
-                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
+                        'generationConfig': {
+                            'temperature': 0.9,  # Повышаем для разнообразия
+                            'maxOutputTokens': 200,
+                            'topP': 0.95,
+                            'topK': 40
+                        }
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
@@ -1644,7 +1649,12 @@ IMPORTANT:
                     with opener.open(req, timeout=30) as response:
                         gemini_result = json.loads(response.read().decode('utf-8'))
                         first_item_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        
+                        print(f"[DEBUG] Gemini generated first item (level={level}, type={first_chosen_type}): {first_item_text[:200]}")
+                        
                         first_item = safe_json_parse(first_item_text, {'english': 'family', 'type': 'word', 'level': level})
+                        
+                        print(f"[DEBUG] Parsed first_item: {first_item}")
                     
                     # Отправляем первый вопрос
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
@@ -2329,6 +2339,10 @@ Levels:
                     import random
                     chosen_type = random.choice(item_types)
                     
+                    # Собираем уже использованные слова
+                    used_words = [h['item'] for h in history]
+                    used_words_str = ', '.join(used_words)
+                    
                     next_prompt = f'''Generate ONE {chosen_type} for English level {next_level} testing.
 
 Type: {chosen_type}
@@ -2340,13 +2354,20 @@ Return ONLY valid JSON:
 {{"english": "{'word' if chosen_type == 'word' else 'phrase/expression'}", "type": "{chosen_type}", "level": "{next_level}"}}
 
 IMPORTANT: 
+- DO NOT USE these words (already used): {used_words_str}
+- Generate a DIFFERENT word/phrase each time
 - For B2+: use sophisticated vocabulary, idioms, collocations
 - For C1+: use advanced/academic vocabulary, complex idioms
 - For C2: use native-level expressions, subtle nuances'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': next_prompt}]}],
-                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
+                        'generationConfig': {
+                            'temperature': 0.9,  # Повышаем для разнообразия
+                            'maxOutputTokens': 200,
+                            'topP': 0.95,
+                            'topK': 40
+                        }
                     }
                     
                     req = urllib.request.Request(
@@ -2358,7 +2379,19 @@ IMPORTANT:
                     with opener.open(req, timeout=30) as response:
                         next_result = json.loads(response.read().decode('utf-8'))
                         next_text = next_result['candidates'][0]['content']['parts'][0]['text']
-                        next_item = safe_json_parse(next_text, {'english': 'word', 'type': 'word', 'level': next_level})
+                        
+                        print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}): {next_text[:200]}")
+                        
+                        # Fallback слова по уровням (чтобы не было "word")
+                        fallback_words = {
+                            'A1': 'cat', 'A2': 'travel', 'B1': 'experience', 
+                            'B2': 'perspective', 'C1': 'hypothesis', 'C2': 'resilience'
+                        }
+                        fallback_word = fallback_words.get(next_level, 'vocabulary')
+                        
+                        next_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
+                        
+                        print(f"[DEBUG] Parsed next_item: {next_item}")
                     
                     # Отправляем следующий вопрос
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
