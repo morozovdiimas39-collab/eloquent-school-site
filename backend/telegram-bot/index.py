@@ -1123,7 +1123,8 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         
         prompt = f'''Create a minimal English learning set. Return ONLY valid JSON, no markdown.
 
-Student: Level {language_level}, Topics: {topics_display}
+Student: Level {language_level}, Goal: {learning_goal}
+Topics for conversation practice: {topics_display}
 
 {{
   "plan": [
@@ -1132,11 +1133,11 @@ Student: Level {language_level}, Topics: {topics_display}
       "focus": "Getting started",
       "conversation_topics": ["{topics_display}"],
       "vocabulary": [
-        {{"english": "word1", "russian": "слово1", "topic": "gaming"}},
+        {{"english": "word1", "russian": "слово1"}},
         ... (5 words total)
       ],
       "phrases": [
-        {{"english": "phrase1", "russian": "фраза1", "topic": "gaming"}},
+        {{"english": "phrase1", "russian": "фраза1"}},
         ... (5 phrases total)
       ],
       "expressions": [
@@ -1150,10 +1151,11 @@ Student: Level {language_level}, Topics: {topics_display}
 
 Requirements:
 - Exactly 1 week
-- 5 vocabulary words from topics: {topics_display}
-- 5 phrases from topics: {topics_display}
-- 2 expressions
-- Difficulty level: {language_level}
+- 5 vocabulary words for level {language_level} that help achieve: {learning_goal}
+- 5 phrases for level {language_level} that help achieve: {learning_goal}
+- 2 common expressions for level {language_level}
+- Words/phrases should match student's level and goal, NOT topics
+- Topics ({topics_display}) are ONLY for conversation practice, NOT for vocabulary selection
 - ONLY valid JSON, no comments'''
         
         payload = {
