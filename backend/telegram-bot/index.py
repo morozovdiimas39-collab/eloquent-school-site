@@ -1271,19 +1271,108 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     Обработчик Telegram webhook - бот отвечает прямо в чате
     """
     method = event.get('httpMethod', 'POST')
+    path = event.get('path', '/')
+    query_params = event.get('queryStringParameters', {}) or {}
     
     if method == 'OPTIONS':
         return {
             'statusCode': 200,
             'headers': {
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Access-Control-Max-Age': '86400'
             },
             'body': '',
             'isBase64Encoded': False
         }
+    
+    # СПЕЦИАЛЬНЫЙ ЭНДПОИНТ: Очистка webhook и pending updates
+    # Вызов: GET https://your-function-url/?action=clear_webhook
+    if method == 'GET' and query_params.get('action') == 'clear_webhook':
+        try:
+            bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+            if not bot_token:
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'TELEGRAM_BOT_TOKEN not configured'}),
+                    'isBase64Encoded': False
+                }
+            
+            webhook_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+            
+            # 1. Получаем текущий статус
+            get_info_url = f'https://api.telegram.org/bot{bot_token}/getWebhookInfo'
+            with urllib.request.urlopen(get_info_url) as response:
+                webhook_info = json.loads(response.read().decode('utf-8'))
+            
+            pending_before = webhook_info.get('result', {}).get('pending_update_count', 0)
+            
+            # 2. Удаляем webhook с drop_pending_updates=true
+            delete_url = f'https://api.telegram.org/bot{bot_token}/deleteWebhook'
+            delete_payload = json.dumps({'drop_pending_updates': True}).encode('utf-8')
+            
+            req = urllib.request.Request(
+                delete_url,
+                data=delete_payload,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            
+            with urllib.request.urlopen(req) as response:
+                delete_result = json.loads(response.read().decode('utf-8'))
+            
+            # 3. Устанавливаем webhook заново
+            set_url = f'https://api.telegram.org/bot{bot_token}/setWebhook'
+            set_payload = json.dumps({
+                'url': webhook_url,
+                'drop_pending_updates': True,
+                'max_connections': 40,
+                'allowed_updates': ['message', 'callback_query', 'my_chat_member']
+            }).encode('utf-8')
+            
+            req = urllib.request.Request(
+                set_url,
+                data=set_payload,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            
+            with urllib.request.urlopen(req) as response:
+                set_result = json.loads(response.read().decode('utf-8'))
+            
+            # 4. Проверяем финальный статус
+            with urllib.request.urlopen(get_info_url) as response:
+                final_info = json.loads(response.read().decode('utf-8'))
+            
+            pending_after = final_info.get('result', {}).get('pending_update_count', 0)
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({
+                    'success': True,
+                    'webhook_url': webhook_url,
+                    'pending_updates_before': pending_before,
+                    'pending_updates_after': pending_after,
+                    'deleted_updates': pending_before - pending_after,
+                    'message': f'✅ Webhook очищен! Удалено {pending_before - pending_after} старых сообщений.'
+                }),
+                'isBase64Encoded': False
+            }
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to clear webhook: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            return {
+                'statusCode': 500,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': str(e)}),
+                'isBase64Encoded': False
+            }
     
     try:
         body = json.loads(event.get('body', '{}'))
