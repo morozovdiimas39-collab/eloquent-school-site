@@ -1853,30 +1853,40 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             conn.close()
                             
                             # Форматируем сообщение
-                            vocab = result['weeks'][0].get('vocabulary', [])
-                            phrases = result['weeks'][0].get('phrases', [])
-                            expressions = result['weeks'][0].get('expressions', [])
+                            print(f"[DEBUG] Formatting message, weeks count: {len(result.get('weeks', []))}")
                             
-                            plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
-                            plan_message += f"🎯 Цель: {learning_goal}\n"
-                            plan_message += f"📊 Уровень: {language_level}\n"
-                            plan_message += f"💡 Темы: {topics_display}\n\n"
-                            plan_message += f"📖 Слова: {len(vocab)} шт\n"
-                            plan_message += f"💭 Фразы: {len(phrases)} шт\n"
-                            plan_message += f"✨ Выражения: {len(expressions)} шт\n\n"
-                            plan_message += "Начинаем практику!"
-                            
-                            send_telegram_message(
-                                chat_id,
-                                plan_message,
-                                {
-                                    'inline_keyboard': [
-                                        [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                        [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                    ]
-                                },
-                                parse_mode=None
-                            )
+                            if not result.get('weeks') or len(result['weeks']) == 0:
+                                send_telegram_message(chat_id, '❌ План пустой. Попробуй /start', parse_mode=None)
+                            else:
+                                week_data = result['weeks'][0]
+                                vocab = week_data.get('vocabulary', [])
+                                phrases = week_data.get('phrases', [])
+                                expressions = week_data.get('expressions', [])
+                                
+                                print(f"[DEBUG] Week data: vocab={len(vocab)}, phrases={len(phrases)}, expr={len(expressions)}")
+                                
+                                plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
+                                plan_message += f"🎯 Цель: {learning_goal}\n"
+                                plan_message += f"📊 Уровень: {language_level}\n"
+                                plan_message += f"💡 Темы: {topics_display}\n\n"
+                                plan_message += f"📖 Слова: {len(vocab)} шт\n"
+                                plan_message += f"💭 Фразы: {len(phrases)} шт\n"
+                                plan_message += f"✨ Выражения: {len(expressions)} шт\n\n"
+                                plan_message += "Начинаем практику!"
+                                
+                                print(f"[DEBUG] Sending plan message to chat {chat_id}")
+                                send_telegram_message(
+                                    chat_id,
+                                    plan_message,
+                                    {
+                                        'inline_keyboard': [
+                                            [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                            [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                        ]
+                                    },
+                                    parse_mode=None
+                                )
+                                print(f"[DEBUG] Plan message sent successfully")
                     except Exception as e:
                         print(f"[ERROR] Failed to generate plan: {e}")
                         import traceback
