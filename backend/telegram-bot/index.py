@@ -2640,23 +2640,65 @@ Levels:
                         if timeline:
                             goal_text += f"\n⏰ Срок: {timeline}"
                         
-                        goal_text += "\n\nТеперь давай проверим твой уровень английского 📊\n\nКак думаешь, какой у тебя сейчас уровень?"
+                        goal_text += "\n\n⏳ Сейчас запущу адаптивный тест - он САМ определит твой уровень через вопросы..."
                         
-                        # Клавиатура с уровнями
-                        keyboard = {
-                            'inline_keyboard': [
-                                [{'text': 'A1 - Начинаю учить', 'callback_data': 'check_level_A1'}],
-                                [{'text': 'A2 - Базовые фразы', 'callback_data': 'check_level_A2'}],
-                                [{'text': 'B1 - Могу поддержать разговор', 'callback_data': 'check_level_B1'}],
-                                [{'text': 'B2 - Уверенно общаюсь', 'callback_data': 'check_level_B2'}],
-                                [{'text': 'C1 - Свободно владею', 'callback_data': 'check_level_C1'}]
-                            ]
-                        }
+                        send_telegram_message(chat_id, goal_text, parse_mode='HTML')
                         
-                        send_telegram_message(chat_id, goal_text, keyboard, parse_mode='HTML')
+                        # СРАЗУ НАЧИНАЕМ АДАПТИВНЫЙ ТЕСТ (БЕЗ ВЫБОРА УРОВНЯ!)
+                        # Сохраняем состояние - начинаем адаптивный тест
+                        conn = get_db_connection()
+                        cur = conn.cursor()
                         
-                        # Переводим в режим проверки уровня
-                        update_conversation_mode(user['id'], 'awaiting_level_selection')
+                        # Инициализируем тест: начинаем с A1
+                        test_state = json.dumps({
+                            'question_num': 0,
+                            'history': []
+                        }, ensure_ascii=False).replace("'", "''")
+                        
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET "
+                            f"conversation_mode = 'adaptive_level_test', "
+                            f"test_phrases = '{test_state}'::jsonb "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                        # Генерируем ПЕРВЫЙ вопрос через Gemini (начинаем с A1)
+                        try:
+                            first_item = generate_adaptive_question('A1', [])
+                            
+                            # Отправляем первый вопрос
+                            type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                            emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
+                            
+                            question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
+                            question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
+                            
+                            send_telegram_message(chat_id, question_message)
+                            
+                            # Обновляем состояние с текущим вопросом
+                            test_state = {
+                                'current_item': first_item,
+                                'question_num': 1,
+                                'history': []
+                            }
+                            
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                            cur.execute(
+                                f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
+                                f"WHERE telegram_id = {user['id']}"
+                            )
+                            cur.close()
+                            conn.close()
+                            
+                        except Exception as e:
+                            print(f"[ERROR] Failed to start adaptive test: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            send_telegram_message(chat_id, '❌ Ошибка запуска теста. Попробуй /start')
                 except Exception as e:
                     print(f"[ERROR] Failed to analyze goal: {e}")
                     send_telegram_message(chat_id, '❌ Не удалось проанализировать цель. Попробуй еще раз или напиши /start', parse_mode=None)
