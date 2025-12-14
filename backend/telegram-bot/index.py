@@ -2208,20 +2208,19 @@ IMPORTANT:
                     
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
-                    # Проверяем текущий ответ
-                    check_prompt = f'''Check if Russian translation is correct for English word/phrase.
+                    # Проверяем текущий ответ (КОРОТКИЙ промпт)
+                    check_prompt = f'''Check translation:
+English: {current_item["english"]}
+Student answer: {text}
 
-English word/phrase: {current_item["english"]}
-Student's Russian translation: {text}
+Return short JSON:
+{{"correct": true, "expected": "правильный_русский_перевод"}}
 
-Return ONLY valid JSON:
-{{"correct": true/false, "expected": "правильный перевод на РУССКОМ"}}  
-
-IMPORTANT: "expected" field MUST be in RUSSIAN (not English!)'''
+IMPORTANT: "expected" must be RUSSIAN!'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': check_prompt}]}],
-                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 200}
+                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 80}
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
@@ -2407,72 +2406,78 @@ Levels:
                     used_words = [h['item'] for h in history]
                     used_words_str = ', '.join(used_words)
                     
-                    next_prompt = f'''You are testing English level. Generate ONE {chosen_type} for level {next_level}.
+                    # Пытаемся сгенерировать уникальное слово (максимум 3 попытки)
+                    next_item = None
+                    for attempt in range(3):
+                        # Генерируем НОВЫЙ запрос для каждой попытки (иначе HTTP 400)
+                        next_prompt = f'''You are testing English level. Generate ONE {chosen_type} for level {next_level}.
 
 CRITICAL: You MUST NOT use any of these already-used words: {used_words_str}
 
 Type: {chosen_type}
-- word: single vocabulary word (e.g. "achieve", "perspective", "curious")
-- phrase: common phrase (e.g. "take care", "piece of cake", "hang out")
-- expression: idiom/collocation (e.g. "break the ice", "hit the nail on the head")
+- word: single vocabulary word (e.g. "achieve", "curious")
+- phrase: common phrase (e.g. "take care", "hang out")
+- expression: idiom (e.g. "break the ice")
 
 Level guidelines:
-- A1: basic words (food, family, colors)
-- A2: everyday words (travel, hobby, weather)
-- B1: abstract words (experience, decision, opportunity)
-- B2+: sophisticated vocabulary, idioms, collocations
-- C1+: advanced/academic vocabulary, complex idioms
-- C2: native-level expressions, subtle nuances
+- A1: basic words (food, colors)
+- A2: everyday words (hobby, weather)
+- B1: abstract words (decision, opportunity)
+- B2+: sophisticated vocabulary, collocations
+- C1+: advanced vocabulary, complex idioms
+- C2: native-level expressions
 
-Return ONLY valid JSON (no markdown):
-{{"english": "unique_{chosen_type}_here", "type": "{chosen_type}", "level": "{next_level}"}}'''
-                    
-                    payload = {
-                        'contents': [{'parts': [{'text': next_prompt}]}],
-                        'generationConfig': {
-                            'temperature': 0.85,  # Высокая температура для разнообразия
-                            'maxOutputTokens': 200,
-                            'topP': 0.95,
-                            'topK': 50
-                        }
-                    }
-                    
-                    req = urllib.request.Request(
-                        gemini_url,
-                        data=json.dumps(payload).encode('utf-8'),
-                        headers={'Content-Type': 'application/json'}
-                    )
-                    
-                    # Пытаемся сгенерировать уникальное слово (максимум 3 попытки)
-                    next_item = None
-                    for attempt in range(3):
-                        with opener.open(req, timeout=30) as response:
-                            next_result = json.loads(response.read().decode('utf-8'))
-                            next_text = next_result['candidates'][0]['content']['parts'][0]['text']
-                            
-                            print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}, attempt={attempt+1}): {next_text[:200]}")
-                            
-                            # Fallback слова по уровням (чтобы не было "word")
-                            fallback_words = {
-                                'A1': 'cat', 'A2': 'travel', 'B1': 'experience', 
-                                'B2': 'perspective', 'C1': 'hypothesis', 'C2': 'resilience'
+Return short JSON:
+{{"english": "word_here", "type": "{chosen_type}", "level": "{next_level}"}}'''
+                        
+                        payload = {
+                            'contents': [{'parts': [{'text': next_prompt}]}],
+                            'generationConfig': {
+                                'temperature': 0.9 + (attempt * 0.05),  # Увеличиваем для каждой попытки
+                                'maxOutputTokens': 100,  # Короче - меньше обрывов
+                                'topP': 0.95,
+                                'topK': 50
                             }
-                            fallback_word = fallback_words.get(next_level, 'vocabulary')
-                            
-                            candidate_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
-                            
-                            # Проверяем что слово не повторяется
-                            if candidate_item['english'] not in used_words:
-                                next_item = candidate_item
-                                print(f"[DEBUG] Accepted unique word: {next_item['english']}")
-                                break
-                            else:
-                                print(f"[WARNING] Word '{candidate_item['english']}' already used, retrying...")
+                        }
+                        
+                        req = urllib.request.Request(
+                            gemini_url,
+                            data=json.dumps(payload).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        
+                        try:
+                            with opener.open(req, timeout=30) as response:
+                                next_result = json.loads(response.read().decode('utf-8'))
+                                next_text = next_result['candidates'][0]['content']['parts'][0]['text']
+                                
+                                print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}, attempt={attempt+1}): {next_text[:200]}")
+                                
+                                # Fallback слова по уровням (НО ПРОВЕРЯЕМ ЧТО НЕ ПОВТОРЯЮТСЯ)
+                                all_fallbacks = ['book', 'home', 'time', 'work', 'life', 'world', 'day', 'night', 'friend', 'teacher']
+                                fallback_word = [w for w in all_fallbacks if w not in used_words][0] if any(w not in used_words for w in all_fallbacks) else 'new'
+                                
+                                candidate_item = safe_json_parse(next_text, {'english': fallback_word, 'type': chosen_type, 'level': next_level})
+                                
+                                # Проверяем что слово не повторяется
+                                if candidate_item['english'] not in used_words:
+                                    next_item = candidate_item
+                                    print(f"[DEBUG] Accepted unique word: {next_item['english']}")
+                                    break
+                                else:
+                                    print(f"[WARNING] Word '{candidate_item['english']}' already used, retrying...")
+                        except Exception as e:
+                            print(f"[ERROR] Gemini request attempt {attempt+1} failed: {e}")
+                            if attempt == 2:  # Последняя попытка
+                                raise
                     
-                    # Если после 3 попыток не получили уникальное слово - используем последний результат
+                    # Если после 3 попыток не получили уникальное слово - используем fallback
                     if not next_item:
-                        next_item = candidate_item
-                        print(f"[WARNING] Could not generate unique word after 3 attempts, using: {next_item['english']}")
+                        # Берем уникальное слово из списка базовых
+                        all_basics = ['home', 'book', 'time', 'work', 'life', 'world', 'help', 'friend', 'food', 'water', 'love', 'happy', 'good', 'new', 'old']
+                        unique_basic = next((w for w in all_basics if w not in used_words), 'word')
+                        next_item = {'english': unique_basic, 'type': chosen_type, 'level': next_level}
+                        print(f"[WARNING] Could not generate unique word after 3 attempts, using fallback: {next_item['english']}")
                     
                     print(f"[DEBUG] Final next_item: {next_item}")
                     
