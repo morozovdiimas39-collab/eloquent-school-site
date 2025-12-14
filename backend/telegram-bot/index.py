@@ -793,7 +793,7 @@ IMPORTANT:
             print(f"[DEBUG] Failed to list models: {e}")
     
     # Подготавливаем запрос к Gemini REST API
-    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
     
     payload = {
         'contents': contents,
@@ -1110,7 +1110,7 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         if not proxy_url:
             proxy_url = os.environ.get('PROXY_URL', '')
         
-        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
@@ -1607,7 +1607,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     if not proxy_url:
                         proxy_url = os.environ.get('PROXY_URL', '')
                     
-                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
                     # Первый вопрос - начинаем с заявленного уровня
                     # Для высоких уровней используем фразы и выражения
@@ -2206,7 +2206,7 @@ IMPORTANT:
                     if not proxy_url:
                         proxy_url = os.environ.get('PROXY_URL', '')
                     
-                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
                     # Проверяем текущий ответ (КОРОТКИЙ промпт)
                     check_prompt = f'''Check translation:
