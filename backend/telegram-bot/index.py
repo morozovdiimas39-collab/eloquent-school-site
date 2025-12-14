@@ -1047,6 +1047,225 @@ def text_to_speech(text: str) -> str:
     """Генерирует озвучку через OpenAI TTS (было Yandex)"""
     return text_to_speech_openai(text)
 
+def generate_full_monthly_plan(student_id: int, learning_goal: str, language_level: str, preferred_topics: List[Dict[str, str]]) -> Dict[str, Any]:
+    """
+    Генерирует ПОЛНЫЙ месячный план обучения со всеми материалами:
+    - Темы для разговоров на 4 недели
+    - Слова, фразы, устойчивые выражения для каждой недели
+    - Конкретные действия на каждую неделю
+    """
+    try:
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+        
+        topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
+        
+        prompt = f'''Ты — опытный методист английского языка. Составь ПОЛНЫЙ персональный план обучения на месяц.
+
+Данные студента:
+- Цель: {learning_goal}
+- Уровень: {language_level}
+- Интересы: {topics_display}
+
+Твоя задача: создать подробный план на 4 недели с КОНКРЕТНЫМИ материалами для изучения.
+
+Для КАЖДОЙ недели укажи:
+1. Фокус недели (на чем сосредоточиться)
+2. Темы для разговоров (2-3 темы)
+3. Слова для изучения (5-7 слов/фраз)
+4. Устойчивые выражения (2-3 фразы)
+5. Конкретные действия (что делать каждый день)
+
+Формат ответа (только JSON, без markdown):
+{{
+  "plan": [
+    {{
+      "week": 1,
+      "focus": "Базовая лексика по теме Gaming",
+      "conversation_topics": ["Любимые игры", "Игровой процесс", "Онлайн-команды"],
+      "vocabulary": [
+        {{"english": "gameplay", "russian": "игровой процесс"}},
+        {{"english": "defeat", "russian": "поражение"}},
+        {{"english": "challenge", "russian": "испытание"}},
+        {{"english": "strategy", "russian": "стратегия"}},
+        {{"english": "teammate", "russian": "товарищ по команде"}}
+      ],
+      "phrases": [
+        {{"english": "I'm into", "russian": "Я увлекаюсь"}},
+        {{"english": "It depends on", "russian": "Это зависит от"}},
+        {{"english": "I'd rather", "russian": "Я бы предпочел"}}
+      ],
+      "actions": [
+        "Практика в диалогах 15 мин/день",
+        "Использовать новые слова в сообщениях",
+        "Голосовые сообщения 2-3 раза в неделю"
+      ]
+    }}
+  ]
+}}
+
+КРИТИЧНО:
+- plan = массив из 4 недель
+- Слова и фразы должны быть ПРАКТИЧНЫМИ для реальных разговоров
+- Темы разговоров связаны с интересами студента ({topics_display})
+- Vocabulary - 5-7 слов уровня {language_level}
+- Phrases - 2-3 устойчивых выражения
+- Actions - конкретные действия (2-3 пункта)
+
+Отвечай ТОЛЬКО валидным JSON без комментариев.'''
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 3000}
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with opener.open(req, timeout=45) as response:
+            gemini_result = json.loads(response.read().decode('utf-8'))
+            plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+            plan_text = plan_text.replace('```json', '').replace('```', '').strip()
+            plan_data = json.loads(plan_text)
+            plan_weeks = plan_data.get('plan', [])
+        
+        if not plan_weeks:
+            return {'success': False, 'error': 'Empty plan generated'}
+        
+        # Сохраняем ВСЕ слова и фразы в БД
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        total_words_added = 0
+        for week_data in plan_weeks:
+            # Добавляем vocabulary
+            for word_data in week_data.get('vocabulary', []):
+                english = word_data['english'].strip().lower()
+                russian = word_data['russian'].strip()
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                )
+                total_words_added += 1
+            
+            # Добавляем phrases
+            for phrase_data in week_data.get('phrases', []):
+                english = phrase_data['english'].strip().lower()
+                russian = phrase_data['russian'].strip()
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                )
+                total_words_added += 1
+        
+        # Сохраняем сам план в БД (в поле learning_plan как JSONB)
+        plan_json = json.dumps(plan_weeks, ensure_ascii=False).replace("'", "''")
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET "
+            f"learning_plan = '{plan_json}'::jsonb "
+            f"WHERE telegram_id = {student_id}"
+        )
+        
+        cur.close()
+        conn.close()
+        
+        # Форматируем сообщение с планом для пользователя
+        plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА МЕСЯЦ\n\n"
+        plan_message += f"🎯 Цель: {learning_goal}\n"
+        plan_message += f"📊 Уровень: {language_level}\n"
+        plan_message += f"💡 Темы: {topics_display}\n"
+        plan_message += f"📚 Всего материалов: {total_words_added} слов и фраз\n\n"
+        plan_message += "━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        for week_data in plan_weeks:
+            week_num = week_data.get('week', 1)
+            focus = week_data.get('focus', 'Обучение')
+            topics = week_data.get('conversation_topics', [])
+            vocab = week_data.get('vocabulary', [])
+            phrases = week_data.get('phrases', [])
+            actions = week_data.get('actions', [])
+            
+            plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n\n"
+            
+            if topics:
+                plan_message += "💬 Темы для разговоров:\n"
+                for topic in topics:
+                    plan_message += f"  • {topic}\n"
+                plan_message += "\n"
+            
+            if vocab:
+                plan_message += "📖 Слова:\n"
+                for word in vocab[:5]:  # Показываем первые 5
+                    plan_message += f"  • {word['english']} — {word['russian']}\n"
+                plan_message += "\n"
+            
+            if phrases:
+                plan_message += "💭 Фразы:\n"
+                for phrase in phrases:
+                    plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
+                plan_message += "\n"
+            
+            if actions:
+                plan_message += "✅ Действия:\n"
+                for action in actions:
+                    plan_message += f"  • {action}\n"
+            
+            plan_message += "\n━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        plan_message += "❓ Тебе подходит этот план?"
+        
+        return {
+            'success': True,
+            'plan_message': plan_message,
+            'plan_data': plan_weeks,
+            'words_count': total_words_added
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to generate monthly plan: {e}")
+        import traceback
+        traceback.print_exc()
+        return {'success': False, 'error': str(e)}
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
@@ -1159,36 +1378,112 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('check_level_'):
                 level = data.replace('check_level_', '')
                 
-                # Генерируем проверочные вопросы для уровня
-                level_questions = {
-                    'A1': "What is your name? Where do you live?",
-                    'A2': "Tell me about your typical day. What do you usually do in the morning?",
-                    'B1': "What are your hobbies? Why do you enjoy them?",
-                    'B2': "Describe a memorable experience from your past. What made it special?",
-                    'C1': "What's your opinion on the impact of technology on modern society?"
-                }
-                
-                question = level_questions.get(level, level_questions['A2'])
-                
-                edit_telegram_message(
-                    chat_id,
-                    message_id,
-                    f'Отлично! Давай проверим уровень {level} 📝\n\n'
-                    f'Ответь на вопрос на английском:\n\n'
-                    f'<b>{question}</b>',
-                )
-                
-                # Сохраняем выбранный уровень для проверки
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(
-                    f"UPDATE {SCHEMA}.users SET "
-                    f"conversation_mode = 'checking_level_{level}', "
-                    f"language_level = '{level}' "
-                    f"WHERE telegram_id = {user['id']}"
-                )
-                cur.close()
-                conn.close()
+                # Генерируем 5 фраз для перевода через Gemini
+                try:
+                    api_key = os.environ['GEMINI_API_KEY']
+                    proxy_id, proxy_url = get_active_proxy_from_db()
+                    if not proxy_url:
+                        proxy_url = os.environ.get('PROXY_URL', '')
+                    
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                    
+                    prompt = f'''Ты — методист английского языка. Студент выбрал уровень {level}.
+
+Твоя задача: составить 5 фраз/предложений на английском для проверки уровня {level}.
+
+Требования:
+- Фразы должны соответствовать уровню {level}
+- Каждая фраза — это законченная мысль (не отдельные слова!)
+- Фразы должны быть разнообразными (не только про одну тему)
+- Студент будет переводить их на русский
+
+Формат ответа (только JSON, без markdown):
+{{
+  "phrases": [
+    "English phrase 1",
+    "English phrase 2",
+    "English phrase 3",
+    "English phrase 4",
+    "English phrase 5"
+  ]
+}}
+
+ВАЖНО: Отвечай ТОЛЬКО валидным JSON.'''
+                    
+                    payload = {
+                        'contents': [{'parts': [{'text': prompt}]}],
+                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 800}
+                    }
+                    
+                    proxy_handler = urllib.request.ProxyHandler({
+                        'http': f'http://{proxy_url}',
+                        'https': f'http://{proxy_url}'
+                    })
+                    opener = urllib.request.build_opener(proxy_handler)
+                    
+                    req = urllib.request.Request(
+                        gemini_url,
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    
+                    with opener.open(req, timeout=30) as response:
+                        gemini_result = json.loads(response.read().decode('utf-8'))
+                        phrases_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        phrases_text = phrases_text.replace('```json', '').replace('```', '').strip()
+                        phrases_data = json.loads(phrases_text)
+                        phrases_list = phrases_data.get('phrases', [])
+                    
+                    if len(phrases_list) < 5:
+                        raise Exception('Got less than 5 phrases')
+                    
+                    # Форматируем тест
+                    test_message = f'Отлично! Давай проверим уровень {level} 📝\n\n'
+                    test_message += 'Переведи эти фразы на русский:\n\n'
+                    for i, phrase in enumerate(phrases_list, 1):
+                        test_message += f'{i}. <b>{phrase}</b>\n'
+                    test_message += '\nОтправь переводы списком (каждый с новой строки)'
+                    
+                    edit_telegram_message(chat_id, message_id, test_message)
+                    
+                    # Сохраняем фразы и переводим в режим проверки
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    phrases_json = json.dumps(phrases_list, ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'checking_level_{level}', "
+                        f"language_level = '{level}', "
+                        f"test_phrases = '{phrases_json}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                except Exception as e:
+                    print(f"[ERROR] Failed to generate level test: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
+                    # Fallback - используем простой текстовый вопрос
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        f'Отлично! Давай проверим уровень {level} 📝\n\n'
+                        f'Напиши несколько предложений на английском о себе или своих увлечениях.'
+                    )
+                    
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'checking_level_{level}', "
+                        f"language_level = '{level}' "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
             
             elif data.startswith('mode_'):
                 mode = data.replace('mode_', '')
@@ -1233,6 +1528,128 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             send_telegram_message(chat_id, exercise_text)
                     else:
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.')
+            
+            elif data.startswith('topic_'):
+                topic_type = data.replace('topic_', '')
+                
+                topic_texts = {
+                    'gaming': '🎮 Игры',
+                    'it': '💻 IT и технологии',
+                    'marketing': '📊 Маркетинг',
+                    'travel': '✈️ Путешествия',
+                    'sport': '⚽ Спорт',
+                    'music': '🎵 Музыка',
+                    'movies': '🎬 Фильмы',
+                    'books': '📚 Книги',
+                    'food': '🍴 Еда и кулинария',
+                    'business': '💼 Бизнес',
+                    'custom': '✍️ Свой вариант'
+                }
+                
+                if topic_type == 'custom':
+                    # Пользователь хочет ввести свои интересы
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        '✍️ Отлично! Напиши своими словами:\n\n• Чем ты увлекаешься?\n• Кем работаешь?\n• Что тебе интересно?'
+                    )
+                    # Переводим в режим awaiting_topics
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_topics' WHERE telegram_id = {user['id']}")
+                    cur.close()
+                    conn.close()
+                else:
+                    # Используем готовую тему
+                    selected_topic = topic_texts.get(topic_type, '💡 Интересы')
+                    
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Подготавливаю персональный план обучения на месяц...'
+                    )
+                    
+                    # Сохраняем тему и запускаем генерацию плана
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    topic_json = json.dumps([{'topic': selected_topic.split()[1], 'emoji': selected_topic.split()[0]}], ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"preferred_topics = '{topic_json}'::jsonb, "
+                        f"conversation_mode = 'generating_plan' "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    
+                    # Получаем данные для генерации плана
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    row = cur.fetchone()
+                    learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
+                    language_level = row[1] if row and row[1] else 'A1'
+                    preferred_topics = row[2] if row and row[2] else []
+                    
+                    cur.close()
+                    conn.close()
+                    
+                    # Генерируем план асинхронно (отправим отдельным сообщением)
+                    try:
+                        # Вызываем генерацию плана
+                        plan_result = generate_full_monthly_plan(user['id'], learning_goal, language_level, preferred_topics)
+                        
+                        if plan_result.get('success'):
+                            send_telegram_message(
+                                chat_id,
+                                plan_result['plan_message'],
+                                {
+                                    'inline_keyboard': [
+                                        [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                        [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                    ]
+                                },
+                                parse_mode=None
+                            )
+                        else:
+                            send_telegram_message(
+                                chat_id,
+                                f'❌ Не удалось сгенерировать план: {plan_result.get("error", "Unknown error")}\n\nПопробуй еще раз через /start',
+                                parse_mode=None
+                            )
+                    except Exception as e:
+                        print(f"[ERROR] Failed to generate plan: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        send_telegram_message(
+                            chat_id,
+                            '❌ Произошла ошибка при генерации плана. Попробуй еще раз через /start',
+                            parse_mode=None
+                        )
+            
+            elif data == 'confirm_plan':
+                # Пользователь согласен с планом - стартуем обучение
+                edit_telegram_message(
+                    chat_id,
+                    message_id,
+                    '🚀 Отлично! Начинаем обучение!\n\nПросто напиши мне что-нибудь на английском или используй кнопки внизу 👇'
+                )
+                
+                # Переключаем в режим диалога
+                update_conversation_mode(user['id'], 'dialog')
+                send_telegram_message(chat_id, '💬 Режим диалога активен!', get_reply_keyboard(), parse_mode=None)
+            
+            elif data == 'edit_plan':
+                # Пользователь хочет изменить план
+                edit_telegram_message(
+                    chat_id,
+                    message_id,
+                    '✏️ Напиши что бы ты хотел изменить в плане:\n\n• Другие темы?\n• Больше/меньше слов?\n• Другой подход к обучению?'
+                )
+                
+                # Переводим в режим корректировки плана
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'editing_plan' WHERE telegram_id = {user['id']}")
+                cur.close()
+                conn.close()
             
             return {
                 'statusCode': 200,
@@ -1493,68 +1910,163 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             language_level = existing_user.get('language_level', 'A1')
             used_word_ids = []  # Инициализируем для использования в статистике
             
-            # Проверяем - проверяем ли уровень пользователя
+            # Проверяем - проверяем ли уровень пользователя (тест с переводами)
             if conversation_mode.startswith('checking_level_'):
                 claimed_level = conversation_mode.replace('checking_level_', '')
                 
-                # Отправляем ответ в Gemini для проверки уровня
-                send_telegram_message(chat_id, '⏳ Анализирую твой ответ...', parse_mode=None)
+                # Получаем сохраненные фразы для проверки
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
                 
-                try:
-                    webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
-                    response = requests.post(
-                        webapp_api_url,
-                        json={
-                            'action': 'check_level',
-                            'claimed_level': claimed_level,
-                            'answer': text
-                        },
-                        timeout=30
-                    )
-                    result = response.json()
+                test_phrases = row[0] if row and row[0] else None
+                
+                if not test_phrases:
+                    # Если нет фраз - используем старый метод (fallback)
+                    send_telegram_message(chat_id, '⏳ Анализирую твой ответ...', parse_mode=None)
                     
-                    if 'error' in result:
-                        send_telegram_message(chat_id, f'❌ Ошибка: {result["error"]}', parse_mode=None)
-                    else:
+                    try:
+                        webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                        response = requests.post(
+                            webapp_api_url,
+                            json={
+                                'action': 'check_level',
+                                'claimed_level': claimed_level,
+                                'answer': text
+                            },
+                            timeout=30
+                        )
+                        result = response.json()
+                        
+                        if 'error' in result:
+                            send_telegram_message(chat_id, f'❌ Ошибка: {result["error"]}', parse_mode=None)
+                            return {
+                                'statusCode': 200,
+                                'headers': {'Content-Type': 'application/json'},
+                                'body': json.dumps({'ok': True}),
+                                'isBase64Encoded': False
+                            }
+                        
+                        actual_level = result.get('actual_level', claimed_level)
+                        
+                    except Exception as e:
+                        print(f"[ERROR] Failed to check level: {e}")
+                        actual_level = claimed_level
+                else:
+                    # Проверяем переводы через Gemini
+                    send_telegram_message(chat_id, '⏳ Проверяю переводы...', parse_mode=None)
+                    
+                    try:
+                        api_key = os.environ['GEMINI_API_KEY']
+                        proxy_id, proxy_url = get_active_proxy_from_db()
+                        if not proxy_url:
+                            proxy_url = os.environ.get('PROXY_URL', '')
+                        
+                        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                        
+                        phrases_str = '\n'.join([f"{i+1}. {p}" for i, p in enumerate(test_phrases)])
+                        
+                        prompt = f'''Ты — эксперт по оценке уровня английского языка.
+
+Студент утверждает что его уровень: {claimed_level}
+
+Я дал ему 5 фраз на английском для перевода на русский:
+{phrases_str}
+
+Его переводы:
+{text}
+
+Твоя задача: определить РЕАЛЬНЫЙ уровень студента по качеству переводов.
+
+Критерии:
+- A1: Очень слабый перевод, много ошибок, не понимает базовых слов
+- A2: Перевод с ошибками, понимает базовые слова но путается в деталях
+- B1: Хороший перевод, понимает смысл, небольшие неточности
+- B2: Отличный перевод, точный смысл, минимум ошибок
+- C1: Идеальный перевод, все нюансы переданы
+
+Формат ответа (только JSON, без markdown):
+{{
+  "actual_level": "A1/A2/B1/B2/C1",
+  "is_correct": true/false,
+  "reasoning": "Краткое объяснение на русском"
+}}
+
+ВАЖНО:
+- actual_level = реальный уровень по переводам
+- is_correct = совпадает ли с {claimed_level} (±1 уровень считается правильным)
+- Отвечай ТОЛЬКО валидным JSON.'''
+                        
+                        payload = {
+                            'contents': [{'parts': [{'text': prompt}]}],
+                            'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 500}
+                        }
+                        
+                        proxy_handler = urllib.request.ProxyHandler({
+                            'http': f'http://{proxy_url}',
+                            'https': f'http://{proxy_url}'
+                        })
+                        opener = urllib.request.build_opener(proxy_handler)
+                        
+                        req = urllib.request.Request(
+                            gemini_url,
+                            data=json.dumps(payload).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        
+                        with opener.open(req, timeout=30) as response:
+                            gemini_result = json.loads(response.read().decode('utf-8'))
+                            result_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                            result_text = result_text.replace('```json', '').replace('```', '').strip()
+                            result = json.loads(result_text)
+                        
                         actual_level = result.get('actual_level', claimed_level)
                         is_correct = result.get('is_correct', True)
                         
-                        if is_correct:
-                            response_text = f"✅ Отлично! Твой уровень действительно {actual_level}\n\n"
-                        else:
-                            response_text = f"📊 Я оценил твой уровень как {actual_level}\n\n"
-                        
-                        response_text += "Расскажи мне о себе:\n\n• Чем ты увлекаешься?\n• Кем работаешь?\n• Что тебе интересно?\n\nМы будем разговаривать на эти темы 💬"
-                        
-                        # Кнопки с интересами
-                        topics_keyboard = {
-                            'inline_keyboard': [
-                                [{'text': '🎮 Игры', 'callback_data': 'topic_gaming'}, {'text': '💻 IT', 'callback_data': 'topic_it'}],
-                                [{'text': '📊 Маркетинг', 'callback_data': 'topic_marketing'}, {'text': '✈️ Путешествия', 'callback_data': 'topic_travel'}],
-                                [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
-                                [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
-                                [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
-                                [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}]
-                            ]
-                        }
-                        
-                        send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode=None)
-                        
-                        # Обновляем уровень и переводим в режим выбора тем
-                        conn = get_db_connection()
-                        cur = conn.cursor()
-                        cur.execute(
-                            f"UPDATE {SCHEMA}.users SET "
-                            f"language_level = '{actual_level}', "
-                            f"conversation_mode = 'awaiting_topics' "
-                            f"WHERE telegram_id = {user['id']}"
-                        )
-                        cur.close()
-                        conn.close()
-                        
-                except Exception as e:
-                    print(f"[ERROR] Failed to check level: {e}")
-                    send_telegram_message(chat_id, '❌ Не удалось проверить уровень. Попробуй /start', parse_mode=None)
+                    except Exception as e:
+                        print(f"[ERROR] Failed to check translations: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        actual_level = claimed_level
+                        is_correct = True
+                
+                # Показываем результат и просим выбрать интересы
+                if is_correct:
+                    response_text = f"✅ Отлично! Твой уровень действительно {actual_level}\n\n"
+                else:
+                    response_text = f"📊 Я оценил твой уровень как {actual_level}\n\n"
+                
+                response_text += "Теперь выбери темы, которые тебе интересны:\n\n💡 Мы будем разговаривать на эти темы!"
+                
+                # Кнопки с интересами
+                topics_keyboard = {
+                    'inline_keyboard': [
+                        [{'text': '🎮 Игры', 'callback_data': 'topic_gaming'}, {'text': '💻 IT', 'callback_data': 'topic_it'}],
+                        [{'text': '📊 Маркетинг', 'callback_data': 'topic_marketing'}, {'text': '✈️ Путешествия', 'callback_data': 'topic_travel'}],
+                        [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
+                        [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
+                        [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
+                        [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}]
+                    ]
+                }
+                
+                send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode=None)
+                
+                # Обновляем уровень и очищаем test_phrases
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET "
+                    f"language_level = '{actual_level}', "
+                    f"conversation_mode = 'awaiting_topic_selection', "
+                    f"test_phrases = NULL "
+                    f"WHERE telegram_id = {user['id']}"
+                )
+                cur.close()
+                conn.close()
                 
                 return {
                     'statusCode': 200,
@@ -1642,10 +2154,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'isBase64Encoded': False
                 }
             
-            # Проверяем - ждем ли мы описание интересов/тем от пользователя
+            # Проверяем - ждем ли мы описание интересов/тем от пользователя (свой вариант)
             elif conversation_mode == 'awaiting_topics':
-                # Пользователь описал свои интересы - парсим через Gemini и сохраняем
-                send_telegram_message(chat_id, '⏳ Анализирую твои интересы и подбираю слова...', parse_mode=None)
+                # Пользователь описал свои интересы - парсим через Gemini, генерируем ПОЛНЫЙ ПЛАН
+                send_telegram_message(chat_id, '⏳ Анализирую твои интересы и готовлю полный план обучения на месяц...', parse_mode=None)
                 
                 try:
                     # Парсим интересы через Gemini
@@ -1710,127 +2222,102 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"WHERE telegram_id = {user['id']}"
                     )
                     
-                    # Получаем цель и уровень для генерации слов
-                    cur.execute(f"SELECT learning_goal, language_level FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    # Получаем цель и уровень для генерации плана
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
+                    preferred_topics = row[2] if row and row[2] else topics_list
                     
                     cur.close()
                     conn.close()
                     
-                    # Генерируем персональные слова через webapp-api
-                    webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
-                    words_response = requests.post(
-                        webapp_api_url,
-                        json={
-                            'action': 'generate_personalized_words',
-                            'student_id': user['id'],
-                            'learning_goal': learning_goal,
-                            'language_level': language_level,
-                            'count': 7
-                        },
-                        timeout=30
-                    )
-                    words_result = words_response.json()
+                    # Генерируем ПОЛНЫЙ МЕСЯЧНЫЙ ПЛАН с материалами
+                    plan_result = generate_full_monthly_plan(user['id'], learning_goal, language_level, preferred_topics)
                     
-                    # Генерируем план обучения через Gemini
-                    topics_display = ', '.join([f"{t['emoji']} {t['topic']}" for t in topics_list[:5]])
-                    
-                    plan_prompt = f'''Ты — методист английского языка. Составь персональный план обучения для студента.
-
-Данные студента:
-- Цель: {learning_goal}
-- Уровень: {language_level}
-- Интересы: {topics_display}
-
-Твоя задача: составить понятный план обучения на 3-4 недели с конкретными действиями.
-
-Формат ответа (только JSON, без markdown):
-{{
-  "plan": [
-    {{
-      "week": 1,
-      "focus": "Базовая лексика",
-      "actions": ["Учим 7 слов по теме Gaming", "Практика в диалогах 15 мин/день"]
-    }},
-    {{
-      "week": 2,
-      "focus": "Простые фразы",
-      "actions": ["Составляем предложения", "Голосовые сообщения"]
-    }}
-  ]
-}}
-
-ВАЖНО:
-- plan = массив из 3-4 недель
-- week = номер недели
-- focus = на чем фокус (2-4 слова)
-- actions = конкретные действия (2-3 пункта по 3-5 слов)
-
-Отвечай ТОЛЬКО валидным JSON.'''
-                    
-                    plan_payload = {
-                        'contents': [{'parts': [{'text': plan_prompt}]}],
-                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 1000}
-                    }
-                    
-                    plan_req = urllib.request.Request(
-                        gemini_url,
-                        data=json.dumps(plan_payload).encode('utf-8'),
-                        headers={'Content-Type': 'application/json'}
-                    )
-                    
-                    with opener.open(plan_req, timeout=30) as plan_response:
-                        plan_result = json.loads(plan_response.read().decode('utf-8'))
-                        plan_text = plan_result['candidates'][0]['content']['parts'][0]['text']
-                        plan_text = plan_text.replace('```json', '').replace('```', '').strip()
-                        plan_data = json.loads(plan_text)
-                        plan_weeks = plan_data.get('plan', [])
-                    
-                    # Формируем сообщение с планом
-                    welcome_msg = f"✅ Отлично! Я составил персональный план обучения:\n\n"
-                    welcome_msg += f"📊 Уровень: {language_level}\n"
-                    welcome_msg += f"🎯 Цель: {learning_goal}\n"
-                    welcome_msg += f"💡 Темы: {topics_display}\n\n"
-                    
-                    if words_result.get('success') and words_result.get('words'):
-                        welcome_msg += f"📚 Я подготовил {len(words_result['words'])} персональных слов!\n\n"
-                    
-                    welcome_msg += "📋 Твой план на 3-4 недели:\n\n"
-                    
-                    for week_data in plan_weeks:
-                        week_num = week_data.get('week', 1)
-                        focus = week_data.get('focus', 'Обучение')
-                        actions = week_data.get('actions', [])
-                        
-                        welcome_msg += f"📅 Неделя {week_num}: {focus}\n"
-                        for action in actions:
-                            welcome_msg += f"  • {action}\n"
-                        welcome_msg += "\n"
-                    
-                    welcome_msg += "💬 Начни практиковаться прямо сейчас! Напиши мне что-нибудь на английском или используй кнопки внизу 👇"
-                    
-                    # Переключаем в режим диалога
-                    update_conversation_mode(user['id'], 'dialog')
-                    
-                    # Отправляем план с клавиатурой режимов
-                    send_telegram_message(chat_id, welcome_msg, get_reply_keyboard(), parse_mode=None)
+                    if plan_result.get('success'):
+                        # Отправляем план с кнопками подтверждения
+                        send_telegram_message(
+                            chat_id,
+                            plan_result['plan_message'],
+                            {
+                                'inline_keyboard': [
+                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                    [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                ]
+                            },
+                            parse_mode=None
+                        )
+                    else:
+                        send_telegram_message(
+                            chat_id,
+                            f'❌ Не удалось сгенерировать план: {plan_result.get("error", "Unknown error")}\n\nПопробуй еще раз через /start',
+                            parse_mode=None
+                        )
                     
                 except Exception as e:
                     print(f"[ERROR] Failed to process topics: {e}")
                     import traceback
                     traceback.print_exc()
                     
-                    # Даже если ошибка - запускаем диалог с дефолтными словами
-                    update_conversation_mode(user['id'], 'dialog')
+                    # Fallback
                     send_telegram_message(
                         chat_id,
-                        '✅ Отлично! Давай начнем практиковаться?\n\n'
-                        'Просто напиши мне что-угодно на английском! 💬',
-                        get_reply_keyboard(),
+                        '❌ Произошла ошибка при генерации плана. Попробуй еще раз через /start',
                         parse_mode=None
                     )
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
+            # Проверяем - хочет ли пользователь изменить план
+            elif conversation_mode == 'editing_plan':
+                # Пользователь написал что хочет изменить - регенерируем план
+                send_telegram_message(chat_id, '⏳ Корректирую план обучения с учетом твоих пожеланий...', parse_mode=None)
+                
+                try:
+                    # Получаем данные пользователя
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    row = cur.fetchone()
+                    learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
+                    language_level = row[1] if row and row[1] else 'A1'
+                    preferred_topics = row[2] if row and row[2] else []
+                    cur.close()
+                    conn.close()
+                    
+                    # Добавляем корректировки в цель
+                    modified_goal = f"{learning_goal}. Дополнительно: {text}"
+                    
+                    # Регенерируем план с учетом правок
+                    plan_result = generate_full_monthly_plan(user['id'], modified_goal, language_level, preferred_topics)
+                    
+                    if plan_result.get('success'):
+                        send_telegram_message(
+                            chat_id,
+                            plan_result['plan_message'],
+                            {
+                                'inline_keyboard': [
+                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                    [{'text': '✏️ Еще изменить', 'callback_data': 'edit_plan'}]
+                                ]
+                            },
+                            parse_mode=None
+                        )
+                    else:
+                        send_telegram_message(
+                            chat_id,
+                            f'❌ Не удалось сгенерировать план: {plan_result.get("error", "Unknown error")}',
+                            parse_mode=None
+                        )
+                except Exception as e:
+                    print(f"[ERROR] Failed to edit plan: {e}")
+                    send_telegram_message(chat_id, '❌ Ошибка при корректировке плана. Попробуй еще раз.', parse_mode=None)
                 
                 return {
                     'statusCode': 200,
