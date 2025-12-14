@@ -1182,16 +1182,9 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             print(f"[DEBUG] Gemini raw response length: {len(plan_text)}")
             print(f"[DEBUG] Gemini raw response (first 500 chars): {plan_text[:500]}")
             
-            # Очищаем от markdown
-            plan_text = plan_text.replace('```json', '').replace('```', '').strip()
-            
-            # Пытаемся парсить JSON
-            try:
-                plan_data = json.loads(plan_text)
-            except json.JSONDecodeError as e:
-                print(f"[ERROR] JSON decode error at position {e.pos}: {e.msg}")
-                print(f"[ERROR] Problematic text around position {max(0, e.pos-50)}:{min(len(plan_text), e.pos+50)}: {plan_text[max(0, e.pos-50):min(len(plan_text), e.pos+50)]}")
-                raise Exception(f'Invalid JSON from Gemini: {e.msg} at position {e.pos}')
+            # Используем safe_json_parse вместо прямого json.loads
+            # Это защитит от незакрытых строк и других ошибок
+            plan_data = safe_json_parse(plan_text, {'plan': []})
             
             plan_weeks = plan_data.get('plan', [])
         
