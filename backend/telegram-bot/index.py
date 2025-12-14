@@ -1447,13 +1447,31 @@ Return ONLY short JSON:
                 # Проверяем уникальность
                 if item['english'] not in used_words:
                     print(f"[DEBUG] Accepted: {item['english']}")
+                    log_proxy_success(proxy_id)
                     return item
                 else:
                     print(f"[WARNING] Word '{item['english']}' already used")
                     
         except Exception as e:
-            print(f"[ERROR] Attempt {attempt+1} failed: {e}")
-            if attempt == 2:
+            error_msg = str(e)
+            print(f"[ERROR] Attempt {attempt+1} failed: {error_msg}")
+            
+            # Логируем ошибку прокси
+            log_proxy_failure(proxy_id, error_msg)
+            
+            # Если прокси упал - берем новый на следующей попытке
+            if attempt < 2:
+                print(f"[WARNING] Proxy failed, getting new one for attempt {attempt+2}")
+                proxy_id, proxy_url = get_active_proxy_from_db()
+                if not proxy_url:
+                    proxy_url = os.environ.get('PROXY_URL', '')
+                proxy_handler = urllib.request.ProxyHandler({
+                    'http': f'http://{proxy_url}',
+                    'https': f'http://{proxy_url}'
+                })
+                opener = urllib.request.build_opener(proxy_handler)
+                continue
+            else:
                 raise
     
     raise Exception(f"Failed to generate unique {chosen_type} for level {level}")
