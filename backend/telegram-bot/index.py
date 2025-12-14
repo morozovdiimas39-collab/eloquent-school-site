@@ -1187,15 +1187,11 @@ Requirements:
                 gemini_result = json.loads(response.read().decode('utf-8'))
                 plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
                 
-                # Очистка JSON
-                plan_text = plan_text.replace('```json', '').replace('```', '').strip()
-                start_idx = plan_text.find('{')
-                end_idx = plan_text.rfind('}')
-                if start_idx != -1 and end_idx != -1:
-                    plan_text = plan_text[start_idx:end_idx+1]
-                
                 print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
-                batch_data = json.loads(plan_text)
+                print(f"[DEBUG] Raw Gemini response: {plan_text[:500]}...")
+                
+                # Используем safe_json_parse для обработки кривого JSON
+                batch_data = safe_json_parse(plan_text, {'plan': []})
                 batch_weeks = batch_data.get('plan', [])
                 
                 if not batch_weeks:
