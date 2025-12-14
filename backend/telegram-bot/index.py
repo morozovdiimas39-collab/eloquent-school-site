@@ -1368,6 +1368,96 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
         traceback.print_exc()
         return {'success': False, 'error': str(e)}
 
+def generate_adaptive_question(level: str, used_words: list) -> dict:
+    """Генерирует вопрос для адаптивного теста через Gemini"""
+    api_key = os.environ['GEMINI_API_KEY']
+    proxy_id, proxy_url = get_active_proxy_from_db()
+    if not proxy_url:
+        proxy_url = os.environ.get('PROXY_URL', '')
+    
+    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+    
+    # Для высоких уровней (B2+) используем фразы и выражения
+    import random
+    item_types = ['word', 'phrase', 'expression'] if level in ['B2', 'C1', 'C2'] else ['word', 'phrase']
+    chosen_type = random.choice(item_types)
+    
+    used_words_str = ', '.join(used_words) if used_words else 'none'
+    
+    # Пытаемся сгенерировать уникальное слово (максимум 3 попытки)
+    for attempt in range(3):
+        prompt = f'''You are testing English level. Generate ONE {chosen_type} for level {level}.
+
+CRITICAL: You MUST NOT use these words: {used_words_str}
+
+Type: {chosen_type}
+- word: single vocabulary word (e.g. "achieve")
+- phrase: common phrase (e.g. "take care")  
+- expression: idiom (e.g. "break the ice")
+
+Level guidelines:
+- A1: basic words (cat, book, home)
+- A2: everyday words (hobby, weather)
+- B1: abstract words (decision, opportunity)
+- B2+: sophisticated vocabulary
+- C1+: advanced vocabulary
+- C2: native-level expressions
+
+Return ONLY short JSON:
+{{"english": "word_here", "type": "{chosen_type}", "level": "{level}"}}'''
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {
+                'temperature': 0.9 + (attempt * 0.05),
+                'maxOutputTokens': 150,
+                'topP': 0.95,
+                'topK': 50
+            }
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        try:
+            with opener.open(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                text = result['candidates'][0]['content']['parts'][0]['text']
+                
+                print(f"[DEBUG] Gemini generated (level={level}, type={chosen_type}, attempt={attempt+1}): {text[:200]}")
+                
+                # Парсим БЕЗ fallback
+                item = safe_json_parse(text, None)
+                
+                if not item or 'english' not in item:
+                    print(f"[ERROR] Invalid JSON on attempt {attempt+1}: {text[:200]}")
+                    if attempt == 2:
+                        raise Exception(f"Gemini failed after 3 attempts")
+                    continue
+                
+                # Проверяем уникальность
+                if item['english'] not in used_words:
+                    print(f"[DEBUG] Accepted: {item['english']}")
+                    return item
+                else:
+                    print(f"[WARNING] Word '{item['english']}' already used")
+                    
+        except Exception as e:
+            print(f"[ERROR] Attempt {attempt+1} failed: {e}")
+            if attempt == 2:
+                raise
+    
+    raise Exception(f"Failed to generate unique {chosen_type} for level {level}")
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
@@ -1518,35 +1608,65 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     edit_telegram_message(
                         chat_id,
                         message_id,
-                        f'✅ Отлично! Твоя цель: <b>{goal_text}</b>\n\n'
-                        'Теперь давай проверим твой уровень английского 📊\n\n'
-                        'Как думаешь, какой у тебя сейчас уровень?',
+                        f'✅ Понял! Твоя цель: <b>{goal_text}</b>.\n\n'
+                        '⏳ Сейчас запущу адаптивный тест - он САМ определит твой уровень через вопросы...'
                     )
                     
-                    # Показываем клавиатуру с уровнями
-                    level_keyboard = {
-                        'inline_keyboard': [
-                            [{'text': 'A1 - Начинаю учить', 'callback_data': 'check_level_A1'}],
-                            [{'text': 'A2 - Базовые фразы', 'callback_data': 'check_level_A2'}],
-                            [{'text': 'B1 - Могу поддержать разговор', 'callback_data': 'check_level_B1'}],
-                            [{'text': 'B2 - Уверенно общаюсь', 'callback_data': 'check_level_B2'}],
-                            [{'text': 'C1 - Свободно владею', 'callback_data': 'check_level_C1'}]
-                        ]
-                    }
-                    
-                    send_telegram_message(
-                        chat_id,
-                        'Выбери свой уровень:',
-                        level_keyboard,
-                        parse_mode='HTML'
-                    )
-                    
-                    # Переводим в режим ожидания выбора уровня
+                    # СРАЗУ НАЧИНАЕМ АДАПТИВНЫЙ ТЕСТ (БЕЗ ВЫБОРА УРОВНЯ!)
+                    # Сохраняем состояние - начинаем адаптивный тест
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_level_selection' WHERE telegram_id = {user['id']}")
+                    
+                    # Инициализируем тест: начинаем с A1
+                    test_state = json.dumps({
+                        'question_num': 0,
+                        'history': []  # [{"level": "A2", "item": "travel", "answer": "путешествие", "correct": true}]
+                    }, ensure_ascii=False).replace("'", "''")
+                    
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'adaptive_level_test', "
+                        f"test_phrases = '{test_state}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
                     cur.close()
                     conn.close()
+                    
+                    # Генерируем ПЕРВЫЙ вопрос через Gemini (начинаем с A1)
+                    try:
+                        first_item = generate_adaptive_question('A1', [])
+                        
+                        # Отправляем первый вопрос
+                        type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                        emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
+                        
+                        question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
+                        question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
+                        
+                        send_telegram_message(chat_id, question_message)
+                        
+                        # Обновляем состояние с текущим вопросом
+                        test_state = {
+                            'current_item': first_item,
+                            'question_num': 1,
+                            'history': []
+                        }
+                        
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                    except Exception as e:
+                        print(f"[ERROR] Failed to start adaptive test: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        send_telegram_message(chat_id, '❌ Ошибка запуска теста. Попробуй /start')
             
             elif data.startswith('role_'):
                 role = data.replace('role_', '')
@@ -1566,162 +1686,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     f'Теперь просто пишите мне вопросы, и я буду отвечать прямо здесь в чате!'
                 )
             
-            elif data.startswith('check_level_'):
-                level = data.replace('check_level_', '')
-                
-                # НОВАЯ ЛОГИКА: Адаптивный тест через Gemini
-                # Инициализируем тест - Gemini начнет задавать вопросы по одному
-                edit_telegram_message(
-                    chat_id,
-                    message_id,
-                    f'Отлично! Давай проверим твой реальный уровень 📊\n\n'
-                    f'Я буду задавать тебе вопросы разной сложности по одному.\n'
-                    f'Просто переводи слова и фразы с английского на русский.\n\n'
-                    f'⏳ Готовлю первый вопрос...'
-                )
-                
-                # Сохраняем состояние - начинаем адаптивный тест
-                conn = get_db_connection()
-                cur = conn.cursor()
-                
-                # Инициализируем тест: сохраняем заявленный уровень и счетчик вопросов
-                test_state = json.dumps({
-                    'claimed_level': level,
-                    'question_num': 0,
-                    'history': []  # [{"level": "A2", "item": "travel", "answer": "путешествие", "correct": true}]
-                }, ensure_ascii=False).replace("'", "''")
-                
-                cur.execute(
-                    f"UPDATE {SCHEMA}.users SET "
-                    f"conversation_mode = 'adaptive_level_test', "
-                    f"test_phrases = '{test_state}'::jsonb "
-                    f"WHERE telegram_id = {user['id']}"
-                )
-                cur.close()
-                conn.close()
-                
-                # Генерируем ПЕРВЫЙ вопрос через Gemini
-                try:
-                    api_key = os.environ['GEMINI_API_KEY']
-                    proxy_id, proxy_url = get_active_proxy_from_db()
-                    if not proxy_url:
-                        proxy_url = os.environ.get('PROXY_URL', '')
-                    
-                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
-                    
-                    # Первый вопрос - начинаем с заявленного уровня
-                    # Для высоких уровней используем фразы и выражения
-                    import random
-                    first_item_types = ['word', 'phrase', 'expression'] if level in ['B2', 'C1', 'C2'] else ['word', 'phrase']
-                    first_chosen_type = random.choice(first_item_types)
-                    
-                    prompt = f'''You are an English level assessment expert.
 
-Task: Generate ONE {first_chosen_type} for level {level} testing.
-
-Type: {first_chosen_type}
-- word: single vocabulary word (e.g. "achieve", "perspective")
-- phrase: common phrase (e.g. "take care", "piece of cake")
-- expression: idiom or collocation (e.g. "break the ice", "hit the nail on the head")
-
-Return ONLY valid JSON:
-{{
-  "english": "{'word' if first_chosen_type == 'word' else 'phrase/expression'}",
-  "type": "{first_chosen_type}",
-  "level": "{level}"
-}}
-
-IMPORTANT: 
-- For B2+: use sophisticated vocabulary, idioms, collocations
-- For C1+: use advanced/academic vocabulary, complex idioms
-- For C2: use native-level expressions, subtle nuances
-- Choose common vocabulary, not rare words'''
-                    
-                    payload = {
-                        'contents': [{'parts': [{'text': prompt}]}],
-                        'generationConfig': {
-                            'temperature': 0.9,  # Повышаем для разнообразия
-                            'maxOutputTokens': 200,
-                            'topP': 0.95,
-                            'topK': 40
-                        }
-                    }
-                    
-                    proxy_handler = urllib.request.ProxyHandler({
-                        'http': f'http://{proxy_url}',
-                        'https': f'http://{proxy_url}'
-                    })
-                    opener = urllib.request.build_opener(proxy_handler)
-                    
-                    req = urllib.request.Request(
-                        gemini_url,
-                        data=json.dumps(payload).encode('utf-8'),
-                        headers={'Content-Type': 'application/json'}
-                    )
-                    
-                    with opener.open(req, timeout=30) as response:
-                        gemini_result = json.loads(response.read().decode('utf-8'))
-                        first_item_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                        
-                        print(f"[DEBUG] Gemini generated first item (level={level}, type={first_chosen_type}): {first_item_text[:200]}")
-                        
-                        first_item = safe_json_parse(first_item_text, {'english': 'family', 'type': 'word', 'level': level})
-                        
-                        print(f"[DEBUG] Parsed first_item: {first_item}")
-                    
-                    # Отправляем первый вопрос
-                    type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
-                    emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
-                    question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
-                    question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
-                    
-                    send_telegram_message(chat_id, question_message)
-                    
-                    # Сохраняем текущий вопрос в состоянии
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    
-                    cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
-                    test_state = cur.fetchone()[0]
-                    test_state['current_item'] = first_item
-                    test_state['question_num'] = 1
-                    
-                    test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
-                    cur.execute(
-                        f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
-                    )
-                    cur.close()
-                    conn.close()
-                    
-                except Exception as e:
-                    print(f"[ERROR] Failed to start adaptive test: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    
-                    # Fallback - отправляем простой первый вопрос
-                    send_telegram_message(
-                        chat_id,
-                        f'📖 <b>Вопрос 1/10</b>\n\nПереведи на русский:\n<b>family</b>'
-                    )
-                    
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    
-                    fallback_state = json.dumps({
-                        'claimed_level': level,
-                        'question_num': 1,
-                        'current_item': {'english': 'family', 'type': 'word', 'level': 'A1'},
-                        'history': []
-                    }, ensure_ascii=False).replace("'", "''")
-                    
-                    cur.execute(
-                        f"UPDATE {SCHEMA}.users SET test_phrases = '{fallback_state}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
-                    )
-                    cur.close()
-                    conn.close()
-            
             elif data.startswith('mode_'):
                 mode = data.replace('mode_', '')
                 update_conversation_mode(user['id'], mode)
@@ -2396,90 +2361,11 @@ Levels:
                     else:
                         next_level = current_item.get('level', 'A1')  # Тот же уровень
                     
-                    # Генерируем следующий вопрос
-                    # Для высоких уровней (B2+) используем фразы и выражения
-                    item_types = ['word', 'phrase', 'expression'] if next_level in ['B2', 'C1', 'C2'] else ['word', 'phrase']
-                    import random
-                    chosen_type = random.choice(item_types)
-                    
                     # Собираем уже использованные слова
                     used_words = [h['item'] for h in history]
-                    used_words_str = ', '.join(used_words)
                     
-                    # Пытаемся сгенерировать уникальное слово (максимум 3 попытки)
-                    next_item = None
-                    for attempt in range(3):
-                        # Генерируем НОВЫЙ запрос для каждой попытки (иначе HTTP 400)
-                        next_prompt = f'''You are testing English level. Generate ONE {chosen_type} for level {next_level}.
-
-CRITICAL: You MUST NOT use any of these already-used words: {used_words_str}
-
-Type: {chosen_type}
-- word: single vocabulary word (e.g. "achieve", "curious")
-- phrase: common phrase (e.g. "take care", "hang out")
-- expression: idiom (e.g. "break the ice")
-
-Level guidelines:
-- A1: basic words (food, colors)
-- A2: everyday words (hobby, weather)
-- B1: abstract words (decision, opportunity)
-- B2+: sophisticated vocabulary, collocations
-- C1+: advanced vocabulary, complex idioms
-- C2: native-level expressions
-
-Return short JSON:
-{{"english": "word_here", "type": "{chosen_type}", "level": "{next_level}"}}'''
-                        
-                        payload = {
-                            'contents': [{'parts': [{'text': next_prompt}]}],
-                            'generationConfig': {
-                                'temperature': 0.9 + (attempt * 0.05),  # Увеличиваем для каждой попытки
-                                'maxOutputTokens': 100,  # Короче - меньше обрывов
-                                'topP': 0.95,
-                                'topK': 50
-                            }
-                        }
-                        
-                        req = urllib.request.Request(
-                            gemini_url,
-                            data=json.dumps(payload).encode('utf-8'),
-                            headers={'Content-Type': 'application/json'}
-                        )
-                        
-                        try:
-                            with opener.open(req, timeout=30) as response:
-                                next_result = json.loads(response.read().decode('utf-8'))
-                                next_text = next_result['candidates'][0]['content']['parts'][0]['text']
-                                
-                                print(f"[DEBUG] Gemini generated next item (level={next_level}, type={chosen_type}, attempt={attempt+1}): {next_text[:200]}")
-                                
-                                # НЕТ fallback - если Gemini вернул битый JSON, это ошибка!
-                                candidate_item = safe_json_parse(next_text, None)
-                                
-                                # Проверяем что Gemini вернул валидное слово
-                                if not candidate_item or 'english' not in candidate_item:
-                                    print(f"[ERROR] Gemini returned invalid JSON on attempt {attempt+1}: {next_text[:200]}")
-                                    if attempt == 2:
-                                        raise Exception(f"Gemini failed to generate valid JSON after 3 attempts")
-                                    continue
-                                
-                                # Проверяем что слово не повторяется
-                                if candidate_item['english'] not in used_words:
-                                    next_item = candidate_item
-                                    print(f"[DEBUG] Accepted unique word: {next_item['english']}")
-                                    break
-                                else:
-                                    print(f"[WARNING] Word '{candidate_item['english']}' already used, retrying...")
-                        except Exception as e:
-                            print(f"[ERROR] Gemini request attempt {attempt+1} failed: {e}")
-                            if attempt == 2:  # Последняя попытка
-                                raise
-                    
-                    # Если после 3 попыток не получили - ОШИБКА (НЕ используем fallback базу)
-                    if not next_item:
-                        raise Exception(f"Failed to generate unique {chosen_type} for level {next_level} after 3 attempts. Used words: {used_words}")
-                    
-                    print(f"[DEBUG] Final next_item: {next_item}")
+                    # Генерируем следующий вопрос через функцию
+                    next_item = generate_adaptive_question(next_level, used_words)
                     
                     # Отправляем следующий вопрос
                     type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
