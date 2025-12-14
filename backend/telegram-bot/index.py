@@ -2853,7 +2853,6 @@ Return ONLY valid JSON:
             if existing_user.get('role') == 'student':
                 try:
                     # Отправляем статистику в webapp-api
-                    import urllib.parse
                     webapp_api_url = os.environ.get('WEBAPP_API_URL', '')
                     if webapp_api_url:
                         # В режиме диалога считаем использованные слова, в упражнениях - 1 слово
