@@ -1597,21 +1597,31 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
                     # Первый вопрос - начинаем с заявленного уровня
+                    # Для высоких уровней используем фразы и выражения
+                    import random
+                    first_item_types = ['word', 'phrase', 'expression'] if level in ['B2', 'C1', 'C2'] else ['word', 'phrase']
+                    first_chosen_type = random.choice(first_item_types)
+                    
                     prompt = f'''You are an English level assessment expert.
 
-Task: Generate ONE vocabulary item for level {level} testing.
+Task: Generate ONE {first_chosen_type} for level {level} testing.
+
+Type: {first_chosen_type}
+- word: single vocabulary word (e.g. "achieve", "perspective")
+- phrase: common phrase (e.g. "take care", "piece of cake")
+- expression: idiom or collocation (e.g. "break the ice", "hit the nail on the head")
 
 Return ONLY valid JSON:
 {{
-  "english": "word or phrase",
-  "type": "word",
+  "english": "{'word' if first_chosen_type == 'word' else 'phrase/expression'}",
+  "type": "{first_chosen_type}",
   "level": "{level}"
 }}
 
-Rules:
-- ONE item only (word or phrase)
-- Appropriate for {level} level
-- Student will translate English → Russian
+IMPORTANT: 
+- For B2+: use sophisticated vocabulary, idioms, collocations
+- For C1+: use advanced/academic vocabulary, complex idioms
+- For C2: use native-level expressions, subtle nuances
 - Choose common vocabulary, not rare words'''
                     
                     payload = {
@@ -1637,7 +1647,8 @@ Rules:
                         first_item = safe_json_parse(first_item_text, {'english': 'family', 'type': 'word', 'level': level})
                     
                     # Отправляем первый вопрос
-                    emoji = '📖' if first_item.get('type') == 'word' else '💬'
+                    type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                    emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
                     question_message = f'{emoji} <b>Вопрос 1/7</b>\n\n'
                     question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
                     
@@ -2175,13 +2186,15 @@ Rules:
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
                     # Проверяем текущий ответ
-                    check_prompt = f'''Check if translation is correct.
+                    check_prompt = f'''Check if Russian translation is correct for English word/phrase.
 
-English: {current_item["english"]}
-Student answer (Russian): {text}
+English word/phrase: {current_item["english"]}
+Student's Russian translation: {text}
 
-Return ONLY JSON:
-{{"correct": true/false, "expected": "правильный перевод"}}'''
+Return ONLY valid JSON:
+{{"correct": true/false, "expected": "правильный перевод на РУССКОМ"}}  
+
+IMPORTANT: "expected" field MUST be in RUSSIAN (not English!)'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': check_prompt}]}],
@@ -2227,7 +2240,15 @@ Test history (7 questions from different levels):
 {history_str}
 
 Determine real level. Return ONLY JSON:
-{{"level": "A1/A2/B1/B2/C1", "reasoning": "brief explanation in Russian"}}'''
+{{"level": "A1/A2/B1/B2/C1/C2", "reasoning": "brief explanation in Russian"}}
+
+Levels:
+- A1: basic words (family, water)
+- A2: everyday words (travel, weather)
+- B1: common expressions (take care)
+- B2: idioms, sophisticated vocabulary
+- C1: advanced academic vocabulary
+- C2: native-level expressions, subtle nuances'''
                         
                         payload = {
                             'contents': [{'parts': [{'text': final_prompt}]}],
@@ -2292,7 +2313,7 @@ Determine real level. Return ONLY JSON:
                     send_telegram_message(chat_id, feedback, parse_mode=None)
                     
                     # Определяем следующий уровень сложности (адаптивно)
-                    levels = ['A1', 'A2', 'B1', 'B2', 'C1']
+                    levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
                     current_level_idx = levels.index(current_item.get('level', 'A1'))
                     
                     if is_correct and current_level_idx < len(levels) - 1:
@@ -2303,10 +2324,25 @@ Determine real level. Return ONLY JSON:
                         next_level = current_item.get('level', 'A1')  # Тот же уровень
                     
                     # Генерируем следующий вопрос
-                    next_prompt = f'''Generate ONE vocabulary item for level {next_level} testing.
+                    # Для высоких уровней (B2+) используем фразы и выражения
+                    item_types = ['word', 'phrase', 'expression'] if next_level in ['B2', 'C1', 'C2'] else ['word', 'phrase']
+                    import random
+                    chosen_type = random.choice(item_types)
+                    
+                    next_prompt = f'''Generate ONE {chosen_type} for English level {next_level} testing.
+
+Type: {chosen_type}
+- word: single vocabulary word (e.g. "achieve", "perspective")
+- phrase: common phrase (e.g. "take care", "piece of cake")
+- expression: idiom or collocation (e.g. "break the ice", "hit the nail on the head")
 
 Return ONLY valid JSON:
-{{"english": "word or phrase", "type": "word", "level": "{next_level}"}}'''
+{{"english": "{'word' if chosen_type == 'word' else 'phrase/expression'}", "type": "{chosen_type}", "level": "{next_level}"}}
+
+IMPORTANT: 
+- For B2+: use sophisticated vocabulary, idioms, collocations
+- For C1+: use advanced/academic vocabulary, complex idioms
+- For C2: use native-level expressions, subtle nuances'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': next_prompt}]}],
@@ -2325,7 +2361,9 @@ Return ONLY valid JSON:
                         next_item = safe_json_parse(next_text, {'english': 'word', 'type': 'word', 'level': next_level})
                     
                     # Отправляем следующий вопрос
-                    emoji = '📖' if next_item.get('type') == 'word' else '💬'
+                    type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                    emoji = type_emojis.get(next_item.get('type', 'word'), '📖')
+                    
                     question_message = f'{emoji} <b>Вопрос {question_num + 1}/7</b>\n\n'
                     question_message += f'Переведи на русский:\n<b>{next_item["english"]}</b>'
                     
