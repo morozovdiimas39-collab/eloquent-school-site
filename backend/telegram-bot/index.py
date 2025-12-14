@@ -1064,26 +1064,29 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
-        prompt = f'''Create a 4-week English learning plan. Return ONLY valid JSON, no markdown.
+        prompt = f'''Create a 4-week English learning plan with vocabulary FROM specific topics. Return ONLY valid JSON, no markdown.
 
-Student: Level {language_level}, Interests: {topics_display}
+Student: Level {language_level}, Topics: {topics_display}
+
+IMPORTANT: ALL words/phrases MUST be from these topics at {language_level} difficulty!
 
 {{
   "plan": [
     {{
       "week": 1,
-      "focus": "Basic vocabulary",
+      "focus": "Topic basics",
       "conversation_topics": ["Topic1", "Topic2"],
       "vocabulary": [
-        {{"english": "word1", "russian": "слово1"}},
-        {{"english": "word2", "russian": "слово2"}},
-        {{"english": "word3", "russian": "слово3"}},
-        {{"english": "word4", "russian": "слово4"}},
-        {{"english": "word5", "russian": "слово5"}}
+        {{"english": "word1", "russian": "слово1", "topic": "gaming"}},
+        ... (49 words total - 7 per day)
       ],
       "phrases": [
-        {{"english": "phrase1", "russian": "фраза1"}},
-        {{"english": "phrase2", "russian": "фраза2"}}
+        {{"english": "phrase1", "russian": "фраза1", "topic": "gaming"}},
+        ... (14 phrases total - 2 per day)
+      ],
+      "expressions": [
+        {{"english": "expression1", "russian": "выражение1", "context": "when..."}},
+        ... (7 expressions total - 1 per day)
       ],
       "actions": ["Action1", "Action2"]
     }}
@@ -1092,11 +1095,17 @@ Student: Level {language_level}, Interests: {topics_display}
 
 Requirements:
 - Exactly 4 weeks
-- 5 vocabulary words per week (level {language_level})
-- 2 phrases per week
+- 49 vocabulary words per week (7 per day) from topics: {topics_display}
+- 14 phrases per week (2 per day) from topics: {topics_display}
+- 7 expressions per week (1 per day) from topics: {topics_display}
 - 2 actions per week
-- Topics related to: {topics_display}
-- ONLY valid JSON, no comments'''
+- Difficulty level: {language_level}
+- ONLY valid JSON, no comments
+
+Example for Gaming + B1:
+vocabulary: [{{"english": "gameplay", "russian": "игровой процесс", "topic": "gaming"}}]
+phrases: [{{"english": "level up", "russian": "повысить уровень", "topic": "gaming"}}]
+expressions: [{{"english": "let\'s team up", "russian": "давай объединимся", "context": "inviting to play together"}}]'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
@@ -1195,6 +1204,29 @@ Requirements:
                     f"ON CONFLICT (student_id, word_id) DO NOTHING"
                 )
                 total_words_added += 1
+            
+            # Добавляем expressions
+            for expr_data in week_data.get('expressions', []):
+                english = expr_data['english'].strip().lower()
+                russian = expr_data['russian'].strip()
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                )
+                total_words_added += 1
         
         # Сохраняем сам план в БД (в поле learning_plan как JSONB)
         plan_json = json.dumps(plan_weeks, ensure_ascii=False).replace("'", "''")
@@ -1221,6 +1253,7 @@ Requirements:
             topics = week_data.get('conversation_topics', [])
             vocab = week_data.get('vocabulary', [])
             phrases = week_data.get('phrases', [])
+            expressions = week_data.get('expressions', [])
             actions = week_data.get('actions', [])
             
             plan_message += f"📅 НЕДЕЛЯ {week_num}: {focus}\n\n"
@@ -1232,15 +1265,27 @@ Requirements:
                 plan_message += "\n"
             
             if vocab:
-                plan_message += "📖 Слова:\n"
-                for word in vocab[:5]:  # Показываем первые 5
+                plan_message += f"📖 Слова (7 в день, всего {len(vocab)}):\n"
+                for word in vocab[:7]:  # Показываем первые 7 (1 день)
                     plan_message += f"  • {word['english']} — {word['russian']}\n"
+                if len(vocab) > 7:
+                    plan_message += f"  ... и еще {len(vocab) - 7} слов\n"
                 plan_message += "\n"
             
             if phrases:
-                plan_message += "💭 Фразы:\n"
-                for phrase in phrases:
+                plan_message += f"💭 Фразы (2 в день, всего {len(phrases)}):\n"
+                for phrase in phrases[:4]:  # Показываем первые 4 (2 дня)
                     plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
+                if len(phrases) > 4:
+                    plan_message += f"  ... и еще {len(phrases) - 4} фраз\n"
+                plan_message += "\n"
+            
+            if expressions:
+                plan_message += f"✨ Устойчивые выражения (1 в день, всего {len(expressions)}):\n"
+                for expr in expressions[:3]:  # Показываем первые 3
+                    plan_message += f"  • {expr['english']} — {expr['russian']}\n"
+                if len(expressions) > 3:
+                    plan_message += f"  ... и еще {len(expressions) - 3} выражений\n"
                 plan_message += "\n"
             
             if actions:
@@ -1466,7 +1511,38 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('check_level_'):
                 level = data.replace('check_level_', '')
                 
-                # Генерируем 5 фраз для перевода через Gemini
+                # НОВАЯ ЛОГИКА: Адаптивный тест через Gemini
+                # Инициализируем тест - Gemini начнет задавать вопросы по одному
+                edit_telegram_message(
+                    chat_id,
+                    message_id,
+                    f'Отлично! Давай проверим твой реальный уровень 📊\n\n'
+                    f'Я буду задавать тебе вопросы разной сложности по одному.\n'
+                    f'Просто переводи слова и фразы с английского на русский.\n\n'
+                    f'⏳ Готовлю первый вопрос...'
+                )
+                
+                # Сохраняем состояние - начинаем адаптивный тест
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Инициализируем тест: сохраняем заявленный уровень и счетчик вопросов
+                test_state = json.dumps({
+                    'claimed_level': level,
+                    'question_num': 0,
+                    'history': []  # [{"level": "A2", "item": "travel", "answer": "путешествие", "correct": true}]
+                }, ensure_ascii=False).replace("'", "''")
+                
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET "
+                    f"conversation_mode = 'adaptive_level_test', "
+                    f"test_phrases = '{test_state}'::jsonb "
+                    f"WHERE telegram_id = {user['id']}"
+                )
+                cur.close()
+                conn.close()
+                
+                # Генерируем ПЕРВЫЙ вопрос через Gemini
                 try:
                     api_key = os.environ['GEMINI_API_KEY']
                     proxy_id, proxy_url = get_active_proxy_from_db()
@@ -1475,35 +1551,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
-                    prompt = f'''Ты — методист английского языка. Студент выбрал уровень {level}.
+                    # Первый вопрос - начинаем с заявленного уровня
+                    prompt = f'''You are an English level assessment expert.
 
-Твоя задача: составить 10 слов и фраз на английском для проверки уровня {level}.
+Task: Generate ONE vocabulary item for level {level} testing.
 
-Требования:
-- 5 слов + 5 фраз соответствующих уровню {level}
-- Слова - это КОНКРЕТНАЯ лексика уровня (не hello, cat, dog)
-- Фразы - это устойчивые выражения и фразовые глаголы
-- Студент будет переводить их с АНГЛИЙСКОГО на РУССКИЙ
-
-Примеры для {level}:
-A1: words=["family", "water", "friend", "book", "work"], phrases=["How are you?", "Nice to meet you", "See you later", "I don't know", "Thank you very much"]
-A2: words=["travel", "weather", "meeting", "hobby", "language"], phrases=["I'd like to", "It depends on", "I'm interested in", "Could you help me?", "I'm sorry to hear that"]
-B1: words=["experience", "opportunity", "challenge", "environment", "knowledge"], phrases=["figure out", "deal with", "come up with", "get along with", "look forward to"]
-B2: words=["perspective", "consequence", "innovation", "sustainability", "diversity"], phrases=["take into account", "as far as I know", "from my point of view", "to be honest with you", "in the long run"]
-
-Формат ответа (только JSON, без markdown):
+Return ONLY valid JSON:
 {{
-  "items": [
-    {{"english": "word1", "type": "word"}},
-    {{"english": "phrase example", "type": "phrase"}}
-  ]
+  "english": "word or phrase",
+  "type": "word",
+  "level": "{level}"
 }}
 
-ВАЖНО: Отвечай ТОЛЬКО валидным JSON с 10 элементами (5 words + 5 phrases).'''
+Rules:
+- ONE item only (word or phrase)
+- Appropriate for {level} level
+- Student will translate English → Russian
+- Choose common vocabulary, not rare words'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': prompt}]}],
-                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 800}
+                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
@@ -1520,128 +1588,57 @@ B2: words=["perspective", "consequence", "innovation", "sustainability", "divers
                     
                     with opener.open(req, timeout=30) as response:
                         gemini_result = json.loads(response.read().decode('utf-8'))
-                        items_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                        items_text = items_text.replace('```json', '').replace('```', '').strip()
-                        items_data = json.loads(items_text)
-                        items_list = items_data.get('items', [])
+                        first_item_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        first_item_text = first_item_text.replace('```json', '').replace('```', '').strip()
+                        first_item = json.loads(first_item_text)
                     
-                    if len(items_list) < 10:
-                        raise Exception(f'Got only {len(items_list)} items, expected 10')
+                    # Отправляем первый вопрос
+                    emoji = '📖' if first_item.get('type') == 'word' else '💬'
+                    question_message = f'{emoji} <b>Вопрос 1/7</b>\n\n'
+                    question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
                     
-                    # Форматируем тест
-                    test_message = f'Отлично! Давай проверим твой уровень {level} 📝\n\n'
-                    test_message += '🎯 <b>Переведи эти слова и фразы с английского на русский:</b>\n\n'
-                    for i, item in enumerate(items_list, 1):
-                        emoji = '📖' if item.get('type') == 'word' else '💬'
-                        test_message += f'{i}. {emoji} <b>{item["english"]}</b>\n'
-                    test_message += '\n✍️ Отправь переводы списком (каждый с новой строки)'
+                    send_telegram_message(chat_id, question_message)
                     
-                    edit_telegram_message(chat_id, message_id, test_message)
-                    
-                    # Сохраняем фразы и переводим в режим проверки
+                    # Сохраняем текущий вопрос в состоянии
                     conn = get_db_connection()
                     cur = conn.cursor()
                     
-                    items_json = json.dumps(items_list, ensure_ascii=False).replace("'", "''")
+                    cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    test_state = cur.fetchone()[0]
+                    test_state['current_item'] = first_item
+                    test_state['question_num'] = 1
+                    
+                    test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                     cur.execute(
-                        f"UPDATE {SCHEMA}.users SET "
-                        f"conversation_mode = 'checking_level_{level}', "
-                        f"language_level = '{level}', "
-                        f"test_phrases = '{items_json}'::jsonb "
+                        f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
                         f"WHERE telegram_id = {user['id']}"
                     )
                     cur.close()
                     conn.close()
                     
                 except Exception as e:
-                    print(f"[ERROR] Failed to generate level test: {e}")
+                    print(f"[ERROR] Failed to start adaptive test: {e}")
                     import traceback
                     traceback.print_exc()
                     
-                    # Fallback - используем дефолтные слова и фразы
-                    default_items_by_level = {
-                        'A1': [
-                            {'english': 'family', 'type': 'word'},
-                            {'english': 'water', 'type': 'word'},
-                            {'english': 'friend', 'type': 'word'},
-                            {'english': 'book', 'type': 'word'},
-                            {'english': 'work', 'type': 'word'},
-                            {'english': 'How are you?', 'type': 'phrase'},
-                            {'english': 'Nice to meet you', 'type': 'phrase'},
-                            {'english': 'See you later', 'type': 'phrase'},
-                            {'english': "I don't know", 'type': 'phrase'},
-                            {'english': 'Thank you', 'type': 'phrase'}
-                        ],
-                        'A2': [
-                            {'english': 'travel', 'type': 'word'},
-                            {'english': 'weather', 'type': 'word'},
-                            {'english': 'meeting', 'type': 'word'},
-                            {'english': 'hobby', 'type': 'word'},
-                            {'english': 'language', 'type': 'word'},
-                            {'english': "I'd like to", 'type': 'phrase'},
-                            {'english': 'It depends on', 'type': 'phrase'},
-                            {'english': "I'm interested in", 'type': 'phrase'},
-                            {'english': 'Could you help me?', 'type': 'phrase'},
-                            {'english': "I'm sorry to hear that", 'type': 'phrase'}
-                        ],
-                        'B1': [
-                            {'english': 'experience', 'type': 'word'},
-                            {'english': 'opportunity', 'type': 'word'},
-                            {'english': 'challenge', 'type': 'word'},
-                            {'english': 'environment', 'type': 'word'},
-                            {'english': 'knowledge', 'type': 'word'},
-                            {'english': 'figure out', 'type': 'phrase'},
-                            {'english': 'deal with', 'type': 'phrase'},
-                            {'english': 'come up with', 'type': 'phrase'},
-                            {'english': 'get along with', 'type': 'phrase'},
-                            {'english': 'look forward to', 'type': 'phrase'}
-                        ],
-                        'B2': [
-                            {'english': 'perspective', 'type': 'word'},
-                            {'english': 'consequence', 'type': 'word'},
-                            {'english': 'innovation', 'type': 'word'},
-                            {'english': 'sustainability', 'type': 'word'},
-                            {'english': 'diversity', 'type': 'word'},
-                            {'english': 'take into account', 'type': 'phrase'},
-                            {'english': 'as far as I know', 'type': 'phrase'},
-                            {'english': 'from my point of view', 'type': 'phrase'},
-                            {'english': 'to be honest', 'type': 'phrase'},
-                            {'english': 'in the long run', 'type': 'phrase'}
-                        ],
-                        'C1': [
-                            {'english': 'resilience', 'type': 'word'},
-                            {'english': 'ambiguity', 'type': 'word'},
-                            {'english': 'implementation', 'type': 'word'},
-                            {'english': 'discrepancy', 'type': 'word'},
-                            {'english': 'comprehend', 'type': 'word'},
-                            {'english': 'beat around the bush', 'type': 'phrase'},
-                            {'english': 'get to the point', 'type': 'phrase'},
-                            {'english': 'by and large', 'type': 'phrase'},
-                            {'english': 'for the sake of', 'type': 'phrase'},
-                            {'english': 'on second thought', 'type': 'phrase'}
-                        ]
-                    }
-                    
-                    fallback_items = default_items_by_level.get(level, default_items_by_level['A1'])
-                    
-                    test_message = f'Отлично! Давай проверим твой уровень {level} 📝\n\n'
-                    test_message += '🎯 <b>Переведи эти слова и фразы с английского на русский:</b>\n\n'
-                    for i, item in enumerate(fallback_items, 1):
-                        emoji = '📖' if item['type'] == 'word' else '💬'
-                        test_message += f"{i}. {emoji} <b>{item['english']}</b>\n"
-                    test_message += '\n✍️ Отправь переводы списком (каждый с новой строки)'
-                    
-                    edit_telegram_message(chat_id, message_id, test_message)
+                    # Fallback - отправляем простой первый вопрос
+                    send_telegram_message(
+                        chat_id,
+                        f'📖 <b>Вопрос 1/7</b>\n\nПереведи на русский:\n<b>family</b>'
+                    )
                     
                     conn = get_db_connection()
                     cur = conn.cursor()
                     
-                    items_json = json.dumps(fallback_items, ensure_ascii=False).replace("'", "''")
+                    fallback_state = json.dumps({
+                        'claimed_level': level,
+                        'question_num': 1,
+                        'current_item': {'english': 'family', 'type': 'word', 'level': 'A1'},
+                        'history': []
+                    }, ensure_ascii=False).replace("'", "''")
+                    
                     cur.execute(
-                        f"UPDATE {SCHEMA}.users SET "
-                        f"conversation_mode = 'checking_level_{level}', "
-                        f"language_level = '{level}', "
-                        f"test_phrases = '{items_json}'::jsonb "
+                        f"UPDATE {SCHEMA}.users SET test_phrases = '{fallback_state}'::jsonb "
                         f"WHERE telegram_id = {user['id']}"
                     )
                     cur.close()
@@ -2094,8 +2091,225 @@ B2: words=["perspective", "consequence", "innovation", "sustainability", "divers
             language_level = existing_user.get('language_level', 'A1')
             used_word_ids = []  # Инициализируем для использования в статистике
             
-            # Проверяем - проверяем ли уровень пользователя (тест с переводами)
-            if conversation_mode.startswith('checking_level_'):
+            # Обработка адаптивного теста уровня (НОВАЯ ЛОГИКА)
+            if conversation_mode == 'adaptive_level_test':
+                # Получаем состояние теста
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                
+                if not row or not row[0]:
+                    send_telegram_message(chat_id, '❌ Ошибка теста. Попробуй /start', parse_mode=None)
+                    return {'statusCode': 200, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'ok': True}), 'isBase64Encoded': False}
+                
+                test_state = row[0]
+                current_item = test_state.get('current_item')
+                question_num = test_state.get('question_num', 0)
+                history = test_state.get('history', [])
+                
+                if not current_item:
+                    send_telegram_message(chat_id, '❌ Ошибка теста. Попробуй /start', parse_mode=None)
+                    return {'statusCode': 200, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'ok': True}), 'isBase64Encoded': False}
+                
+                # Анализируем ответ через Gemini
+                send_telegram_message(chat_id, '⏳ Проверяю...', parse_mode=None)
+                
+                try:
+                    api_key = os.environ['GEMINI_API_KEY']
+                    proxy_id, proxy_url = get_active_proxy_from_db()
+                    if not proxy_url:
+                        proxy_url = os.environ.get('PROXY_URL', '')
+                    
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                    
+                    # Проверяем текущий ответ
+                    check_prompt = f'''Check if translation is correct.
+
+English: {current_item["english"]}
+Student answer (Russian): {text}
+
+Return ONLY JSON:
+{{"correct": true/false, "expected": "правильный перевод"}}'''
+                    
+                    payload = {
+                        'contents': [{'parts': [{'text': check_prompt}]}],
+                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 200}
+                    }
+                    
+                    proxy_handler = urllib.request.ProxyHandler({
+                        'http': f'http://{proxy_url}',
+                        'https': f'http://{proxy_url}'
+                    })
+                    opener = urllib.request.build_opener(proxy_handler)
+                    
+                    req = urllib.request.Request(
+                        gemini_url,
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    
+                    with opener.open(req, timeout=30) as response:
+                        check_result = json.loads(response.read().decode('utf-8'))
+                        check_text = check_result['candidates'][0]['content']['parts'][0]['text']
+                        check_text = check_text.replace('```json', '').replace('```', '').strip()
+                        check_data = json.loads(check_text)
+                    
+                    is_correct = check_data.get('correct', False)
+                    expected = check_data.get('expected', '')
+                    
+                    # Сохраняем результат в историю
+                    history.append({
+                        'level': current_item.get('level', 'A1'),
+                        'item': current_item['english'],
+                        'answer': text,
+                        'correct': is_correct
+                    })
+                    
+                    # Если 7 вопросов - завершаем тест и определяем уровень
+                    if question_num >= 7:
+                        # Финальный анализ уровня
+                        history_str = '\n'.join([f"{i+1}. [{h['level']}] {h['item']} → {h['answer']} ({'✅' if h['correct'] else '❌'})" for i, h in enumerate(history)])
+                        
+                        final_prompt = f'''Analyze student's English level based on test results.
+
+Test history (7 questions from different levels):
+{history_str}
+
+Determine real level. Return ONLY JSON:
+{{"level": "A1/A2/B1/B2/C1", "reasoning": "brief explanation in Russian"}}'''
+                        
+                        payload = {
+                            'contents': [{'parts': [{'text': final_prompt}]}],
+                            'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 300}
+                        }
+                        
+                        req = urllib.request.Request(
+                            gemini_url,
+                            data=json.dumps(payload).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        
+                        with opener.open(req, timeout=30) as response:
+                            final_result = json.loads(response.read().decode('utf-8'))
+                            final_text = final_result['candidates'][0]['content']['parts'][0]['text']
+                            final_text = final_text.replace('```json', '').replace('```', '').strip()
+                            final_data = json.loads(final_text)
+                        
+                        actual_level = final_data.get('level', 'A1')
+                        reasoning = final_data.get('reasoning', '')
+                        correct_count = sum(1 for h in history if h['correct'])
+                        
+                        # Показываем результат
+                        feedback = '✅ Правильно!' if is_correct else f'❌ Правильный ответ: {expected}'
+                        send_telegram_message(chat_id, feedback, parse_mode=None)
+                        
+                        response_text = f"\n📊 РЕЗУЛЬТАТЫ ТЕСТА\n\n"
+                        response_text += f"✅ Правильных ответов: {correct_count}/7\n"
+                        response_text += f"🎯 Твой уровень: <b>{actual_level}</b>\n\n"
+                        response_text += f"💡 {reasoning}\n\n"
+                        response_text += "Теперь выбери темы, которые тебе интересны:"
+                        
+                        topics_keyboard = {
+                            'inline_keyboard': [
+                                [{'text': '🎮 Игры', 'callback_data': 'topic_gaming'}, {'text': '💻 IT', 'callback_data': 'topic_it'}],
+                                [{'text': '📊 Маркетинг', 'callback_data': 'topic_marketing'}, {'text': '✈️ Путешествия', 'callback_data': 'topic_travel'}],
+                                [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
+                                [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
+                                [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
+                                [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}]
+                            ]
+                        }
+                        
+                        send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode='HTML')
+                        
+                        # Обновляем уровень пользователя
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET "
+                            f"language_level = '{actual_level}', "
+                            f"conversation_mode = 'awaiting_topics', "
+                            f"test_phrases = NULL "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                        return {'statusCode': 200, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'ok': True}), 'isBase64Encoded': False}
+                    
+                    # Продолжаем тест - генерируем следующий вопрос
+                    feedback = '✅ Правильно!' if is_correct else f'❌ Правильный ответ: {expected}'
+                    send_telegram_message(chat_id, feedback, parse_mode=None)
+                    
+                    # Определяем следующий уровень сложности (адаптивно)
+                    levels = ['A1', 'A2', 'B1', 'B2', 'C1']
+                    current_level_idx = levels.index(current_item.get('level', 'A1'))
+                    
+                    if is_correct and current_level_idx < len(levels) - 1:
+                        next_level = levels[current_level_idx + 1]  # Сложнее
+                    elif not is_correct and current_level_idx > 0:
+                        next_level = levels[current_level_idx - 1]  # Проще
+                    else:
+                        next_level = current_item.get('level', 'A1')  # Тот же уровень
+                    
+                    # Генерируем следующий вопрос
+                    next_prompt = f'''Generate ONE vocabulary item for level {next_level} testing.
+
+Return ONLY valid JSON:
+{{"english": "word or phrase", "type": "word", "level": "{next_level}"}}'''
+                    
+                    payload = {
+                        'contents': [{'parts': [{'text': next_prompt}]}],
+                        'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
+                    }
+                    
+                    req = urllib.request.Request(
+                        gemini_url,
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    
+                    with opener.open(req, timeout=30) as response:
+                        next_result = json.loads(response.read().decode('utf-8'))
+                        next_text = next_result['candidates'][0]['content']['parts'][0]['text']
+                        next_text = next_text.replace('```json', '').replace('```', '').strip()
+                        next_item = json.loads(next_text)
+                    
+                    # Отправляем следующий вопрос
+                    emoji = '📖' if next_item.get('type') == 'word' else '💬'
+                    question_message = f'{emoji} <b>Вопрос {question_num + 1}/7</b>\n\n'
+                    question_message += f'Переведи на русский:\n<b>{next_item["english"]}</b>'
+                    
+                    send_telegram_message(chat_id, question_message)
+                    
+                    # Обновляем состояние
+                    test_state['current_item'] = next_item
+                    test_state['question_num'] = question_num + 1
+                    test_state['history'] = history
+                    
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                except Exception as e:
+                    print(f"[ERROR] Adaptive test failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    send_telegram_message(chat_id, '❌ Ошибка теста. Попробуй /start', parse_mode=None)
+                
+                return {'statusCode': 200, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'ok': True}), 'isBase64Encoded': False}
+            
+            # Проверяем - проверяем ли уровень пользователя (СТАРАЯ ЛОГИКА - fallback)
+            elif conversation_mode.startswith('checking_level_'):
                 claimed_level = conversation_mode.replace('checking_level_', '')
                 
                 # Получаем сохраненные фразы для проверки
