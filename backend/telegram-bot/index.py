@@ -1105,11 +1105,13 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
     - Конкретные действия на каждую неделю
     """
     try:
+        print(f"[DEBUG] generate_full_monthly_plan STARTED")
         api_key = os.environ['GEMINI_API_KEY']
         proxy_id, proxy_url = get_active_proxy_from_db()
         if not proxy_url:
             proxy_url = os.environ.get('PROXY_URL', '')
         
+        print(f"[DEBUG] Proxy obtained: {proxy_url[:30]}... (id={proxy_id})")
         gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
@@ -1179,7 +1181,9 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             headers={'Content-Type': 'application/json'}
         )
         
+        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=45s)")
         with opener.open(req, timeout=45) as response:
+            print(f"[DEBUG] Gemini API responded! Reading data...")
             gemini_result = json.loads(response.read().decode('utf-8'))
             plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
             
@@ -1199,8 +1203,10 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
                 plan_text = plan_text[start_idx:end_idx+1]
             
             # 3. Пытаемся распарсить JSON напрямую (без regex fallback - он не умеет массивы)
+            print(f"[DEBUG] Parsing JSON plan...")
             try:
                 plan_data = json.loads(plan_text)
+                print(f"[DEBUG] JSON parsed successfully! Plan has {len(plan_data.get('plan', []))} weeks")
             except json.JSONDecodeError as e:
                 print(f"[ERROR] JSON parse failed: {e}")
                 print(f"[ERROR] Problematic JSON (first 1000 chars): {plan_text[:1000]}")
@@ -1212,6 +1218,7 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             return {'success': False, 'error': 'Empty plan generated'}
         
         # Сохраняем ВСЕ слова и фразы в БД
+        print(f"[DEBUG] Saving {len(plan_weeks)} weeks to DB...")
         conn = get_db_connection()
         cur = conn.cursor()
         
@@ -1297,6 +1304,8 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
         cur.close()
         conn.close()
         
+        print(f"[DEBUG] Saved {total_words_added} words/phrases to DB. Formatting message...")
+        
         # Форматируем сообщение с планом для пользователя
         plan_message = f"📋 ТВОЙ ПЕРСОНАЛЬНЫЙ ПЛАН НА МЕСЯЦ\n\n"
         plan_message += f"🎯 Цель: {learning_goal}\n"
@@ -1354,6 +1363,8 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             plan_message += "\n━━━━━━━━━━━━━━━━━━━\n\n"
         
         plan_message += "❓ Тебе подходит этот план?"
+        
+        print(f"[DEBUG] Plan message formatted ({len(plan_message)} chars). Returning result...")
         
         return {
             'success': True,
