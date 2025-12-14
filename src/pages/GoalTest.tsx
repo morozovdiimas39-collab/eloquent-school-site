@@ -100,11 +100,14 @@ export default function GoalTest() {
       });
 
       const data = await response.json();
+      console.log('🔍 Gemini response:', data);
 
       if (data.subtopics && data.subtopics.length > 0) {
+        console.log('✅ Got subtopics from Gemini:', data.subtopics);
         setSuggestedSubtopics(data.subtopics);
         setSelectedSubtopics(data.subtopics.map((s: SuggestedSubtopic) => s.id));
       } else {
+        console.log('⚠️ No subtopics, using fallback. Response:', data);
         setSuggestedSubtopics([
           { id: 'general', title: 'Общая подготовка', description: 'Базовые фразы и выражения' }
         ]);
