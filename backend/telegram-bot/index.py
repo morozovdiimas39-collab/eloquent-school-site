@@ -2226,10 +2226,50 @@ IMPORTANT: "expected" field MUST be in RUSSIAN (not English!)'''
                     with opener.open(req, timeout=30) as response:
                         check_result = json.loads(response.read().decode('utf-8'))
                         check_text = check_result['candidates'][0]['content']['parts'][0]['text']
-                        check_data = safe_json_parse(check_text, {'correct': False, 'expected': current_item['english']})
+                        
+                        print(f"[DEBUG] Gemini check response: {check_text[:300]}")
+                        
+                        check_data = safe_json_parse(check_text, {'correct': False, 'expected': '???'})
                     
                     is_correct = check_data.get('correct', False)
-                    expected = check_data.get('expected', '')
+                    expected = check_data.get('expected', '???')
+                    
+                    # КРИТИЧНО: Проверяем что expected на русском (не латиница)
+                    if expected and all(ord(c) < 128 for c in expected.replace(' ', '').replace('-', '')):
+                        # expected содержит только латиницу - это английское слово!
+                        print(f"[ERROR] Gemini returned English as 'expected': {expected}. Asking for Russian translation...")
+                        
+                        # Делаем второй запрос - явно просим перевод
+                        translate_prompt = f'''Translate English word/phrase to Russian.
+
+English: {current_item["english"]}
+
+Return ONLY valid JSON:
+{{"russian": "перевод на русском языке"}}
+
+Example: {{"russian": "путешествие"}}'''
+                        
+                        translate_payload = {
+                            'contents': [{'parts': [{'text': translate_prompt}]}],
+                            'generationConfig': {'temperature': 0.2, 'maxOutputTokens': 100}
+                        }
+                        
+                        translate_req = urllib.request.Request(
+                            gemini_url,
+                            data=json.dumps(translate_payload).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        
+                        try:
+                            with opener.open(translate_req, timeout=15) as translate_resp:
+                                translate_result = json.loads(translate_resp.read().decode('utf-8'))
+                                translate_text = translate_result['candidates'][0]['content']['parts'][0]['text']
+                                translate_data = safe_json_parse(translate_text, {'russian': expected})
+                                expected = translate_data.get('russian', expected)
+                                print(f"[DEBUG] Got Russian translation: {expected}")
+                        except Exception as e:
+                            print(f"[WARNING] Failed to get Russian translation: {e}")
+                            expected = '(перевод не определен)'
                     
                     # Сохраняем результат в историю
                     history.append({
