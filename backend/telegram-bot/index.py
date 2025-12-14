@@ -1064,63 +1064,48 @@ def generate_full_monthly_plan(student_id: int, learning_goal: str, language_lev
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
-        prompt = f'''Ты — опытный методист английского языка. Составь ПОЛНЫЙ персональный план обучения на месяц.
+        prompt = f'''Create a 4-week English learning plan. Return ONLY valid JSON, no markdown.
 
-Данные студента:
-- Цель: {learning_goal}
-- Уровень: {language_level}
-- Интересы: {topics_display}
+Student: Level {language_level}, Interests: {topics_display}
 
-Твоя задача: создать подробный план на 4 недели с КОНКРЕТНЫМИ материалами для изучения.
-
-Для КАЖДОЙ недели укажи:
-1. Фокус недели (на чем сосредоточиться)
-2. Темы для разговоров (2-3 темы)
-3. Слова для изучения (5-7 слов/фраз)
-4. Устойчивые выражения (2-3 фразы)
-5. Конкретные действия (что делать каждый день)
-
-Формат ответа (только JSON, без markdown):
 {{
   "plan": [
     {{
       "week": 1,
-      "focus": "Базовая лексика по теме Gaming",
-      "conversation_topics": ["Любимые игры", "Игровой процесс", "Онлайн-команды"],
+      "focus": "Basic vocabulary",
+      "conversation_topics": ["Topic1", "Topic2"],
       "vocabulary": [
-        {{"english": "gameplay", "russian": "игровой процесс"}},
-        {{"english": "defeat", "russian": "поражение"}},
-        {{"english": "challenge", "russian": "испытание"}},
-        {{"english": "strategy", "russian": "стратегия"}},
-        {{"english": "teammate", "russian": "товарищ по команде"}}
+        {{"english": "word1", "russian": "слово1"}},
+        {{"english": "word2", "russian": "слово2"}},
+        {{"english": "word3", "russian": "слово3"}},
+        {{"english": "word4", "russian": "слово4"}},
+        {{"english": "word5", "russian": "слово5"}}
       ],
       "phrases": [
-        {{"english": "I'm into", "russian": "Я увлекаюсь"}},
-        {{"english": "It depends on", "russian": "Это зависит от"}},
-        {{"english": "I'd rather", "russian": "Я бы предпочел"}}
+        {{"english": "phrase1", "russian": "фраза1"}},
+        {{"english": "phrase2", "russian": "фраза2"}}
       ],
-      "actions": [
-        "Практика в диалогах 15 мин/день",
-        "Использовать новые слова в сообщениях",
-        "Голосовые сообщения 2-3 раза в неделю"
-      ]
+      "actions": ["Action1", "Action2"]
     }}
   ]
 }}
 
-КРИТИЧНО:
-- plan = массив из 4 недель
-- Слова и фразы должны быть ПРАКТИЧНЫМИ для реальных разговоров
-- Темы разговоров связаны с интересами студента ({topics_display})
-- Vocabulary - 5-7 слов уровня {language_level}
-- Phrases - 2-3 устойчивых выражения
-- Actions - конкретные действия (2-3 пункта)
-
-Отвечай ТОЛЬКО валидным JSON без комментариев.'''
+Requirements:
+- Exactly 4 weeks
+- 5 vocabulary words per week (level {language_level})
+- 2 phrases per week
+- 2 actions per week
+- Topics related to: {topics_display}
+- ONLY valid JSON, no comments'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 3000}
+            'generationConfig': {
+                'temperature': 0.7, 
+                'maxOutputTokens': 4000,
+                'topP': 0.95,
+                'topK': 40
+            }
         }
         
         proxy_handler = urllib.request.ProxyHandler({
