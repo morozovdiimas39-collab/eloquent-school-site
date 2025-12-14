@@ -1872,10 +1872,29 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 plan_message += f"🎯 Цель: {learning_goal}\n"
                                 plan_message += f"📊 Уровень: {language_level}\n"
                                 plan_message += f"💡 Темы: {topics_text}\n\n"
-                                plan_message += f"📖 Слова: {len(vocab)} шт\n"
-                                plan_message += f"💭 Фразы: {len(phrases)} шт\n"
-                                plan_message += f"✨ Выражения: {len(expressions)} шт\n\n"
-                                plan_message += "Начинаем практику!"
+                                
+                                # Показываем слова
+                                if vocab:
+                                    plan_message += f"📖 Слова ({len(vocab)} шт):\n"
+                                    for word in vocab:
+                                        plan_message += f"  • {word['english']} — {word['russian']}\n"
+                                    plan_message += "\n"
+                                
+                                # Показываем фразы
+                                if phrases:
+                                    plan_message += f"💭 Фразы ({len(phrases)} шт):\n"
+                                    for phrase in phrases:
+                                        plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
+                                    plan_message += "\n"
+                                
+                                # Показываем выражения
+                                if expressions:
+                                    plan_message += f"✨ Выражения ({len(expressions)} шт):\n"
+                                    for expr in expressions:
+                                        plan_message += f"  • {expr['english']} — {expr['russian']}\n"
+                                    plan_message += "\n"
+                                
+                                plan_message += "Начинаем практику?"
                                 
                                 print(f"[DEBUG] Sending plan message to chat {chat_id}")
                                 send_telegram_message(
