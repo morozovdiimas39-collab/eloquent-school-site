@@ -1909,6 +1909,14 @@ B2: words=["perspective", "consequence", "innovation", "sustainability", "divers
                 cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_goal' WHERE telegram_id = {user['id']}")
                 cur.close()
                 conn.close()
+            
+            # ВАЖНО: Возвращаем ответ после /start, чтобы не продолжить обработку
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True}),
+                'isBase64Encoded': False
+            }
         
         # Обработка выбора режима через Reply Keyboard
         elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод']:
