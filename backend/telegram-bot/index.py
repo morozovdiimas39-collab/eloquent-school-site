@@ -1417,26 +1417,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     if 'error' in result:
                         send_telegram_message(chat_id, f'❌ Ошибка при анализе цели: {result["error"]}', parse_mode=None)
                     else:
-                        # Формируем ответ с планом
-                        plan_text = f"""✅ Отлично! Вот твой план обучения:
+                        # Подтверждаем цель
+                        goal_text = f"✅ Понял! Твоя цель: <b>{result.get('goal')}</b>"
                         
-📋 <b>Цель:</b> {result.get('goal', 'Не указана')}
-⏰ <b>Срок:</b> {result.get('timeline', 'Не указан')}
-📊 <b>Уровень:</b> {result.get('level', 'A2')}
-📈 <b>График:</b> {result.get('schedule', '3-4 раза в неделю')}
-
-<b>Темы для изучения:</b>
-"""
-                        subtopics = result.get('subtopics', [])
-                        for i, topic in enumerate(subtopics[:5], 1):
-                            plan_text += f"{i}. {topic.get('title', 'Тема')} - {topic.get('description', '')}\n"
+                        timeline = result.get('timeline')
+                        if timeline:
+                            goal_text += f"\n⏰ Срок: {timeline}"
                         
-                        plan_text += "\n✨ Начнём практиковаться? Напиши /start чтобы перейти к обучению!"
+                        goal_text += "\n\nТеперь давай проверим твой уровень английского 📊"
                         
-                        send_telegram_message(chat_id, plan_text, parse_mode='HTML')
+                        send_telegram_message(chat_id, goal_text, parse_mode='HTML')
                         
-                        # Сбрасываем состояние
-                        update_conversation_mode(user['id'], 'dialog')
+                        # Переводим в режим проверки уровня
+                        update_conversation_mode(user['id'], 'awaiting_level_check')
                 except Exception as e:
                     print(f"[ERROR] Failed to analyze goal: {e}")
                     send_telegram_message(chat_id, '❌ Не удалось проанализировать цель. Попробуй еще раз или напиши /start', parse_mode=None)
