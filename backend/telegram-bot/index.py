@@ -2185,7 +2185,7 @@ IMPORTANT: "expected" must be RUSSIAN!'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': check_prompt}]}],
-                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 200}
+                        'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 2000}
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
