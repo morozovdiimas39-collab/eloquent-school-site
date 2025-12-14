@@ -1163,7 +1163,7 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 8000,
+                'maxOutputTokens': 16000,
                 'topP': 0.95,
                 'topK': 40
             }
@@ -1181,9 +1181,9 @@ expressions: [{{"english": "let\'s team up", "russian": "давай объеди
             headers={'Content-Type': 'application/json'}
         )
         
-        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=30s)")
+        print(f"[DEBUG] Calling Gemini API for plan generation... (timeout=60s)")
         try:
-            with opener.open(req, timeout=30) as response:
+            with opener.open(req, timeout=60) as response:
                 print(f"[DEBUG] Gemini API responded! Reading data...")
                 gemini_result = json.loads(response.read().decode('utf-8'))
                 plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
