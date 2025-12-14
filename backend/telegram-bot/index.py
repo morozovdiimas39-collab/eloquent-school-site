@@ -2117,8 +2117,13 @@ Rules:
                 # Анализируем ответ через Gemini
                 send_telegram_message(chat_id, '⏳ Проверяю...', parse_mode=None)
                 
+                # Инициализируем переменные для использования во всем блоке
+                api_key = os.environ.get('GEMINI_API_KEY', '')
+                proxy_id = None
+                proxy_url = None
+                gemini_url = ''
+                
                 try:
-                    api_key = os.environ['GEMINI_API_KEY']
                     proxy_id, proxy_url = get_active_proxy_from_db()
                     if not proxy_url:
                         proxy_url = os.environ.get('PROXY_URL', '')
