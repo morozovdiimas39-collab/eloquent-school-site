@@ -910,6 +910,33 @@ def send_telegram_voice(chat_id: int, voice_url: str, caption: str = None):
         print(f"[ERROR] Failed to send voice: {e}")
         raise
 
+def send_telegram_sticker(chat_id: int, sticker_id: str):
+    """Отправляет стикер в Telegram"""
+    token = os.environ['TELEGRAM_BOT_TOKEN']
+    url = f'https://api.telegram.org/bot{token}/sendSticker'
+    
+    payload = {
+        'chat_id': chat_id,
+        'sticker': sticker_id
+    }
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG] Sticker sent: {result}")
+            return result
+    except Exception as e:
+        print(f"[ERROR] Failed to send sticker: {e}")
+        # Не падаем если стикер не отправился
+        return None
+
 def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode='HTML'):
     """Отправляет сообщение в Telegram"""
     send_chat_action(chat_id, 'typing')
@@ -2050,6 +2077,20 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         user = message['from']
         text = message.get('text', '')
         voice = message.get('voice')
+        sticker = message.get('sticker')
+        
+        # Логируем file_id стикеров для добавления в коллекцию
+        if sticker:
+            file_id = sticker.get('file_id')
+            set_name = sticker.get('set_name', '')
+            print(f"[DEBUG] Sticker received: file_id={file_id}, set_name={set_name}")
+            # Не обрабатываем дальше, просто логируем
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True, 'sticker_logged': file_id}),
+                'isBase64Encoded': False
+            }
         
         # Обработка голосовых сообщений
         if voice:
@@ -2164,6 +2205,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'student'
                 )
                 
+                # Отправляем приветственный стикер (из стикер-пака Hey_Anya)
+                try:
+                    # File ID нужно получить отправив стикер боту и залогировав его
+                    # Временно используем заглушку - обновим после получения реального ID
+                    sticker_file_id = os.environ.get('WELCOME_STICKER_ID', '')
+                    if sticker_file_id:
+                        send_telegram_sticker(chat_id, sticker_file_id)
+                except Exception as e:
+                    print(f"[ERROR] Failed to send welcome sticker: {e}")
+                
                 # НОВЫЙ онбординг - сначала спрашиваем режим обучения
                 send_telegram_message(
                     chat_id,
@@ -2193,6 +2244,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 conn.close()
             else:
                 # Возвращающийся пользователь
+                # Отправляем приветственный стикер
+                try:
+                    sticker_file_id = os.environ.get('WELCOME_STICKER_ID', '')
+                    if sticker_file_id:
+                        send_telegram_sticker(chat_id, sticker_file_id)
+                except Exception as e:
+                    print(f"[ERROR] Failed to send welcome sticker: {e}")
+                
                 send_telegram_message(
                     chat_id,
                     'Привет! Я Аня 👋\n\n'
