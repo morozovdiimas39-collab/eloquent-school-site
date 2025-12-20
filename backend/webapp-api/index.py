@@ -1589,6 +1589,93 @@ def reset_proxy_stats(proxy_id: int) -> bool:
     conn.close()
     return True
 
+def call_gemini_demo(user_message: str, history: list) -> str:
+    """
+    Вызывает Gemini API для демо-чата на лендинге
+    Args:
+        user_message: текущее сообщение пользователя
+        history: список предыдущих сообщений [{'role': 'user'|'model', 'content': str}]
+    Returns:
+        str: ответ Gemini
+    """
+    api_key = os.environ['GEMINI_API_KEY']
+    proxies = get_proxies()
+    
+    # System prompt для демо-чата
+    system_prompt = """You are Anya, a friendly and helpful English tutor for Russian-speaking students.
+
+Your task in this DEMO chat:
+- Have a natural, friendly conversation in English
+- Correct grammar and spelling mistakes gently
+- Keep responses SHORT (1-3 sentences max)
+- Be encouraging and supportive
+- Use simple, clear English
+- Add 1 emoji per message MAX
+
+When you find a mistake:
+- Show correction in this format:
+  🔧 Fix:
+  ❌ [wrong sentence]
+  ✅ [correct sentence]
+  🇷🇺 [brief explanation in Russian]
+
+Examples:
+User: "I go to shop yesterday"
+You: "🔧 Fix:
+❌ I go to shop yesterday
+✅ I went to the shop yesterday
+🇷🇺 С 'yesterday' нужно прошедшее время (went)
+
+Nice! What did you buy? 🛍️"
+
+Be natural, friendly, and helpful! Keep it short and conversational."""
+
+    # Формируем содержимое для Gemini
+    contents = []
+    
+    # Системный промпт
+    contents.append({
+        'role': 'user',
+        'parts': [{'text': system_prompt}]
+    })
+    
+    contents.append({
+        'role': 'model',
+        'parts': [{'text': 'Understood! I will be Anya, a friendly English tutor.'}]
+    })
+    
+    # Добавляем историю
+    for msg in history[-10:]:  # Последние 10 сообщений
+        role = 'user' if msg['role'] == 'user' else 'model'
+        contents.append({
+            'role': role,
+            'parts': [{'text': msg['content']}]
+        })
+    
+    # Добавляем новое сообщение
+    contents.append({
+        'role': 'user',
+        'parts': [{'text': user_message}]
+    })
+    
+    # Запрос к Gemini
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+    
+    payload = {
+        'contents': contents,
+        'generationConfig': {
+            'temperature': 0.8,
+            'maxOutputTokens': 500,
+            'topP': 0.95
+        }
+    }
+    
+    response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+    response.raise_for_status()
+    
+    result = response.json()
+    return result['candidates'][0]['content']['parts'][0]['text']
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Главный обработчик WebApp API
@@ -1960,6 +2047,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'demo_chat':
+            message = body_data.get('message', '')
+            history = body_data.get('history', [])
+            
+            if not message:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': False, 'error': 'message is required'}),
+                    'isBase64Encoded': False
+                }
+            
+            response_text = call_gemini_demo(message, history)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'response': response_text}),
                 'isBase64Encoded': False
             }
         

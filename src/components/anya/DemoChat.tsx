@@ -2,50 +2,30 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
+import funcUrls from '../../../backend/func2url.json';
 
 interface Message {
   id: string;
   text: string;
   sender: 'user' | 'anya';
-  correction?: string;
-  translation?: string;
+  role: 'user' | 'model';
 }
 
-const demoScenarios = [
-  {
-    trigger: /hi|hello|привет|hey/i,
-    response: "Hi! 👋 I'm Anya, your English tutor. What would you like to talk about today?",
-    translation: "Привет! Я Аня, твой репетитор английского. О чём хотел бы поговорить сегодня?"
-  },
-  {
-    trigger: /how are you|как дела/i,
-    response: "I'm doing great, thanks for asking! How about you?",
-    translation: "У меня всё отлично, спасибо что спросил! Как у тебя дела?"
-  },
-  {
-    trigger: /weather|погода/i,
-    response: "The weather is nice today! Do you like sunny days? ☀️",
-    translation: "Сегодня хорошая погода! Ты любишь солнечные дни?"
-  },
-  {
-    trigger: /i like|я люблю/i,
-    response: "That's wonderful! Tell me more about what you enjoy doing.",
-    translation: "Это прекрасно! Расскажи мне больше о том, что тебе нравится делать.",
-    correction: "Great sentence! Just remember: 'I like' + verb+ing (I like reading)"
-  },
-];
+const TELEGRAM_BOT_LINK = 'https://t.me/eloquent_school_bot';
+const API_URL = funcUrls['webapp-api'];
 
 export default function DemoChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: "Hi there! I'm Anya 🌟 Try chatting with me in English! I'll help you improve.",
+      text: "Hi! I'm Anya 👋 Try chatting with me in English! I'll help you improve.",
       sender: 'anya',
-      translation: "Привет! Я Аня 🌟 Попробуй пообщаться со мной на английском! Я помогу тебе улучшиться."
+      role: 'model'
     }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [messageCount, setMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -56,42 +36,93 @@ export default function DemoChat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       text: input,
-      sender: 'user'
+      sender: 'user',
+      role: 'user'
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const matchedScenario = demoScenarios.find(scenario => 
-        scenario.trigger.test(input)
-      );
+    const newCount = messageCount + 1;
+    setMessageCount(newCount);
 
-      const anyaMessage: Message = {
+    // Проверяем, если это 7-е сообщение - предлагаем перейти в Telegram
+    if (newCount >= 7) {
+      setTimeout(() => {
+        const finalMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: "Great practice! 🎉\n\nTo continue learning with unlimited messages, exercises, and voice practice, let's move to Telegram where it's more convenient!\n\nClick the button below to start! 👇",
+          sender: 'anya',
+          role: 'model'
+        };
+        setMessages(prev => [...prev, finalMessage]);
+        setIsTyping(false);
+      }, 1500);
+      return;
+    }
+
+    try {
+      // Формируем историю для API
+      const history = messages.map(msg => ({
+        role: msg.role,
+        content: msg.text
+      }));
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'demo_chat',
+          message: input,
+          history: history
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.response) {
+        const anyaMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: data.response,
+          sender: 'anya',
+          role: 'model'
+        };
+        setMessages(prev => [...prev, anyaMessage]);
+      } else {
+        throw new Error(data.error || 'Failed to get response');
+      }
+    } catch (error) {
+      console.error('Demo chat error:', error);
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: matchedScenario?.response || "That's interesting! Can you tell me more? 😊",
+        text: "Sorry, I'm having trouble connecting right now. Try again in a moment! 😊",
         sender: 'anya',
-        translation: matchedScenario?.translation || "Интересно! Можешь рассказать больше?",
-        correction: matchedScenario?.correction
+        role: 'model'
       };
-
-      setMessages(prev => [...prev, anyaMessage]);
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
+  };
+
+  const handleQuickPhrase = (phrase: string) => {
+    setInput(phrase);
   };
 
   const quickPhrases = [
     "Hi! How are you?",
     "I like learning English",
-    "Tell me about the weather"
+    "Tell me about yourself"
   ];
+
+  const showTelegramButton = messageCount >= 7;
 
   return (
     <section id="demo" className="relative py-20 overflow-hidden">
@@ -113,7 +144,7 @@ export default function DemoChat() {
               Попробуй прямо сейчас
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Напиши Ане на английском и посмотри, как она исправляет ошибки и помогает учиться
+              Напиши Ане на английском — она отвечает с помощью настоящего AI!
             </p>
           </div>
 
@@ -137,20 +168,9 @@ export default function DemoChat() {
                               <h3 className="font-bold text-xl">Anya AI Tutor</h3>
                               <p className="text-sm text-white/90 flex items-center gap-2">
                                 <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-                                Online • Отвечает мгновенно
+                                Online • Powered by Gemini 2.0
                               </p>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                              <Icon name="Phone" size={20} />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                              <Icon name="Video" size={20} />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
-                              <Icon name="MoreVertical" size={20} />
-                            </Button>
                           </div>
                         </div>
                       </div>
@@ -177,263 +197,235 @@ export default function DemoChat() {
                                     : 'bg-white border-2 border-purple-100 text-gray-900 rounded-tl-sm'
                                 }`}
                               >
-                                <p className="text-base leading-relaxed">{message.text}</p>
+                                <p className="text-base leading-relaxed whitespace-pre-line">{message.text}</p>
                               </div>
-                              {message.translation && (
-                                <div className="text-xs text-gray-500 italic px-3 flex items-start gap-1">
-                                  <Icon name="Languages" size={12} className="mt-0.5 flex-shrink-0" />
-                                  {message.translation}
-                                </div>
-                              )}
-                              {message.correction && (
-                                <div className="bg-orange-50 border-2 border-orange-200 rounded-xl px-4 py-3 text-sm text-orange-900 shadow-sm">
-                                  <div className="flex items-start gap-2">
-                                    <Icon name="Lightbulb" size={16} className="text-orange-500 mt-0.5 flex-shrink-0" />
-                                    <div>
-                                      <div className="font-semibold mb-1">💡 Подсказка</div>
-                                      <div>{message.correction}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           </div>
                         ))}
+                        
                         {isTyping && (
                           <div className="flex justify-start animate-fade-in">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm font-bold shadow-md">
-                                A
+                            <div className="max-w-[75%] space-y-2">
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                                  A
+                                </div>
+                                <span className="text-xs text-gray-500 font-medium">Anya is typing...</span>
                               </div>
-                              <div className="bg-white border-2 border-purple-100 rounded-2xl rounded-tl-sm px-5 py-3.5 shadow-md">
+                              <div className="bg-white border-2 border-purple-100 rounded-2xl rounded-tl-sm px-5 py-4">
                                 <div className="flex gap-1.5">
-                                  <div className="w-2.5 h-2.5 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                  <div className="w-2.5 h-2.5 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                  <div className="w-2.5 h-2.5 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                  <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                  <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                  <div className="w-2.5 h-2.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         )}
+                        
                         <div ref={messagesEndRef} />
                       </div>
 
-                      <div className="p-6 bg-white border-t-2 border-gray-100">
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {quickPhrases.map((phrase, idx) => (
-                            <Button
-                              key={idx}
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setInput(phrase)}
-                              className="text-sm hover:bg-purple-50 hover:border-purple-300 transition-all"
-                            >
-                              <Icon name="Zap" size={14} className="mr-1.5" />
-                              {phrase}
-                            </Button>
-                          ))}
-                        </div>
-                        <div className="flex gap-3">
-                          <Button variant="ghost" size="sm" className="px-3">
-                            <Icon name="Paperclip" size={20} className="text-gray-500" />
-                          </Button>
-                          <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Type your message in English..."
-                            className="flex-1 px-5 py-3.5 text-base border-2 border-gray-200 rounded-xl focus:border-purple-400 focus:outline-none transition-all"
-                          />
-                          <Button variant="ghost" size="sm" className="px-3">
-                            <Icon name="Smile" size={20} className="text-gray-500" />
-                          </Button>
+                      {showTelegramButton ? (
+                        <div className="p-6 bg-gradient-to-r from-blue-50 to-purple-50 border-t-2 border-purple-100">
                           <Button
-                            onClick={handleSend}
-                            disabled={!input.trim() || isTyping}
-                            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-3.5 shadow-lg hover:shadow-xl transition-all"
+                            onClick={() => window.open(TELEGRAM_BOT_LINK, '_blank')}
+                            className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all"
                           >
-                            <Icon name="Send" size={20} />
+                            <Icon name="Send" size={20} className="mr-2" />
+                            Продолжить в Telegram
                           </Button>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="p-6 bg-gradient-to-r from-gray-50 to-blue-50 border-t-2 border-gray-100 space-y-4">
+                          {/* Quick phrases */}
+                          <div className="flex flex-wrap gap-2">
+                            {quickPhrases.map((phrase, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleQuickPhrase(phrase)}
+                                className="px-4 py-2 bg-white hover:bg-purple-50 text-gray-700 hover:text-purple-700 rounded-full text-sm font-medium border border-gray-200 hover:border-purple-300 transition-all hover:shadow-md"
+                              >
+                                {phrase}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Input */}
+                          <div className="flex gap-3">
+                            <input
+                              type="text"
+                              value={input}
+                              onChange={(e) => setInput(e.target.value)}
+                              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                              placeholder="Type your message in English..."
+                              disabled={isTyping}
+                              className="flex-1 px-5 py-3.5 rounded-2xl border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 outline-none text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                            <Button
+                              onClick={handleSend}
+                              disabled={!input.trim() || isTyping}
+                              size="lg"
+                              className="px-6 py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <Icon name="Send" size={20} />
+                            </Button>
+                          </div>
+
+                          {/* Message counter */}
+                          <div className="text-center text-sm text-gray-500">
+                            {messageCount}/7 demo messages • {7 - messageCount} left
+                          </div>
+                        </div>
+                      )}
                     </Card>
                   </div>
                 </div>
+
                 {/* Laptop base */}
-                <div className="relative">
-                  <div className="h-6 bg-gradient-to-b from-gray-700 to-gray-800 rounded-b-3xl"></div>
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-48 h-2 bg-gray-900 rounded-t-lg"></div>
-                </div>
-
-                {/* Floating stats */}
-                <div className="absolute -right-8 top-32 bg-white rounded-2xl px-6 py-4 shadow-2xl border-2 border-purple-100 animate-float">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center">
-                      <Icon name="CheckCircle2" size={24} className="text-white" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-500">Ошибок исправлено</div>
-                      <div className="text-2xl font-bold text-gray-900">247</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="absolute -left-8 bottom-48 bg-white rounded-2xl px-6 py-4 shadow-2xl border-2 border-blue-100 animate-float animation-delay-1000">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
-                      <Icon name="BookOpen" size={24} className="text-white" />
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-500">Слов изучено</div>
-                      <div className="text-2xl font-bold text-gray-900">1,432</div>
-                    </div>
-                  </div>
-                </div>
+                <div className="h-6 bg-gray-800 rounded-b-3xl border-8 border-gray-800 border-t-0"></div>
+                <div className="h-2 bg-gray-700 rounded-b-lg mx-auto" style={{ width: '60%' }}></div>
               </div>
             </div>
 
-            {/* Mobile: Phone mockup */}
+            {/* Mobile Phone Frame */}
             <div className="lg:hidden">
-              <div className="relative mx-auto max-w-sm">
-                <div className="bg-gray-900 rounded-[3rem] p-4 shadow-2xl border-8 border-gray-800">
+              <div className="relative mx-auto w-full max-w-sm">
+                <div className="relative bg-gray-900 rounded-[3rem] p-4 shadow-2xl border-8 border-gray-800">
                   <div className="bg-white rounded-[2.5rem] overflow-hidden">
-                    {/* Status bar */}
-                    <div className="bg-gray-50 px-6 py-3 flex items-center justify-between text-xs">
-                      <span className="font-semibold">9:41</span>
-                      <div className="flex items-center gap-1">
-                        <Icon name="Signal" size={12} />
-                        <Icon name="Wifi" size={12} />
-                        <Icon name="Battery" size={12} />
-                      </div>
-                    </div>
-
-                    <Card className="overflow-hidden border-0 rounded-none">
-                      <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 p-4 text-white">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center relative">
-                            <span className="text-xl">👩‍🏫</span>
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></div>
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-bold">Anya</h3>
-                            <p className="text-xs text-white/90 flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                              online
-                            </p>
-                          </div>
-                          <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 h-8 w-8 p-0">
-                            <Icon name="MoreVertical" size={18} />
-                          </Button>
+                    <Card className="overflow-hidden border-0">
+                      {/* Status bar */}
+                      <div className="bg-gray-50 px-6 py-3 flex items-center justify-between text-xs">
+                        <span className="font-semibold">9:41</span>
+                        <div className="flex items-center gap-1">
+                          <Icon name="Signal" size={12} />
+                          <Icon name="Wifi" size={12} />
+                          <Icon name="Battery" size={12} />
                         </div>
                       </div>
 
-                      <div className="h-[450px] overflow-y-auto p-4 space-y-3 bg-gradient-to-b from-gray-50 to-white">
+                      {/* Chat header */}
+                      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center relative">
+                          <span className="text-xl">👩‍🏫</span>
+                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white"></div>
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-white text-sm">Anya AI</div>
+                          <div className="text-xs text-white/90 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
+                            Gemini 2.0
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Chat messages */}
+                      <div className="h-[400px] overflow-y-auto p-4 space-y-3 bg-gray-50">
                         {messages.map((message) => (
                           <div
                             key={message.id}
                             className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
                           >
-                            <div className={`max-w-[85%] space-y-2`}>
+                            <div className="max-w-[85%]">
                               {message.sender === 'anya' && (
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
                                     A
                                   </div>
-                                  <span className="text-xs text-gray-500 font-medium">Anya</span>
                                 </div>
                               )}
                               <div
-                                className={`rounded-2xl px-4 py-3 shadow-md ${
+                                className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm ${
                                   message.sender === 'user'
                                     ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-tr-sm'
-                                    : 'bg-white border-2 border-purple-100 text-gray-900 rounded-tl-sm'
+                                    : 'bg-white border border-purple-100 text-gray-900 rounded-tl-sm'
                                 }`}
                               >
-                                <p className="text-sm leading-relaxed">{message.text}</p>
+                                <p className="leading-relaxed whitespace-pre-line">{message.text}</p>
                               </div>
-                              {message.translation && (
-                                <div className="text-xs text-gray-500 italic px-2 flex items-start gap-1">
-                                  <Icon name="Languages" size={11} className="mt-0.5 flex-shrink-0" />
-                                  {message.translation}
-                                </div>
-                              )}
-                              {message.correction && (
-                                <div className="bg-orange-50 border-2 border-orange-200 rounded-xl px-3 py-2.5 text-xs text-orange-900 shadow-sm">
-                                  <div className="flex items-start gap-2">
-                                    <Icon name="Lightbulb" size={14} className="text-orange-500 mt-0.5 flex-shrink-0" />
-                                    <div>
-                                      <div className="font-semibold mb-1">💡 Подсказка</div>
-                                      <div>{message.correction}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           </div>
                         ))}
+
                         {isTyping && (
                           <div className="flex justify-start animate-fade-in">
-                            <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-xs font-bold shadow">
-                                A
+                            <div className="max-w-[85%]">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                                  A
+                                </div>
+                                <span className="text-xs text-gray-500">typing...</span>
                               </div>
-                              <div className="bg-white border-2 border-purple-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-md">
+                              <div className="bg-white border border-purple-100 rounded-2xl rounded-tl-sm px-4 py-3">
                                 <div className="flex gap-1">
-                                  <div className="w-2 h-2 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                  <div className="w-2 h-2 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                  <div className="w-2 h-2 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                                 </div>
                               </div>
                             </div>
                           </div>
                         )}
+
                         <div ref={messagesEndRef} />
                       </div>
 
-                      <div className="p-4 bg-white border-t">
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {quickPhrases.map((phrase, idx) => (
-                            <Button
-                              key={idx}
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setInput(phrase)}
-                              className="text-xs hover:bg-purple-50 hover:border-purple-300"
-                            >
-                              {phrase}
-                            </Button>
-                          ))}
-                        </div>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Type in English..."
-                            className="flex-1 px-4 py-3 text-sm border-2 border-gray-200 rounded-xl focus:border-purple-400 focus:outline-none"
-                          />
+                      {showTelegramButton ? (
+                        <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 border-t border-purple-100">
                           <Button
-                            onClick={handleSend}
-                            disabled={!input.trim() || isTyping}
-                            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-4 shadow-lg"
+                            onClick={() => window.open(TELEGRAM_BOT_LINK, '_blank')}
+                            className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
                           >
-                            <Icon name="Send" size={18} />
+                            <Icon name="Send" size={18} className="mr-2" />
+                            Продолжить в Telegram
                           </Button>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="p-4 bg-white border-t border-gray-200 space-y-3">
+                          {/* Quick phrases */}
+                          <div className="flex flex-wrap gap-2">
+                            {quickPhrases.slice(0, 2).map((phrase, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleQuickPhrase(phrase)}
+                                className="px-3 py-1.5 bg-gray-50 hover:bg-purple-50 text-gray-700 hover:text-purple-700 rounded-full text-xs font-medium border border-gray-200 hover:border-purple-300 transition-all"
+                              >
+                                {phrase}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Input */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={input}
+                              onChange={(e) => setInput(e.target.value)}
+                              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                              placeholder="Type in English..."
+                              disabled={isTyping}
+                              className="flex-1 px-4 py-2.5 rounded-full border border-gray-300 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none text-sm disabled:opacity-50"
+                            />
+                            <Button
+                              onClick={handleSend}
+                              disabled={!input.trim() || isTyping}
+                              size="sm"
+                              className="px-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50"
+                            >
+                              <Icon name="Send" size={16} />
+                            </Button>
+                          </div>
+
+                          {/* Message counter */}
+                          <div className="text-center text-xs text-gray-500">
+                            {messageCount}/7 demo messages
+                          </div>
+                        </div>
+                      )}
                     </Card>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="text-center mt-12">
-            <div className="inline-flex items-center gap-2 px-6 py-3 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-purple-100">
-              <Icon name="Sparkles" size={18} className="text-purple-600" />
-              <span className="text-gray-700 font-medium">Это демо с ограниченными ответами. Полная версия в Telegram намного умнее!</span>
             </div>
           </div>
         </div>
