@@ -85,6 +85,26 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
     }
   };
 
+  const deleteWord = async (wordId: number) => {
+    if (!confirm('Удалить это слово из изучения?')) return;
+    
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_word',
+          word_id: wordId
+        })
+      });
+      await loadWords();
+      await loadStats();
+    } catch (error) {
+      console.error('Ошибка удаления слова:', error);
+      alert('Не удалось удалить слово');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'new': return 'bg-blue-100 text-blue-700';
@@ -220,6 +240,14 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                         Назначено: {new Date(word.assigned_at).toLocaleDateString('ru-RU')}
                       </p>
                     </div>
+                    
+                    <button
+                      onClick={() => deleteWord(word.word_id)}
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                      title="Удалить слово"
+                    >
+                      <Icon name="Trash2" size={18} />
+                    </button>
                   </div>
                 </div>
               ))}
