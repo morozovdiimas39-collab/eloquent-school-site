@@ -295,8 +295,8 @@ export default function DemoChat() {
             </div>
 
             {/* Mobile: Full-width chat without phone frame */}
-            <div className="lg:hidden px-4">
-              <div className="relative mx-auto w-full max-w-2xl">
+            <div className="lg:hidden">
+              <div className="relative mx-auto w-full">
                 <Card className="overflow-hidden border-0 shadow-2xl rounded-2xl">
                   {/* Chat header */}
                   <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 flex items-center gap-3">
@@ -375,7 +375,7 @@ export default function DemoChat() {
                       </Button>
                     </div>
                   ) : (
-                    <div className="p-5 bg-white border-t-2 border-gray-100 space-y-4">
+                    <div className="p-4 bg-white border-t-2 border-gray-100 space-y-3">
                       {/* Quick phrases */}
                       <div className="flex flex-wrap gap-2">
                         {quickPhrases.slice(0, 2).map((phrase, index) => (
@@ -390,7 +390,7 @@ export default function DemoChat() {
                       </div>
 
                       {/* Input */}
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <input
                           type="text"
                           value={input}
@@ -398,21 +398,15 @@ export default function DemoChat() {
                           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
                           placeholder="Type in English..."
                           disabled={isTyping}
-                          className="flex-1 px-5 py-3 rounded-full border-2 border-gray-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-100 outline-none text-base disabled:opacity-50"
+                          className="flex-1 px-4 py-3 rounded-full border-2 border-gray-200 focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none text-base disabled:opacity-50"
                         />
                         <Button
                           onClick={handleSend}
                           disabled={!input.trim() || isTyping}
-                          size="lg"
-                          className="px-6 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50"
+                          className="px-5 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 rounded-full"
                         >
                           <Icon name="Send" size={18} />
                         </Button>
-                      </div>
-
-                      {/* Message counter */}
-                      <div className="text-center text-sm text-gray-500 font-medium">
-                        {messageCount}/7 demo messages • {7 - messageCount} left
                       </div>
                     </div>
                   )}
