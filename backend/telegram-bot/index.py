@@ -4768,21 +4768,72 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                 corrected = check_data.get('corrected', '')
                                 
                                 if is_correct:
-                                    send_telegram_message(chat_id, f'✅ Отлично! {{feedback}} 🎉', get_reply_keyboard())
+                                    send_telegram_message(chat_id, f'✅ Отлично! {feedback} 🎉', get_reply_keyboard())
+                                    
+                                    # Переходим к следующему слову
+                                    if current_word_id:
+                                        update_word_progress_api(user['id'], current_word_id, True)
+                                    
+                                    clear_exercise_state(user['id'])
+                                    
+                                    word = get_random_word(user['id'], language_level)
+                                    if word:
+                                        exercise_text = generate_sentence_exercise(word, language_level)
+                                        update_exercise_state(user['id'], word['id'], word['english'])
+                                        send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                                    else:
+                                        send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
+                                        update_conversation_mode(user['id'], 'dialog')
                                 else:
-                                    response_text = f'❌ {{feedback}}'
-                                    if corrected:
-                                        response_text += f'\n\n✅ Правильно: {corrected}'
-                                    send_telegram_message(chat_id, response_text, get_reply_keyboard())
+                                    # ⚠️ КРИТИЧНО: При ошибке показываем исправление и просим ПОВТОРИТЬ ТО ЖЕ СЛОВО
+                                    response_text = '🔧 Fix / Correct:\n'
+                                    response_text += f'❌ {user_answer}\n'
+                                    response_text += f'✅ {corrected}\n'
+                                    response_text += f'🇷🇺 {feedback}\n\n'
+                                    response_text += f'Попробуй еще раз со словом: {correct_answer}'
+                                    
+                                    send_telegram_message(chat_id, response_text, get_reply_keyboard(), parse_mode=None)
+                                    
+                                    # НЕ обновляем прогресс и НЕ меняем слово - пусть повторит!
+                                    # current_exercise_word_id и current_exercise_answer остаются те же
+                                    return {
+                                        'statusCode': 200,
+                                        'headers': {'Content-Type': 'application/json'},
+                                        'body': json.dumps({'status': 'retry_same_word'})
+                                    }
                         
                         except Exception as e:
-                            print(f'[ERROR] Failed to check sentence: {{e}}')
+                            print(f'[ERROR] Failed to check sentence: {e}')
                             # Fallback: простая проверка наличия слова
                             is_correct = correct_answer.lower() in user_answer.lower()
                             if is_correct:
                                 send_telegram_message(chat_id, '✅ Хорошо! Предложение использует слово правильно! 🎉', get_reply_keyboard())
+                                
+                                # Переходим к следующему слову
+                                if current_word_id:
+                                    update_word_progress_api(user['id'], current_word_id, True)
+                                
+                                clear_exercise_state(user['id'])
+                                
+                                word = get_random_word(user['id'], language_level)
+                                if word:
+                                    exercise_text = generate_sentence_exercise(word, language_level)
+                                    update_exercise_state(user['id'], word['id'], word['english'])
+                                    send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                                else:
+                                    send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
+                                    update_conversation_mode(user['id'], 'dialog')
                             else:
-                                send_telegram_message(chat_id, f'❌ Предложение не содержит слово "{correct_answer}". Попробуй еще раз!', get_reply_keyboard())
+                                # При ошибке - просим повторить то же слово
+                                response_text = f'❌ Предложение не содержит слово "{correct_answer}".\n\nПопробуй еще раз!'
+                                send_telegram_message(chat_id, response_text, get_reply_keyboard())
+                                
+                                # НЕ меняем слово - пусть повторит
+                                return {
+                                    'statusCode': 200,
+                                    'headers': {'Content-Type': 'application/json'},
+                                    'body': json.dumps({'status': 'retry_same_word'})
+                                }
                     else:
                         # Для других режимов (context, association, translation) - точное совпадение
                         correct_answer_lower = correct_answer.lower()
@@ -4790,36 +4841,46 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                         
                         if is_correct:
                             send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉', get_reply_keyboard())
+                            
+                            # Обновляем прогресс слова
+                            if current_word_id:
+                                update_word_progress_api(user['id'], current_word_id, True)
+                            
+                            clear_exercise_state(user['id'])
+                            
+                            word = get_random_word(user['id'], language_level)
+                            if word:
+                                if conversation_mode == 'context':
+                                    exercise_text, answer = generate_context_exercise(word, language_level)
+                                    update_exercise_state(user['id'], word['id'], answer)
+                                    send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                                elif conversation_mode == 'association':
+                                    exercise_text, answer = generate_association_exercise(word, language_level)
+                                    update_exercise_state(user['id'], word['id'], answer)
+                                    send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                                elif conversation_mode == 'translation':
+                                    exercise_text, answer = generate_translation_exercise(word)
+                                    update_exercise_state(user['id'], word['id'], answer)
+                                    send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                            else:
+                                send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
+                                update_conversation_mode(user['id'], 'dialog')
                         else:
-                            send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: {correct_answer}', get_reply_keyboard())
-                    
-                    # Обновляем прогресс слова
-                    if current_word_id:
-                        update_word_progress_api(user['id'], current_word_id, is_correct)
-                    
-                    clear_exercise_state(user['id'])
-                    
-                    word = get_random_word(user['id'], language_level)
-                    if word:
-                        if conversation_mode == 'sentence':
-                            exercise_text = generate_sentence_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], word['english'])
-                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
-                        elif conversation_mode == 'context':
-                            exercise_text, answer = generate_context_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
-                        elif conversation_mode == 'association':
-                            exercise_text, answer = generate_association_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
-                        elif conversation_mode == 'translation':
-                            exercise_text, answer = generate_translation_exercise(word)
-                            update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
-                    else:
-                        send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
-                        update_conversation_mode(user['id'], 'dialog')
+                            # При ошибке - показываем правильный ответ и просим повторить
+                            response_text = '🔧 Fix / Correct:\n'
+                            response_text += f'❌ {user_answer}\n'
+                            response_text += f'✅ {correct_answer}\n'
+                            response_text += f'🇷🇺 Правильный ответ: {correct_answer}\n\n'
+                            response_text += 'Попробуй еще раз!'
+                            
+                            send_telegram_message(chat_id, response_text, get_reply_keyboard(), parse_mode=None)
+                            
+                            # НЕ обновляем прогресс и НЕ меняем слово
+                            return {{
+                                'statusCode': 200,
+                                'headers': {{'Content-Type': 'application/json'}},
+                                'body': json.dumps({{'status': 'retry_same_word'}})
+                            }}
                 
             else:
                 # Режим диалога или голосового - обрабатываем через Gemini
