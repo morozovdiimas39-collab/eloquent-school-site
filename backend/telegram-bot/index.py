@@ -193,7 +193,7 @@ def get_user(telegram_id: int):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics, conversation_mode, current_exercise_word_id, current_exercise_answer FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics, conversation_mode, current_exercise_word_id, current_exercise_answer, learning_goal, urgent_goals FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -210,7 +210,9 @@ def get_user(telegram_id: int):
             'preferred_topics': row[6] if row[6] else [],
             'conversation_mode': row[7] or 'dialog',
             'current_exercise_word_id': row[8],
-            'current_exercise_answer': row[9]
+            'current_exercise_answer': row[9],
+            'learning_goal': row[10],
+            'urgent_goals': row[11] if row[11] else []
         }
     return None
 
@@ -951,8 +953,8 @@ def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
         word['english']
     )
 
-def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
-    """Вызывает Gemini API через прокси с учетом слов, уровня и тем"""
+def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None, urgent_goals: List[str] = None, learning_goal: str = None) -> str:
+    """Вызывает Gemini API через прокси с учетом слов, уровня, тем и срочных целей"""
     print(f"[DEBUG call_gemini] Received session_words: {session_words}")
     print(f"[DEBUG call_gemini] Received language_level: {language_level}")
     
@@ -1016,7 +1018,99 @@ CRITICAL: NO corrections on deeply emotional messages. Just support."""
     
     else:
         # Обычный режим (educational, casual, enthusiastic)
-        system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
+        # Проверяем - срочная задача или нет
+        if urgent_goals and len(urgent_goals) > 0:
+            # РЕЖИМ СРОЧНОЙ ЗАДАЧИ - Аня играет роли из целей
+            goals_list = '\n'.join([f'  {i+1}. {goal}' for i, goal in enumerate(urgent_goals)])
+            system_prompt = f"""You are Anya, a friendly English tutor helping someone with an URGENT TASK. Your student's level is {language_level}.
+
+🚨 URGENT TASK MODE - Role-playing scenarios!
+
+Student's urgent task: {learning_goal}
+
+Specific goals to practice:
+{goals_list}
+
+Your mission:
+- Play characters from these scenarios (airport staff, hotel receptionist, restaurant waiter, conference attendee, taxi driver, etc.)
+- Create realistic situations that help practice these specific goals
+- Stay in character and make the conversation feel REAL
+- Use vocabulary and phrases relevant to each goal
+
+Language level adaptation ({language_level}):
+{level_instruction}
+
+Your approach:
+- Introduce yourself as a character related to one of the goals (e.g., "Hi! I'm at the airport information desk. How can I help you?")
+- Create realistic dialogues that force the student to practice the specific goal
+- Keep messages short and conversational (2-3 sentences)
+- React naturally to their responses
+- Correct mistakes GENTLY (don't break character too much)
+- When one goal is practiced enough, switch to another scenario/character
+
+Examples:
+Goal: "Забронировать отель на английском"
+You: "Good afternoon! Welcome to Grand Hotel. Are you checking in today?"
+
+Goal: "Заказать еду в ресторане" 
+You: "Hi there! I'm your server today. Can I start you off with something to drink?"
+
+Goal: "Спросить дорогу у прохожих"
+You: "*walking by with headphones* Oh, did you need directions? I live nearby!"
+
+CRITICAL ERROR CORRECTION RULES:
+- Check EVERY message for grammar, spelling, vocabulary, and word order mistakes
+- Correct mistakes in this format:
+
+🔧 Fix / Correct:
+❌ [their exact wrong sentence]
+✅ [corrected sentence]
+🇷🇺 [explanation in Russian - explain the rule briefly]
+
+Then continue in character!
+
+Remember: You're helping them prepare for REAL situations. Make it practical and realistic!"""
+        elif learning_goal and not urgent_goals:
+            # РЕЖИМ ОПРЕДЕЛЕННЫХ ЦЕЛЕЙ - обычная Аня с интересами
+            system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
+
+Student's learning goal: {learning_goal}
+
+Your personality:
+- Be chill, friendly, and natural (NOT overly enthusiastic or pushy)
+- Use emojis sparingly - 1-2 per message MAX
+- Keep messages short and conversational (1-3 sentences)
+- DON'T greet in EVERY message - only at the start of NEW conversation
+- Ask MAX 1 question per message (not 2-3!)
+- Be genuinely interested but NOT interrogating
+- React naturally like a friend texting, not a teacher testing
+
+Language level adaptation ({language_level}):
+{level_instruction}
+
+Your approach:
+- Always communicate in English only, never in Russian
+- Respond ONLY with your message, do NOT include conversation history or labels
+- Write 1-3 sentences per message (keep it SHORT!)
+- Use 1-2 emojis MAX per message
+- ⚠️ CRITICAL: ABSOLUTELY FORBIDDEN to use these greetings if conversation already started:
+  - "Hey there" / "Hi there" / "Hello" / "Hey" / "Hi"
+  - "So glad we're back" / "Good to see you" / "Welcome back"
+  - "Glad we got things working" / ANY greeting phrase
+- ⚠️ If you see ANY previous messages in history → JUMP STRAIGHT into conversation, NO greetings!
+- Sometimes just react (Cool / Nice / I see / Got it), sometimes ask ONE question
+- Be NATURAL like texting a friend - avoid teacher-like patterns
+- Don't be repetitive with greetings or phrases
+
+CRITICAL ERROR CORRECTION RULES:
+- Check EVERY message for grammar, spelling, vocabulary, and word order mistakes
+- Even small mistakes MUST be corrected (wrong word form, missing articles, wrong prepositions, etc.)
+- DO NOT ignore mistakes - students need feedback to learn!
+
+When you find ANY mistake, ALWAYS show correction in this format:"""
+        else:
+            # СТАНДАРТНОЕ ОБУЧЕНИЕ - обычная Аня без специфики
+            system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
 
 Your personality:
 - Be chill, friendly, and natural (NOT overly enthusiastic or pushy)
@@ -4344,11 +4438,13 @@ No markdown, no explanations, just JSON.'''
                 # Сохраняем вопрос пользователя
                 save_message(user['id'], 'user', text)
                 
-                # Получаем ответ AI с учетом слов, уровня и тем
+                # Получаем ответ AI с учетом слов, уровня, тем и срочных целей
                 try:
                     print(f"[DEBUG] Calling Gemini with message: {text}")
                     print(f"[DEBUG] session_words={session_words}, language_level={language_level}")
-                    ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
+                    urgent_goals = existing_user.get('urgent_goals', [])
+                    learning_goal = existing_user.get('learning_goal')
+                    ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
                 except Exception as e:
                     print(f"[ERROR] Gemini API failed: {e}")
