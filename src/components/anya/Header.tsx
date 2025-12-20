@@ -10,13 +10,14 @@ export default function Header() {
       <div className="container mx-auto px-4 h-24 flex items-center justify-between">
         <button 
           onClick={() => navigate('/')}
-          className="group hover:opacity-80 transition-opacity"
+          className="group hover:opacity-80 transition-opacity flex items-center gap-3"
         >
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+            <span className="text-2xl font-bold text-white">A</span>
+          </div>
           <div className="flex flex-col">
-            <span className="text-3xl font-black tracking-tight">
-              <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 bg-clip-text text-transparent">A</span>
-              <span className="text-gray-900">nya</span>
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GPT</span>
+            <span className="text-2xl font-bold tracking-tight text-gray-900">
+              Anya
             </span>
             <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase -mt-1">
               ИИ-репетитор английского

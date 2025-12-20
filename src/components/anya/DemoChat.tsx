@@ -33,7 +33,7 @@ export default function DemoChat() {
   };
 
   useEffect(() => {
-    scrollToBottom();
+    // Не прокручиваем автоматически, пользователь сам управляет
   }, [messages]);
 
   const handleSend = async () => {
@@ -52,6 +52,9 @@ export default function DemoChat() {
 
     const newCount = messageCount + 1;
     setMessageCount(newCount);
+
+    // Прокручиваем вниз при отправке сообщения
+    setTimeout(() => scrollToBottom(), 100);
 
     // Проверяем, если это 7-е сообщение - предлагаем перейти в Telegram
     if (newCount >= 7) {
@@ -95,6 +98,8 @@ export default function DemoChat() {
           role: 'model'
         };
         setMessages(prev => [...prev, anyaMessage]);
+        // Прокручиваем к ответу Ани
+        setTimeout(() => scrollToBottom(), 100);
       } else {
         throw new Error(data.error || 'Failed to get response');
       }
@@ -107,6 +112,7 @@ export default function DemoChat() {
         role: 'model'
       };
       setMessages(prev => [...prev, errorMessage]);
+      setTimeout(() => scrollToBottom(), 100);
     } finally {
       setIsTyping(false);
     }
