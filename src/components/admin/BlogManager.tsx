@@ -45,18 +45,25 @@ export default function BlogManager() {
 
   const loadPosts = async () => {
     try {
+      console.log('📝 BlogManager: Loading posts from', API_URL);
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_blog_posts', published_only: false })
       });
 
+      console.log('📝 BlogManager: Response status', response.status);
       const data = await response.json();
+      console.log('📝 BlogManager: Response data', data);
+      
       if (data.success) {
         setPosts(data.posts);
+        console.log('📝 BlogManager: Loaded', data.posts.length, 'posts');
+      } else {
+        console.error('📝 BlogManager: Failed to load posts', data);
       }
     } catch (error) {
-      console.error('Error loading posts:', error);
+      console.error('📝 BlogManager: Error loading posts:', error);
     } finally {
       setLoading(false);
     }
