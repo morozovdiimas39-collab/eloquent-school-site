@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
-import funcUrls from '../../../backend/func2url.json';
+import funcUrls from '../../../../backend/func2url.json';
 
 const API_URL = funcUrls['webapp-api'];
 

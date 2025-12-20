@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
-import funcUrls from '../../../backend/func2url.json';
+import funcUrls from '../../../../backend/func2url.json';
 
 interface BlogPost {
   id: number;

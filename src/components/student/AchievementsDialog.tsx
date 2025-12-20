@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
-import funcUrls from '../../../backend/func2url.json';
+import funcUrls from '../../../../backend/func2url.json';
 
 const API_URL = funcUrls['webapp-api'];
 
