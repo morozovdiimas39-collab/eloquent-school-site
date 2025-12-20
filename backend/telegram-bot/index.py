@@ -981,13 +981,16 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
 def generate_association_exercise(word: Dict[str, Any], language_level: str) -> tuple:
     """Генерирует упражнение с ассоциациями через Gemini"""
     try:
+        print(f"[DEBUG generate_association_exercise] Starting for word: {word['english']}, level: {language_level}")
+        
         api_key = os.environ['GEMINI_API_KEY']
         proxy_id, proxy_url = get_active_proxy_from_db()
         if not proxy_url:
             proxy_url = os.environ.get('PROXY_URL', '')
+            print(f"[DEBUG] Using PROXY_URL from env for associations")
         
         if not proxy_url:
-            # Fallback на дефолтные ассоциации если нет прокси
+            print(f"[WARNING] No proxy available - using fallback associations")
             hints = ['word', 'thing', 'item']
             hints_text = ', '.join(hints)
             return (
@@ -1013,6 +1016,8 @@ Examples:
 Return ONLY valid JSON:
 {{"associations": ["hint1", "hint2", "hint3"]}}'''
 
+        print(f"[DEBUG] Calling Gemini for associations...")
+        
         gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
         
         payload = {
@@ -1036,8 +1041,12 @@ Return ONLY valid JSON:
             result = json.loads(response.read().decode('utf-8'))
             text = result['candidates'][0]['content']['parts'][0]['text']
             
+            print(f"[DEBUG] Gemini response for associations: {text}")
+            
             data = safe_json_parse(text, {'associations': ['word', 'thing', 'item']})
             hints = data.get('associations', ['word', 'thing', 'item'])[:3]
+            
+            print(f"[DEBUG] Parsed associations: {hints}")
             
             log_proxy_success(proxy_id)
             
@@ -1049,7 +1058,10 @@ Return ONLY valid JSON:
             )
             
     except Exception as e:
-        print(f"[ERROR] Failed to generate associations: {e}")
+        print(f"[ERROR] Failed to generate associations for '{word['english']}': {e}")
+        import traceback
+        traceback.print_exc()
+        
         # Fallback на простые ассоциации
         hints = ['word', 'thing', 'item']
         hints_text = ', '.join(hints)
