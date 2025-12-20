@@ -936,7 +936,7 @@ def get_random_word(telegram_id: int, language_level: str = 'A1') -> Dict[str, A
 
 def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> str:
     """Генерирует задание на составление предложения"""
-    return f"✍️ Составь предложение со словом: <b>{word['english']}</b> ({word['russian']})"
+    return f"✍️ Составь предложение со словом: {word['english']} ({word['russian']})"
 
 def generate_context_exercise(word: Dict[str, Any], language_level: str) -> tuple:
     """Генерирует упражнение Fill in the blanks"""
@@ -4692,16 +4692,94 @@ No markdown, no explanations, just JSON.'''
             elif conversation_mode != 'dialog':
                 correct_answer = existing_user.get('current_exercise_answer', '')
                 current_word_id = existing_user.get('current_exercise_word_id')
-                user_answer = text.strip().lower()
+                user_answer = text.strip()
                 
                 if correct_answer:
-                    correct_answer_lower = correct_answer.lower()
-                    is_correct = (user_answer == correct_answer_lower)
-                    
-                    if is_correct:
-                        send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉', get_reply_keyboard())
+                    # ⚠️ CRITICAL: В режиме sentence проверяем через Gemini (не точное совпадение!)
+                    if conversation_mode == 'sentence':
+                        # Проверяем предложение через AI
+                        try:
+                            api_key = os.environ['GEMINI_API_KEY']
+                            proxy_id, proxy_url = get_active_proxy_from_db()
+                            if not proxy_url:
+                                proxy_id = None
+                                proxy_url = os.environ.get('PROXY_URL', '')
+                            
+                            check_prompt = f'''Check if this English sentence is correct and uses the word "{correct_answer}" properly.
+
+Student's sentence: "{user_answer}"
+Required word: {correct_answer}
+Student level: {language_level}
+
+Respond ONLY with this JSON:
+{{
+  "is_correct": true/false,
+  "has_word": true/false,
+  "grammar_ok": true/false,
+  "feedback": "short explanation in Russian",
+  "corrected": "corrected sentence if needed (or empty string if correct)"
+}}
+
+Rules:
+- is_correct = true if sentence uses word correctly AND has no major errors
+- has_word = true if sentence contains the required word
+- grammar_ok = true if grammar is acceptable for {language_level} level
+- Minor mistakes are OK for A1-A2 students!'''
+                            
+                            gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                            payload = {{
+                                'contents': [{{'parts': [{{'text': check_prompt}}]}}],
+                                'generationConfig': {{'temperature': 0.3, 'maxOutputTokens': 500}}
+                            }}
+                            
+                            proxy_handler = urllib.request.ProxyHandler({{
+                                'http': f'http://{{proxy_url}}',
+                                'https': f'http://{{proxy_url}}'
+                            }})
+                            opener = urllib.request.build_opener(proxy_handler)
+                            
+                            req = urllib.request.Request(
+                                gemini_url,
+                                data=json.dumps(payload).encode('utf-8'),
+                                headers={{'Content-Type': 'application/json'}}
+                            )
+                            
+                            with opener.open(req, timeout=15) as response:
+                                result = json.loads(response.read().decode('utf-8'))
+                                check_text = result['candidates'][0]['content']['parts'][0]['text']
+                                check_data = safe_json_parse(check_text, {{'is_correct': False, 'feedback': 'Ошибка проверки'}})
+                                
+                                log_proxy_success(proxy_id)
+                                
+                                is_correct = check_data.get('is_correct', False)
+                                feedback = check_data.get('feedback', '')
+                                corrected = check_data.get('corrected', '')
+                                
+                                if is_correct:
+                                    send_telegram_message(chat_id, f'✅ Отлично! {{feedback}} 🎉', get_reply_keyboard())
+                                else:
+                                    response_text = f'❌ {{feedback}}'
+                                    if corrected:
+                                        response_text += f'\n\n✅ Правильно: {corrected}'
+                                    send_telegram_message(chat_id, response_text, get_reply_keyboard())
+                        
+                        except Exception as e:
+                            print(f'[ERROR] Failed to check sentence: {{e}}')
+                            # Fallback: простая проверка наличия слова
+                            is_correct = correct_answer.lower() in user_answer.lower()
+                            if is_correct:
+                                send_telegram_message(chat_id, '✅ Хорошо! Предложение использует слово правильно! 🎉', get_reply_keyboard())
+                            else:
+                                send_telegram_message(chat_id, f'❌ Предложение не содержит слово "{correct_answer}". Попробуй еще раз!', get_reply_keyboard())
                     else:
-                        send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: <b>{correct_answer}</b>', get_reply_keyboard())
+                        # Для других режимов (context, association, translation) - точное совпадение
+                        correct_answer_lower = correct_answer.lower()
+                        is_correct = (user_answer.lower() == correct_answer_lower)
+                        
+                        if is_correct:
+                            send_telegram_message(chat_id, '✅ Правильно! Отличная работа! 🎉', get_reply_keyboard())
+                        else:
+                            send_telegram_message(chat_id, f'❌ Не совсем. Правильный ответ: {correct_answer}', get_reply_keyboard())
                     
                     # Обновляем прогресс слова
                     if current_word_id:
