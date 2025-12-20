@@ -3413,13 +3413,53 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 response_text = call_gemini(recognized_text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal, learning_mode)
                 
-                # Генерируем голосовой ответ
-                voice_url = text_to_speech(response_text)
+                # ⚠️ CRITICAL: В голосовом режиме отправляем исправления ТЕКСТОМ (отдельно)
+                # Ищем блок исправлений в ответе: 🔧 Fix / Correct:
+                correction_block = ''
+                clean_response = response_text
                 
-                # В режиме voice отправляем ТОЛЬКО голос (без текста)
+                if '🔧 Fix / Correct:' in response_text or '🔧' in response_text:
+                    # Извлекаем блок исправлений (от 🔧 до первого пустого \n\n)
+                    parts = response_text.split('\n\n', 1)
+                    if len(parts) > 1 and '🔧' in parts[0]:
+                        correction_block = parts[0]
+                        clean_response = parts[1].strip() if len(parts) > 1 else response_text
+                    else:
+                        # Ищем конец блока по первой строке без ❌✅🇷🇺
+                        lines = response_text.split('\n')
+                        correction_lines = []
+                        remaining_lines = []
+                        in_correction = False
+                        
+                        for line in lines:
+                            if '🔧' in line:
+                                in_correction = True
+                            
+                            if in_correction:
+                                correction_lines.append(line)
+                                # Конец блока: строка без специальных символов И не пустая
+                                if line.strip() and not any(marker in line for marker in ['🔧', '❌', '✅', '🇷🇺']):
+                                    in_correction = False
+                                    remaining_lines = lines[len(correction_lines):]
+                                    break
+                            else:
+                                remaining_lines.append(line)
+                        
+                        if correction_lines:
+                            correction_block = '\n'.join(correction_lines)
+                            clean_response = '\n'.join(remaining_lines).strip()
+                
+                # Если нашли исправления - отправляем их ТЕКСТОМ
+                if correction_block:
+                    send_telegram_message(chat_id, correction_block, parse_mode='HTML')
+                
+                # Генерируем голосовой ответ (БЕЗ исправлений - только чистый ответ)
+                voice_url = text_to_speech(clean_response)
+                
+                # Отправляем голосовой ответ
                 send_telegram_voice(chat_id, voice_url)
                 
-                # Сохраняем в историю
+                # Сохраняем в историю (полный ответ с исправлениями для контекста)
                 save_message(user['id'], 'user', recognized_text)
                 save_message(user['id'], 'assistant', response_text)
                 
