@@ -864,7 +864,18 @@ IMPORTANT:
         else:
             words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
             print(f"[DEBUG call_gemini] Adding word list to prompt: {words_list}")
-            system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}\nTry to use these words naturally in the conversation."
+            
+            # ЖОРСТКИЙ НАКАЗ використовувати слова
+            system_prompt += f"\n\n🎯 CRITICAL VOCABULARY TASK:\n"
+            system_prompt += f"You MUST use these words in your responses: {', '.join(words_list)}\n\n"
+            system_prompt += f"RULES:\n"
+            system_prompt += f"- Use AT LEAST 1 word from this list in EVERY response\n"
+            system_prompt += f"- Make it natural and conversational (not forced)\n"
+            system_prompt += f"- If the word doesn't fit the context, create a context where it fits\n"
+            system_prompt += f"- Ask questions or share stories that naturally include these words\n\n"
+            system_prompt += f"Example: If the word is 'travel', ask 'Do you like to travel?' or share 'I love to travel!'\n"
+            system_prompt += f"Example: If the word is 'no', ask a yes/no question or use 'no' in your answer naturally\n\n"
+            system_prompt += f"⚠️ CRITICAL: DO NOT respond without using at least one word from the list!"
     else:
         print(f"[DEBUG call_gemini] NO session_words provided!")
     
