@@ -1693,6 +1693,239 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             'isBase64Encoded': False
         }
     
+    # СПЕЦИАЛЬНЫЙ ЭНДПОИНТ: Асинхронная генерация плана
+    # Вызывается из самого бота для фоновой генерации
+    if method == 'POST':
+        body_str = event.get('body', '{}')
+        body_data = json.loads(body_str) if body_str else {}
+        
+        if body_data.get('action') == 'generate_plan_async':
+            try:
+                user_id = body_data['user_id']
+                chat_id = body_data['chat_id']
+                learning_goal = body_data['learning_goal']
+                language_level = body_data['language_level']
+                preferred_topics = body_data['preferred_topics']
+                selected_topic = body_data['selected_topic']
+                
+                print(f"[DEBUG] ASYNC: Starting plan generation for user {user_id}")
+                
+                result = generate_plan_batch(user_id, learning_goal, language_level, preferred_topics, batch_num=1)
+                print(f"[DEBUG] ASYNC: Plan generation finished: success={result.get('success')}")
+                
+                if not result.get('success'):
+                    send_telegram_message(
+                        chat_id,
+                        f'❌ Ошибка генерации плана: {result.get("error", "Unknown error")}\n\nПопробуй /start',
+                        parse_mode=None
+                    )
+                else:
+                    # Сохраняем план
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    plan_json = json.dumps(result['weeks'], ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user_id}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    # Форматируем и отправляем сообщение
+                    if not result.get('weeks') or len(result['weeks']) == 0:
+                        send_telegram_message(chat_id, '❌ План пустой. Попробуй /start', parse_mode=None)
+                    else:
+                        week_data = result['weeks'][0]
+                        vocab = week_data.get('vocabulary', [])
+                        phrases = week_data.get('phrases', [])
+                        expressions = week_data.get('expressions', [])
+                        
+                        topics_text = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else selected_topic
+                        
+                        plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
+                        plan_message += f"🎯 Цель: {learning_goal}\n"
+                        plan_message += f"📊 Уровень: {language_level}\n"
+                        plan_message += f"💡 Темы: {topics_text}\n\n"
+                        
+                        if vocab:
+                            plan_message += f"📖 Слова ({len(vocab)} шт):\n"
+                            for word in vocab:
+                                plan_message += f"  • {word['english']} — {word['russian']}\n"
+                            plan_message += "\n"
+                        
+                        if phrases:
+                            plan_message += f"💭 Фразы ({len(phrases)} шт):\n"
+                            for phrase in phrases:
+                                plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
+                            plan_message += "\n"
+                        
+                        if expressions:
+                            plan_message += f"✨ Выражения ({len(expressions)} шт):\n"
+                            for expr in expressions:
+                                plan_message += f"  • {expr['english']} — {expr['russian']}\n"
+                            plan_message += "\n"
+                        
+                        plan_message += "Начинаем практику?"
+                        
+                        send_telegram_message(
+                            chat_id,
+                            plan_message,
+                            {
+                                'inline_keyboard': [
+                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                    [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                ]
+                            },
+                            parse_mode=None
+                        )
+                        print(f"[DEBUG] ASYNC: Plan message sent successfully")
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True}),
+                    'isBase64Encoded': False
+                }
+                
+            except Exception as e:
+                print(f"[ERROR] ASYNC generation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Отправляем сообщение об ошибке
+                try:
+                    send_telegram_message(
+                        body_data.get('chat_id'),
+                        '❌ Произошла ошибка при генерации плана. Попробуй еще раз через /start',
+                        parse_mode=None
+                    )
+                except:
+                    pass
+                
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': str(e)}),
+                    'isBase64Encoded': False
+                }
+    
+    # СПЕЦИАЛЬНЫЙ ЭНДПОИНТ: Асинхронная генерация плана
+    # Вызывается из самого бота для фоновой генерации
+    if method == 'POST':
+        body_str = event.get('body', '{}')
+        try:
+            body_data = json.loads(body_str) if body_str else {}
+        except:
+            body_data = {}
+        
+        if body_data.get('action') == 'generate_plan_async':
+            try:
+                user_id = body_data['user_id']
+                chat_id = body_data['chat_id']
+                learning_goal = body_data['learning_goal']
+                language_level = body_data['language_level']
+                preferred_topics = body_data['preferred_topics']
+                selected_topic = body_data['selected_topic']
+                
+                print(f"[DEBUG] ASYNC: Starting plan generation for user {user_id}")
+                
+                result = generate_plan_batch(user_id, learning_goal, language_level, preferred_topics, batch_num=1)
+                print(f"[DEBUG] ASYNC: Plan generation finished: success={result.get('success')}")
+                
+                if not result.get('success'):
+                    send_telegram_message(
+                        chat_id,
+                        f'❌ Ошибка генерации плана: {result.get("error", "Unknown error")}\n\nПопробуй /start',
+                        parse_mode=None
+                    )
+                else:
+                    # Сохраняем план
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    plan_json = json.dumps(result['weeks'], ensure_ascii=False).replace("'", "''")
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user_id}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    # Форматируем и отправляем сообщение
+                    if not result.get('weeks') or len(result['weeks']) == 0:
+                        send_telegram_message(chat_id, '❌ План пустой. Попробуй /start', parse_mode=None)
+                    else:
+                        week_data = result['weeks'][0]
+                        vocab = week_data.get('vocabulary', [])
+                        phrases = week_data.get('phrases', [])
+                        expressions = week_data.get('expressions', [])
+                        
+                        topics_text = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else selected_topic
+                        
+                        plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
+                        plan_message += f"🎯 Цель: {learning_goal}\n"
+                        plan_message += f"📊 Уровень: {language_level}\n"
+                        plan_message += f"💡 Темы: {topics_text}\n\n"
+                        
+                        if vocab:
+                            plan_message += f"📖 Слова ({len(vocab)} шт):\n"
+                            for word in vocab:
+                                plan_message += f"  • {word['english']} — {word['russian']}\n"
+                            plan_message += "\n"
+                        
+                        if phrases:
+                            plan_message += f"💭 Фразы ({len(phrases)} шт):\n"
+                            for phrase in phrases:
+                                plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
+                            plan_message += "\n"
+                        
+                        if expressions:
+                            plan_message += f"✨ Выражения ({len(expressions)} шт):\n"
+                            for expr in expressions:
+                                plan_message += f"  • {expr['english']} — {expr['russian']}\n"
+                            plan_message += "\n"
+                        
+                        plan_message += "Начинаем практику?"
+                        
+                        send_telegram_message(
+                            chat_id,
+                            plan_message,
+                            {
+                                'inline_keyboard': [
+                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
+                                    [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
+                                ]
+                            },
+                            parse_mode=None
+                        )
+                        print(f"[DEBUG] ASYNC: Plan message sent successfully")
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True}),
+                    'isBase64Encoded': False
+                }
+                
+            except Exception as e:
+                print(f"[ERROR] ASYNC generation failed: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Отправляем сообщение об ошибке
+                try:
+                    send_telegram_message(
+                        body_data.get('chat_id'),
+                        '❌ Произошла ошибка при генерации плана. Попробуй еще раз через /start',
+                        parse_mode=None
+                    )
+                except:
+                    pass
+                
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': str(e)}),
+                    'isBase64Encoded': False
+                }
+    
     # СПЕЦИАЛЬНЫЙ ЭНДПОИНТ: Очистка webhook и pending updates
     # Вызов: GET https://your-function-url/?action=clear_webhook
     if method == 'GET' and query_params.get('action') == 'clear_webhook':
@@ -2054,7 +2287,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     edit_telegram_message(
                         chat_id,
                         message_id,
-                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Подготавливаю план обучения на 2 недели...'
+                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Генерирую персональный план... (это займёт ~30 сек)'
                     )
                     print(f"[DEBUG] Message edited successfully")
                     
@@ -2087,93 +2320,51 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.close()
                     conn.close()
                     
-                    # Генерируем план на 2 недели
+                    # АСИНХРОННАЯ ГЕНЕРАЦИЯ - запускаем в фоне через отдельный HTTP-запрос
                     try:
-                        print(f"[DEBUG] STARTING PLAN GENERATION: user_id={user['id']}, level={language_level}, goal={learning_goal}")
-                        result = generate_plan_batch(user['id'], learning_goal, language_level, preferred_topics, batch_num=1)
-                        print(f"[DEBUG] PLAN GENERATION FINISHED: success={result.get('success')}")
+                        print(f"[DEBUG] Starting ASYNC plan generation for user {user['id']}")
                         
-                        if not result.get('success'):
-                            send_telegram_message(
-                                chat_id,
-                                f'❌ Ошибка генерации плана: {result.get("error", "Unknown error")}\n\nПопробуй /start',
-                                parse_mode=None
-                            )
-                        else:
-                            # Сохраняем план
-                            conn = get_db_connection()
-                            cur = conn.cursor()
-                            plan_json = json.dumps(result['weeks'], ensure_ascii=False).replace("'", "''")
-                            cur.execute(
-                                f"UPDATE {SCHEMA}.users SET learning_plan = '{plan_json}'::jsonb WHERE telegram_id = {user['id']}"
-                            )
-                            cur.close()
-                            conn.close()
-                            
-                            # Форматируем сообщение
-                            print(f"[DEBUG] Formatting message, weeks count: {len(result.get('weeks', []))}")
-                            
-                            if not result.get('weeks') or len(result['weeks']) == 0:
-                                send_telegram_message(chat_id, '❌ План пустой. Попробуй /start', parse_mode=None)
-                            else:
-                                week_data = result['weeks'][0]
-                                vocab = week_data.get('vocabulary', [])
-                                phrases = week_data.get('phrases', [])
-                                expressions = week_data.get('expressions', [])
-                                
-                                print(f"[DEBUG] Week data: vocab={len(vocab)}, phrases={len(phrases)}, expr={len(expressions)}")
-                                
-                                # Создаем topics_display из preferred_topics
-                                topics_text = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else selected_topic
-                                
-                                plan_message = f"✅ ГОТОВО! Твой стартовый набор:\n\n"
-                                plan_message += f"🎯 Цель: {learning_goal}\n"
-                                plan_message += f"📊 Уровень: {language_level}\n"
-                                plan_message += f"💡 Темы: {topics_text}\n\n"
-                                
-                                # Показываем слова
-                                if vocab:
-                                    plan_message += f"📖 Слова ({len(vocab)} шт):\n"
-                                    for word in vocab:
-                                        plan_message += f"  • {word['english']} — {word['russian']}\n"
-                                    plan_message += "\n"
-                                
-                                # Показываем фразы
-                                if phrases:
-                                    plan_message += f"💭 Фразы ({len(phrases)} шт):\n"
-                                    for phrase in phrases:
-                                        plan_message += f"  • {phrase['english']} — {phrase['russian']}\n"
-                                    plan_message += "\n"
-                                
-                                # Показываем выражения
-                                if expressions:
-                                    plan_message += f"✨ Выражения ({len(expressions)} шт):\n"
-                                    for expr in expressions:
-                                        plan_message += f"  • {expr['english']} — {expr['russian']}\n"
-                                    plan_message += "\n"
-                                
-                                plan_message += "Начинаем практику?"
-                                
-                                print(f"[DEBUG] Sending plan message to chat {chat_id}")
-                                send_telegram_message(
-                                    chat_id,
-                                    plan_message,
-                                    {
-                                        'inline_keyboard': [
-                                            [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                            [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                        ]
-                                    },
-                                    parse_mode=None
-                                )
-                                print(f"[DEBUG] Plan message sent successfully")
+                        # Запускаем генерацию через самого себя (асинхронно)
+                        function_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+                        async_payload = json.dumps({
+                            'action': 'generate_plan_async',
+                            'user_id': user['id'],
+                            'chat_id': chat_id,
+                            'learning_goal': learning_goal,
+                            'language_level': language_level,
+                            'preferred_topics': preferred_topics,
+                            'selected_topic': selected_topic
+                        }).encode('utf-8')
+                        
+                        async_req = urllib.request.Request(
+                            function_url,
+                            data=async_payload,
+                            headers={'Content-Type': 'application/json'},
+                            method='POST'
+                        )
+                        
+                        # Запускаем без ожидания результата (fire-and-forget)
+                        import threading
+                        def fire_async():
+                            try:
+                                with urllib.request.urlopen(async_req, timeout=120) as resp:
+                                    print(f"[DEBUG] Async generation completed")
+                            except Exception as e:
+                                print(f"[ERROR] Async generation failed: {e}")
+                        
+                        thread = threading.Thread(target=fire_async)
+                        thread.daemon = True
+                        thread.start()
+                        
+                        print(f"[DEBUG] Async generation started in background thread")
+                        
                     except Exception as e:
-                        print(f"[ERROR] Failed to generate plan: {e}")
+                        print(f"[ERROR] Failed to start async generation: {e}")
                         import traceback
                         traceback.print_exc()
                         send_telegram_message(
                             chat_id,
-                            '❌ Произошла ошибка при генерации плана. Попробуй еще раз через /start',
+                            '❌ Произошла ошибка при запуске генерации плана. Попробуй еще раз через /start',
                             parse_mode=None
                         )
             
