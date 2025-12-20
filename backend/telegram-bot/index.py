@@ -227,6 +227,8 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
     )
     
+    print(f"[DEBUG get_session_words] student_id={student_id}, limit={limit}")
+    
     # ПРИОРИТЕТ 1: Слова которые нужно проверить (dialog_uses = 5)
     cur.execute(
         f"SELECT w.id, w.english_text, w.russian_translation, wp.dialog_uses FROM {SCHEMA}.word_progress wp "
@@ -235,12 +237,14 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"ORDER BY wp.updated_at ASC LIMIT 1"
     )
     check_word = cur.fetchone()
+    print(f"[DEBUG get_session_words] check_word (dialog_uses=5): {check_word}")
     
     if check_word:
         # Возвращаем ТОЛЬКО слово на проверку с флагом
         words = [{'id': check_word[0], 'english': check_word[1], 'russian': check_word[2], 'needs_check': True}]
         cur.close()
         conn.close()
+        print(f"[DEBUG get_session_words] Returning check word: {words}")
         return words
     
     # Новые слова (40%)
@@ -252,6 +256,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
     )
     new_words = cur.fetchall()
+    print(f"[DEBUG get_session_words] new_words (status=new, dialog_uses<5): {len(new_words)} words")
     
     # Слова на повторение (40%)
     review_limit = max(1, int(limit * 0.4))
@@ -263,6 +268,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
     )
     review_words = cur.fetchall()
+    print(f"[DEBUG get_session_words] review_words (status=learning/learned, next_review_date<=NOW): {len(review_words)} words")
     
     # Освоенные слова (20%)
     mastered_limit = max(1, limit - len(new_words) - len(review_words))
@@ -273,10 +279,15 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"ORDER BY wp.last_practiced ASC NULLS FIRST LIMIT {mastered_limit}"
     )
     mastered_words = cur.fetchall()
+    print(f"[DEBUG get_session_words] mastered_words (status=mastered): {len(mastered_words)} words")
     
     all_words = list(new_words) + list(review_words) + list(mastered_words)
     
     words = [{'id': row[0], 'english': row[1], 'russian': row[2], 'needs_check': False} for row in all_words]
+    
+    print(f"[DEBUG get_session_words] FINAL RESULT: returning {len(words)} words total")
+    if words:
+        print(f"[DEBUG get_session_words] First word: {words[0]}")
     
     cur.close()
     conn.close()
