@@ -297,6 +297,12 @@ export default function BlogSection({ showAll = false }: BlogSectionProps) {
   }, []);
 
   const loadPosts = async () => {
+    if (!API_URL) {
+      console.error('BlogSection: API_URL is not defined');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(API_URL, {
         method: 'POST',

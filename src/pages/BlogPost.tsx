@@ -40,6 +40,12 @@ export default function BlogPost() {
   const loadPost = async () => {
     if (!slug) return;
 
+    if (!API_URL) {
+      console.error('BlogPost: API_URL is not defined');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
@@ -60,6 +66,11 @@ export default function BlogPost() {
   };
 
   const loadOtherPosts = async () => {
+    if (!API_URL) {
+      console.error('BlogPost: API_URL is not defined for loadOtherPosts');
+      return;
+    }
+
     try {
       const response = await fetch(API_URL, {
         method: 'POST',

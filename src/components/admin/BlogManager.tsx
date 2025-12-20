@@ -44,6 +44,12 @@ export default function BlogManager() {
   }, []);
 
   const loadPosts = async () => {
+    if (!API_URL) {
+      console.error('📝 BlogManager: API_URL is not defined');
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('📝 BlogManager: Loading posts from', API_URL);
       const response = await fetch(API_URL, {
@@ -195,9 +201,11 @@ export default function BlogManager() {
                 <Input
                   value={formData.title}
                   onChange={(e) => {
-                    setFormData({ ...formData, title: e.target.value });
+                    const newTitle = e.target.value;
                     if (!editingPost) {
-                      setFormData({ ...formData, title: e.target.value, slug: generateSlug(e.target.value) });
+                      setFormData({ ...formData, title: newTitle, slug: generateSlug(newTitle) });
+                    } else {
+                      setFormData({ ...formData, title: newTitle });
                     }
                   }}
                   placeholder="Как учить английский с ИИ-репетитором"
