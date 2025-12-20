@@ -2074,6 +2074,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('topic_'):
                 print(f"[DEBUG] TOPIC CALLBACK RECEIVED: {data}")
                 topic_type = data.replace('topic_', '')
+                print(f"[DEBUG] topic_type extracted: {topic_type}")
                 
                 topic_texts = {
                     'gaming': '🎮 Игры',
@@ -2089,8 +2090,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'custom': '✍️ Свой вариант'
                 }
                 
+                print(f"[DEBUG] topic_texts defined, checking if custom...")
                 if topic_type == 'custom':
                     # Пользователь хочет ввести свои интересы
+                    print(f"[DEBUG] Custom topic selected, editing message...")
                     edit_telegram_message(
                         chat_id,
                         message_id,
@@ -2104,19 +2107,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     conn.close()
                 else:
                     # Используем готовую тему
+                    print(f"[DEBUG] Non-custom topic selected: {topic_type}")
                     selected_topic = topic_texts.get(topic_type, '💡 Интересы')
+                    print(f"[DEBUG] selected_topic: {selected_topic}")
                     
+                    print(f"[DEBUG] Editing message to show selected topic...")
                     edit_telegram_message(
                         chat_id,
                         message_id,
-                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Подготавливаю персональный план обучения на месяц...'
+                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Подготавливаю план обучения на 2 недели...'
                     )
+                    print(f"[DEBUG] Message edited successfully")
                     
                     # Сохраняем тему и запускаем генерацию плана
+                    print(f"[DEBUG] Connecting to DB to save topic...")
                     conn = get_db_connection()
                     cur = conn.cursor()
                     
+                    print(f"[DEBUG] Preparing topic JSON...")
                     topic_json = json.dumps([{'topic': selected_topic.split()[1], 'emoji': selected_topic.split()[0]}], ensure_ascii=False).replace("'", "''")
+                    print(f"[DEBUG] topic_json: {topic_json}")
+                    
+                    print(f"[DEBUG] Updating user with topic and mode...")
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
                         f"preferred_topics = '{topic_json}'::jsonb, "
@@ -2124,12 +2136,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"WHERE telegram_id = {user['id']}"
                     )
                     
+                    print(f"[DEBUG] Fetching user data for plan generation...")
                     # Получаем данные для генерации плана
                     cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
                     preferred_topics = row[2] if row and row[2] else []
+                    print(f"[DEBUG] User data: goal={learning_goal}, level={language_level}, topics={preferred_topics}")
                     
                     cur.close()
                     conn.close()
