@@ -1252,6 +1252,43 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
     
     row = cur.fetchone()
     
+    cur.execute(
+        f"SELECT practice_date, messages_sent, words_practiced, errors_corrected "
+        f"FROM {SCHEMA}.daily_stats "
+        f"WHERE student_id = {student_id} "
+        f"ORDER BY practice_date DESC LIMIT 7"
+    )
+    
+    daily_stats = []
+    for stat_row in cur.fetchall():
+        daily_stats.append({
+            'date': stat_row[0].isoformat() if stat_row[0] else None,
+            'messages': stat_row[1] or 0,
+            'words': stat_row[2] or 0,
+            'errors': stat_row[3] or 0
+        })
+    
+    cur.execute(
+        f"SELECT a.code, a.title_en, a.title_ru, a.description_en, a.description_ru, a.emoji, a.points, ua.unlocked_at "
+        f"FROM {SCHEMA}.user_achievements ua "
+        f"JOIN {SCHEMA}.achievements a ON a.code = ua.achievement_code "
+        f"WHERE ua.user_id = {student_id} "
+        f"ORDER BY ua.unlocked_at DESC"
+    )
+    
+    achievements = []
+    total_points = 0
+    for ach_row in cur.fetchall():
+        achievements.append({
+            'code': ach_row[0],
+            'title_en': ach_row[1],
+            'title_ru': ach_row[2],
+            'emoji': ach_row[5],
+            'points': ach_row[6],
+            'unlocked_at': ach_row[7].isoformat() if ach_row[7] else None
+        })
+        total_points += ach_row[6] or 0
+    
     cur.close()
     conn.close()
     
@@ -1261,7 +1298,10 @@ def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
         'learning': row[2],
         'learned': row[3],
         'mastered': row[4],
-        'average_mastery': float(row[5]) if row[5] else 0.0
+        'average_mastery': float(row[5]) if row[5] else 0.0,
+        'daily_stats': daily_stats,
+        'achievements': achievements,
+        'total_points': total_points
     }
 
 def update_student_settings(telegram_id: int, language_level: str = None, preferred_topics: List[Dict] = None, timezone: str = None, learning_goal: str = None, learning_goal_details: str = None) -> bool:
