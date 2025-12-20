@@ -133,7 +133,7 @@ export default function DemoChat() {
   return (
     <section id="demo" className="relative py-20 overflow-hidden">
       {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-50 via-white to-blue-50"></div>
+      <div className="absolute inset-0 bg-gradient-to-b from-purple-50 via-white to-blue-50"></div>
       <div className="absolute top-20 left-10 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
       <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
 
