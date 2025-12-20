@@ -9,9 +9,6 @@ import { useNavigate } from 'react-router-dom';
 import funcUrls from '../../backend/func2url.json';
 import StudentSettings from '@/components/student/StudentSettings';
 import ImprovedMyWords from '@/components/student/ImprovedMyWords';
-import AchievementsDialog from '@/components/student/AchievementsDialog';
-import ProgressStats from '@/components/student/ProgressStats';
-import LearningGoals from '@/components/student/LearningGoals';
 
 interface TelegramUser {
   id: number;
@@ -67,7 +64,6 @@ export default function Dashboard() {
   const [timezone, setTimezone] = useState('UTC');
   const [learningGoal, setLearningGoal] = useState<string>('');
   const [learningGoalDetails, setLearningGoalDetails] = useState<string>('');
-  const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -230,10 +226,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <ProgressStats studentId={user.id} />
-
-        <LearningGoals studentId={user.id} />
-
         <ImprovedMyWords
           studentId={user.id}
           languageLevel={languageLevel}
@@ -266,14 +258,6 @@ export default function Dashboard() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {user && (
-        <AchievementsDialog
-          open={achievementsOpen}
-          onOpenChange={setAchievementsOpen}
-          studentId={user.id}
-        />
-      )}
     </div>
   );
 }
