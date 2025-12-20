@@ -227,12 +227,28 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
     )
     
+    # ПРИОРИТЕТ 1: Слова которые нужно проверить (dialog_uses = 5)
+    cur.execute(
+        f"SELECT w.id, w.english_text, w.russian_translation, wp.dialog_uses FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.dialog_uses = 5 AND wp.needs_check = TRUE "
+        f"ORDER BY wp.updated_at ASC LIMIT 1"
+    )
+    check_word = cur.fetchone()
+    
+    if check_word:
+        # Возвращаем ТОЛЬКО слово на проверку с флагом
+        words = [{'id': check_word[0], 'english': check_word[1], 'russian': check_word[2], 'needs_check': True}]
+        cur.close()
+        conn.close()
+        return words
+    
     # Новые слова (40%)
     new_limit = max(1, int(limit * 0.4))
     cur.execute(
         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
         f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' AND (wp.dialog_uses < 5 OR wp.dialog_uses IS NULL) "
         f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
     )
     new_words = cur.fetchall()
@@ -243,7 +259,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
         f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
         f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
-        f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+        f"AND wp.next_review_date <= CURRENT_TIMESTAMP AND (wp.dialog_uses < 5 OR wp.dialog_uses IS NULL) "
         f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
     )
     review_words = cur.fetchall()
@@ -260,11 +276,50 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     
     all_words = list(new_words) + list(review_words) + list(mastered_words)
     
-    words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in all_words]
+    words = [{'id': row[0], 'english': row[1], 'russian': row[2], 'needs_check': False} for row in all_words]
     
     cur.close()
     conn.close()
     return words
+
+def increment_dialog_uses(student_id: int, word_ids: List[int]):
+    """Увеличивает счётчик использования слов Аней в диалоге"""
+    if not word_ids:
+        return
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    for word_id in word_ids:
+        cur.execute(
+            f"UPDATE {SCHEMA}.word_progress "
+            f"SET dialog_uses = COALESCE(dialog_uses, 0) + 1, "
+            f"needs_check = CASE WHEN COALESCE(dialog_uses, 0) + 1 = 5 THEN TRUE ELSE needs_check END, "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+        print(f"[DEBUG] Incremented dialog_uses for word_id={word_id}")
+    
+    cur.close()
+    conn.close()
+
+def mark_word_as_mastered(student_id: int, word_id: int):
+    """Помечает слово как освоенное после успешной проверки"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.word_progress "
+        f"SET status = 'mastered', "
+        f"needs_check = FALSE, "
+        f"mastery_score = 100, "
+        f"updated_at = CURRENT_TIMESTAMP "
+        f"WHERE student_id = {student_id} AND word_id = {word_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    print(f"[DEBUG] Word {word_id} marked as mastered for student {student_id}")
 
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str, role: str):
     """Создает пользователя"""
@@ -771,8 +826,26 @@ IMPORTANT:
 - Be encouraging but don't skip corrections!"""
     
     if session_words:
-        words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
-        system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}\nTry to use these words naturally in the conversation."
+        check_word = next((w for w in session_words if w.get('needs_check')), None)
+        
+        if check_word:
+            system_prompt += f"\n\n🎯 CRITICAL TASK - WORD MASTERY CHECK:\n"
+            system_prompt += f"The word '{check_word['english']}' ({check_word['russian']}) has been used 5 times in conversations.\n"
+            system_prompt += f"NOW you must CHECK if the student truly knows this word.\n\n"
+            system_prompt += f"Your task:\n"
+            system_prompt += f"1. Ask a question that REQUIRES using '{check_word['english']}' in the answer\n"
+            system_prompt += f"2. Make it natural and conversational (not like a test)\n"
+            system_prompt += f"3. The question should be related to the word's meaning\n\n"
+            system_prompt += f"Examples:\n"
+            system_prompt += f"- For 'cat': 'Do you have any pets? Tell me about them!' or 'What animals do you like?'\n"
+            system_prompt += f"- For 'travel': 'Where would you like to go? Tell me about your dream destination!'\n"
+            system_prompt += f"- For 'book': 'What are you reading these days? Any favorite books?'\n\n"
+            system_prompt += f"After the student answers, analyze if they used '{check_word['english']}' correctly.\n"
+            system_prompt += f"If YES → reply with: '✅ WORD_MASTERED: {check_word['english']}' at the END of your message (after regular response)\n"
+            system_prompt += f"If NO or incorrectly → continue teaching naturally"
+        else:
+            words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
+            system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}\nTry to use these words naturally in the conversation."
     
     if preferred_topics and len(preferred_topics) > 0:
         topics_list = [f"{t['emoji']} {t['topic']}" for t in preferred_topics[:5]]
@@ -3547,9 +3620,33 @@ No markdown, no explanations, just JSON.'''
                     traceback.print_exc()
                     ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
                 
-                # Обновляем прогресс использованных слов (считаем правильным использованием)
+                # Проверяем маркер освоения слова
+                mastered_word_marker = '✅ WORD_MASTERED:'
+                if mastered_word_marker in ai_response:
+                    # Извлекаем слово
+                    marker_pos = ai_response.find(mastered_word_marker)
+                    word_text = ai_response[marker_pos + len(mastered_word_marker):].strip().split()[0]
+                    
+                    # Находим word_id
+                    if session_words:
+                        mastered_word = next((w for w in session_words if w['english'].lower() == word_text.lower()), None)
+                        if mastered_word:
+                            mark_word_as_mastered(user['id'], mastered_word['id'])
+                            print(f"[SUCCESS] Word '{word_text}' marked as mastered!")
+                    
+                    # Убираем маркер из ответа пользователю
+                    ai_response = ai_response[:marker_pos].strip()
+                
+                # Обновляем прогресс использованных слов учеником
                 for word_id in used_word_ids:
                     update_word_progress_api(user['id'], word_id, True)
+                
+                # Отслеживаем какие слова Аня использовала в своём ответе
+                if session_words:
+                    ai_used_words = detect_words_in_text(ai_response, session_words)
+                    if ai_used_words:
+                        increment_dialog_uses(user['id'], ai_used_words)
+                        print(f"[DEBUG] Anya used words in response: {ai_used_words}")
                 
                 # Сохраняем ответ AI
                 save_message(user['id'], 'assistant', ai_response)
