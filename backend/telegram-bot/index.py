@@ -1071,36 +1071,39 @@ Then continue in character!
 
 Remember: You're helping them prepare for REAL situations. Make it practical and realistic!"""
         elif learning_goal and not urgent_goals:
-            # РЕЖИМ ОПРЕДЕЛЕННЫХ ЦЕЛЕЙ - обычная Аня с интересами
-            system_prompt = f"""You are Anya, a friendly English tutor helping someone practice English. Your student's level is {language_level}.
+            # РЕЖИМ ОПРЕДЕЛЕННЫХ ЦЕЛЕЙ - Аня общается ТОЛЬКО в рамках цели (БЕЗ интересов!)
+            system_prompt = f"""You are Anya, a friendly English tutor helping someone with a SPECIFIC LEARNING GOAL. Your student's level is {language_level}.
 
-Student's learning goal: {learning_goal}
+🎯 CRITICAL: Student's specific goal: {learning_goal}
 
-Your personality:
-- Be chill, friendly, and natural (NOT overly enthusiastic or pushy)
-- Use emojis sparingly - 1-2 per message MAX
-- Keep messages short and conversational (1-3 sentences)
-- DON'T greet in EVERY message - only at the start of NEW conversation
-- Ask MAX 1 question per message (not 2-3!)
-- Be genuinely interested but NOT interrogating
-- React naturally like a friend texting, not a teacher testing
+Your mission:
+- Talk ONLY about topics related to their goal
+- Help them practice vocabulary and phrases they'll actually need for this goal
+- Make conversations realistic and practical for their specific purpose
+
+Examples:
+Goal: "Хочу смотреть Рик и Морти в оригинале"
+You: "So you want to watch Rick and Morty! 🎬 Have you tried watching with English subtitles first? Which character do you like most?"
+
+Goal: "Хочу читать Оруэлла"
+You: "Orwell is amazing! 📚 Are you starting with 1984 or Animal Farm? The language can be tricky - I can help you with difficult words!"
+
+Goal: "Подготовка к собеседованию"
+You: "Let's practice interview questions! Tell me about yourself and your experience. What position are you applying for?"
 
 Language level adaptation ({language_level}):
 {level_instruction}
 
 Your approach:
 - Always communicate in English only, never in Russian
-- Respond ONLY with your message, do NOT include conversation history or labels
-- Write 1-3 sentences per message (keep it SHORT!)
+- Keep messages short and conversational (1-3 sentences)
 - Use 1-2 emojis MAX per message
-- ⚠️ CRITICAL: ABSOLUTELY FORBIDDEN to use these greetings if conversation already started:
-  - "Hey there" / "Hi there" / "Hello" / "Hey" / "Hi"
-  - "So glad we're back" / "Good to see you" / "Welcome back"
-  - "Glad we got things working" / ANY greeting phrase
-- ⚠️ If you see ANY previous messages in history → JUMP STRAIGHT into conversation, NO greetings!
-- Sometimes just react (Cool / Nice / I see / Got it), sometimes ask ONE question
-- Be NATURAL like texting a friend - avoid teacher-like patterns
-- Don't be repetitive with greetings or phrases
+- ⚠️ CRITICAL: ALL topics MUST relate to their goal - don't discuss random things!
+- ⚠️ If goal is about movies/series - discuss episodes, characters, quotes
+- ⚠️ If goal is about books - discuss plot, characters, themes, vocabulary
+- ⚠️ If goal is about work/interviews - practice professional language
+- ⚠️ If you see previous messages → JUMP STRAIGHT into conversation, NO greetings!
+- Be NATURAL and focused on helping them achieve their specific goal
 
 CRITICAL ERROR CORRECTION RULES:
 - Check EVERY message for grammar, spelling, vocabulary, and word order mistakes
@@ -2878,6 +2881,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'books': '📚 Книги',
                     'food': '🍴 Еда и кулинария',
                     'business': '💼 Бизнес',
+                    'art': '🎨 Искусство',
+                    'science': '🔬 Наука',
+                    'fashion': '🎯 Мода',
+                    'home': '🏠 Дом и уют',
                     'custom': '✍️ Свой вариант'
                 }
                 
@@ -2897,53 +2904,175 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.close()
                     conn.close()
                 else:
-                    # Используем готовую тему
-                    print(f"[DEBUG] Non-custom topic selected: {topic_type}")
+                    # Множественный выбор интересов - добавляем к существующим
+                    print(f"[DEBUG] Topic selected: {topic_type}")
                     selected_topic = topic_texts.get(topic_type, '💡 Интересы')
-                    print(f"[DEBUG] selected_topic: {selected_topic}")
                     
-                    print(f"[DEBUG] Editing message to show selected topic...")
-                    edit_telegram_message(
-                        chat_id,
-                        message_id,
-                        f'✅ Отлично! Ты выбрал: <b>{selected_topic}</b>\n\n⏳ Генерирую персональный план... (это займёт ~30 сек)'
-                    )
-                    print(f"[DEBUG] Message edited successfully")
-                    
-                    # Сохраняем тему и запускаем генерацию плана
-                    print(f"[DEBUG] Connecting to DB to save topic...")
                     conn = get_db_connection()
                     cur = conn.cursor()
                     
-                    print(f"[DEBUG] Preparing topic JSON...")
-                    topic_json = json.dumps([{'topic': selected_topic.split()[1], 'emoji': selected_topic.split()[0]}], ensure_ascii=False).replace("'", "''")
-                    print(f"[DEBUG] topic_json: {topic_json}")
+                    # Получаем текущие интересы
+                    cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    row = cur.fetchone()
+                    current_topics = row[0] if row and row[0] else []
                     
-                    print(f"[DEBUG] Updating user with topic and mode...")
+                    # Проверяем есть ли уже этот интерес
+                    topic_emoji = selected_topic.split()[0]
+                    topic_name = ' '.join(selected_topic.split()[1:])
+                    topic_exists = any(t.get('topic') == topic_name for t in current_topics)
+                    
+                    if topic_exists:
+                        # Удаляем интерес (toggle)
+                        current_topics = [t for t in current_topics if t.get('topic') != topic_name]
+                        action_text = '➖ Убрано'
+                    else:
+                        # Добавляем новый интерес
+                        current_topics.append({'topic': topic_name, 'emoji': topic_emoji})
+                        action_text = '✅ Добавлено'
+                    
+                    # Сохраняем обновленный список
+                    topics_json = json.dumps(current_topics, ensure_ascii=False).replace("'", "''")
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
-                        f"preferred_topics = '{topic_json}'::jsonb, "
-                        f"conversation_mode = 'generating_plan' "
+                        f"preferred_topics = '{topics_json}'::jsonb "
                         f"WHERE telegram_id = {user['id']}"
                     )
                     
-                    print(f"[DEBUG] Fetching user data for plan generation...")
+                    cur.close()
+                    conn.close()
+                    
+                    # Обновляем клавиатуру с галочками
+                    selected_topics_names = [t.get('topic') for t in current_topics]
+                    
+                    topics_keyboard = {
+                        'inline_keyboard': [
+                            [{
+                                'text': f"{'✅ ' if 'Игры' in selected_topics_names else ''}🎮 Игры", 
+                                'callback_data': 'topic_gaming'
+                            }, {
+                                'text': f"{'✅ ' if 'IT и технологии' in selected_topics_names else ''}💻 IT", 
+                                'callback_data': 'topic_it'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Маркетинг' in selected_topics_names else ''}📊 Маркетинг", 
+                                'callback_data': 'topic_marketing'
+                            }, {
+                                'text': f"{'✅ ' if 'Путешествия' in selected_topics_names else ''}✈️ Путешествия", 
+                                'callback_data': 'topic_travel'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Спорт' in selected_topics_names else ''}⚽ Спорт", 
+                                'callback_data': 'topic_sport'
+                            }, {
+                                'text': f"{'✅ ' if 'Музыка' in selected_topics_names else ''}🎵 Музыка", 
+                                'callback_data': 'topic_music'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Фильмы' in selected_topics_names else ''}🎬 Фильмы", 
+                                'callback_data': 'topic_movies'
+                            }, {
+                                'text': f"{'✅ ' if 'Книги' in selected_topics_names else ''}📚 Книги", 
+                                'callback_data': 'topic_books'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Еда и кулинария' in selected_topics_names else ''}🍴 Еда", 
+                                'callback_data': 'topic_food'
+                            }, {
+                                'text': f"{'✅ ' if 'Бизнес' in selected_topics_names else ''}💼 Бизнес", 
+                                'callback_data': 'topic_business'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Искусство' in selected_topics_names else ''}🎨 Искусство", 
+                                'callback_data': 'topic_art'
+                            }, {
+                                'text': f"{'✅ ' if 'Наука' in selected_topics_names else ''}🔬 Наука", 
+                                'callback_data': 'topic_science'
+                            }],
+                            [{
+                                'text': f"{'✅ ' if 'Мода' in selected_topics_names else ''}🎯 Мода", 
+                                'callback_data': 'topic_fashion'
+                            }, {
+                                'text': f"{'✅ ' if 'Дом и уют' in selected_topics_names else ''}🏠 Дом и уют", 
+                                'callback_data': 'topic_home'
+                            }],
+                            [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}],
+                            [{'text': '✅ Готово!', 'callback_data': 'topics_done'}]
+                        ]
+                    }
+                    
+                    # Обновляем сообщение с галочками
+                    selected_display = ', '.join([t.get('emoji', '') + ' ' + t.get('topic', '') for t in current_topics]) if current_topics else 'Ничего не выбрано'
+                    
+                    try:
+                        edit_telegram_message(
+                            chat_id,
+                            message_id,
+                            f'{action_text}: <b>{selected_topic}</b>\n\nТвои интересы: {selected_display}\n\n💡 Выбери еще или нажми "Готово"'
+                        )
+                    except Exception as e:
+                        print(f"[WARNING] Failed to edit message text: {e}")
+                    
+                    # Обновляем клавиатуру
+                    try:
+                        token = os.environ['TELEGRAM_BOT_TOKEN']
+                        url = f'https://api.telegram.org/bot{token}/editMessageReplyMarkup'
+                        payload = {
+                            'chat_id': chat_id,
+                            'message_id': message_id,
+                            'reply_markup': topics_keyboard
+                        }
+                        req = urllib.request.Request(
+                            url,
+                            data=json.dumps(payload).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        with urllib.request.urlopen(req) as response:
+                            print(f"[DEBUG] Keyboard updated successfully")
+                    except Exception as e:
+                        print(f"[WARNING] Failed to update keyboard: {e}")
+            
+            elif data == 'topics_done':
+                # Пользователь закончил выбирать интересы - запускаем генерацию плана
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Получаем выбранные интересы
+                cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                row = cur.fetchone()
+                selected_topics = row[0] if row and row[0] else []
+                
+                if not selected_topics or len(selected_topics) == 0:
+                    # Если ничего не выбрано - просим выбрать хотя бы одну тему
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        '❗ Пожалуйста, выбери хотя бы одну тему для обучения!\n\nИли нажми "✍️ Свой вариант" чтобы ввести вручную.'
+                    )
+                else:
+                    # Формируем сообщение с выбранными интересами
+                    topics_display = ', '.join([t.get('emoji', '') + ' ' + t.get('topic', '') for t in selected_topics])
+                    
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        f'✅ Отлично! Ты выбрал: <b>{topics_display}</b>\n\n⏳ Генерирую персональный план... (это займёт ~30 сек)'
+                    )
+                    
                     # Получаем данные для генерации плана
                     cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
                     preferred_topics = row[2] if row and row[2] else []
-                    print(f"[DEBUG] User data: goal={learning_goal}, level={language_level}, topics={preferred_topics}")
+                    
+                    # Обновляем режим на generating_plan
+                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'generating_plan' WHERE telegram_id = {user['id']}")
                     
                     cur.close()
                     conn.close()
                     
-                    # АСИНХРОННАЯ ГЕНЕРАЦИЯ - запускаем в фоне через отдельный HTTP-запрос
+                    # АСИНХРОННАЯ ГЕНЕРАЦИЯ - запускаем в фоне
                     try:
-                        print(f"[DEBUG] Starting ASYNC plan generation for user {user['id']}")
-                        
-                        # Запускаем генерацию через самого себя (асинхронно)
                         function_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
                         async_payload = json.dumps({
                             'action': 'generate_plan_async',
@@ -2952,7 +3081,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             'learning_goal': learning_goal,
                             'language_level': language_level,
                             'preferred_topics': preferred_topics,
-                            'selected_topic': selected_topic
+                            'selected_topic': topics_display
                         }).encode('utf-8')
                         
                         async_req = urllib.request.Request(
@@ -2974,8 +3103,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         thread = threading.Thread(target=fire_async)
                         thread.daemon = True
                         thread.start()
-                        
-                        print(f"[DEBUG] Async generation started in background thread")
                         
                     except Exception as e:
                         print(f"[ERROR] Failed to start async generation: {e}")
@@ -3526,7 +3653,7 @@ No markdown, no explanations, just JSON.'''
                         response_text += f"✅ Правильных ответов: {correct_count}/10\n"
                         response_text += f"🎯 Твой уровень: <b>{actual_level}</b>\n\n"
                         response_text += f"💡 {reasoning}\n\n"
-                        response_text += "Теперь выбери темы, которые тебе интересны:"
+                        response_text += "Теперь выбери темы, которые тебе интересны:\n\n💡 Можно выбрать несколько!"
                         
                         topics_keyboard = {
                             'inline_keyboard': [
@@ -3535,7 +3662,10 @@ No markdown, no explanations, just JSON.'''
                                 [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
                                 [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
                                 [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
-                                [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}]
+                                [{'text': '🎨 Искусство', 'callback_data': 'topic_art'}, {'text': '🔬 Наука', 'callback_data': 'topic_science'}],
+                                [{'text': '🎯 Мода', 'callback_data': 'topic_fashion'}, {'text': '🏠 Дом и уют', 'callback_data': 'topic_home'}],
+                                [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}],
+                                [{'text': '✅ Готово!', 'callback_data': 'topics_done'}]
                             ]
                         }
                         
@@ -3763,34 +3893,63 @@ No markdown, no explanations, just JSON.'''
                         response_text += f"💡 {reasoning}\n"
                     response_text += f"\n🎯 Не переживай! Мы подберем материалы под твой уровень.\n\n"
                 
-                response_text += "Теперь выбери темы, которые тебе интересны:\n\n💬 Мы будем разговаривать на эти темы!"
-                
-                # Кнопки с интересами
-                topics_keyboard = {
-                    'inline_keyboard': [
-                        [{'text': '🎮 Игры', 'callback_data': 'topic_gaming'}, {'text': '💻 IT', 'callback_data': 'topic_it'}],
-                        [{'text': '📊 Маркетинг', 'callback_data': 'topic_marketing'}, {'text': '✈️ Путешествия', 'callback_data': 'topic_travel'}],
-                        [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
-                        [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
-                        [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
-                        [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}]
-                    ]
-                }
-                
-                send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode='HTML')
-                
-                # Обновляем уровень и очищаем test_phrases
+                # Проверяем режим обучения - для specific_topic НЕ НУЖНЫ интересы
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(
-                    f"UPDATE {SCHEMA}.users SET "
-                    f"language_level = '{actual_level}', "
-                    f"conversation_mode = 'awaiting_topic_selection', "
-                    f"test_phrases = NULL "
-                    f"WHERE telegram_id = {user['id']}"
-                )
-                cur.close()
-                conn.close()
+                cur.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                row = cur.fetchone()
+                learning_mode = row[0] if row and row[0] else 'standard'
+                
+                if learning_mode == 'specific_topic':
+                    # РЕЖИМ КОНКРЕТНОЙ ЦЕЛИ - НЕ СПРАШИВАЕМ ИНТЕРЕСЫ, СРАЗУ НАЧИНАЕМ ДИАЛОГ
+                    response_text += "\n\n🚀 Отлично! Начинаем практику! Просто напиши мне что-нибудь на английском 👇"
+                    
+                    send_telegram_message(chat_id, response_text, parse_mode='HTML')
+                    
+                    # Обновляем уровень и переводим в режим диалога
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"language_level = '{actual_level}', "
+                        f"conversation_mode = 'dialog', "
+                        f"test_phrases = NULL "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    # Отправляем клавиатуру для диалога
+                    send_telegram_message(chat_id, '💬 Режим диалога активен!', get_reply_keyboard(), parse_mode=None)
+                else:
+                    # СТАНДАРТНЫЙ РЕЖИМ - СПРАШИВАЕМ ИНТЕРЕСЫ
+                    response_text += "Теперь выбери темы, которые тебе интересны:\n\n💬 Мы будем разговаривать на эти темы!\n💡 Можно выбрать несколько!"
+                    
+                    # Кнопки с интересами
+                    topics_keyboard = {
+                        'inline_keyboard': [
+                            [{'text': '🎮 Игры', 'callback_data': 'topic_gaming'}, {'text': '💻 IT', 'callback_data': 'topic_it'}],
+                            [{'text': '📊 Маркетинг', 'callback_data': 'topic_marketing'}, {'text': '✈️ Путешествия', 'callback_data': 'topic_travel'}],
+                            [{'text': '⚽ Спорт', 'callback_data': 'topic_sport'}, {'text': '🎵 Музыка', 'callback_data': 'topic_music'}],
+                            [{'text': '🎬 Фильмы', 'callback_data': 'topic_movies'}, {'text': '📚 Книги', 'callback_data': 'topic_books'}],
+                            [{'text': '🍴 Еда', 'callback_data': 'topic_food'}, {'text': '💼 Бизнес', 'callback_data': 'topic_business'}],
+                            [{'text': '🎨 Искусство', 'callback_data': 'topic_art'}, {'text': '🔬 Наука', 'callback_data': 'topic_science'}],
+                            [{'text': '🎯 Мода', 'callback_data': 'topic_fashion'}, {'text': '🏠 Дом и уют', 'callback_data': 'topic_home'}],
+                            [{'text': '✍️ Свой вариант', 'callback_data': 'topic_custom'}],
+                            [{'text': '✅ Готово!', 'callback_data': 'topics_done'}]
+                        ]
+                    }
+                    
+                    send_telegram_message(chat_id, response_text, topics_keyboard, parse_mode='HTML')
+                    
+                    # Обновляем уровень и очищаем test_phrases
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"language_level = '{actual_level}', "
+                        f"conversation_mode = 'awaiting_topic_selection', "
+                        f"test_phrases = NULL "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
                 
                 return {
                     'statusCode': 200,
