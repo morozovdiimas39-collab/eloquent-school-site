@@ -3067,6 +3067,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     language_level = row[1] if row and row[1] else 'A1'
                     preferred_topics = row[2] if row and row[2] else []
                     
+                    # КРИТИЧНО: Удаляем ВСЕ старые слова перед генерацией новых
+                    # Это предотвращает "зависание" на старых словах при смене интересов
+                    print(f"[DEBUG] Clearing old words for student {user['id']} before generating new plan...")
+                    cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {user['id']}")
+                    cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {user['id']}")
+                    print(f"[DEBUG] Old words cleared successfully!")
+                    
                     # Обновляем режим на generating_plan
                     cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'generating_plan' WHERE telegram_id = {user['id']}")
                     
