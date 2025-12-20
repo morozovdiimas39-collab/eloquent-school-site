@@ -2288,6 +2288,59 @@ Return ONLY short JSON:
     
     raise Exception(f"Failed to generate unique {chosen_type} for level {level}")
 
+def generate_plan_async(chat_id: int, user_id: int):
+    """
+    Асинхронная генерация плана через HTTP POST к самому себе
+    Используется для запуска генерации в отдельном потоке
+    """
+    try:
+        # Получаем данные пользователя
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user_id}"
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if not row:
+            print(f"[ERROR] User {user_id} not found for async plan generation")
+            return
+        
+        learning_goal, language_level, preferred_topics = row
+        
+        # URL самого себя из func2url.json
+        bot_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+        
+        payload = {
+            'action': 'generate_plan_async',
+            'user_id': user_id,
+            'chat_id': chat_id,
+            'learning_goal': learning_goal,
+            'language_level': language_level,
+            'preferred_topics': preferred_topics or [],
+            'selected_topic': '💡 Общие темы'
+        }
+        
+        req = urllib.request.Request(
+            bot_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST'
+        )
+        
+        print(f"[DEBUG] Triggering async plan generation via HTTP POST for user {user_id}")
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG] Async plan generation triggered: {result}")
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to trigger async plan generation: {e}")
+        import traceback
+        traceback.print_exc()
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
