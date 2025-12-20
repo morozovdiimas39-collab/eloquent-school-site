@@ -1235,19 +1235,15 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         print(f"[DEBUG] Student has {len(existing_words)} existing words")
         print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
         
-        prompt = f'''Generate English learning plan. Level: {language_level}. Goal: {learning_goal}
+        prompt = f'''Generate 1 English word for level {language_level}. Goal: {learning_goal}
 
-Return valid JSON (no markdown):
-
-{{"plan": [{{"week": 1, "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}]}}]}}
-
-Generate NEW words for level {language_level} that help achieve: {learning_goal}'''
+Return JSON: {{"plan": [{{"week": 1, "vocabulary": [{{"english": "word", "russian": "перевод"}}], "phrases": [], "expressions": []}}]}}'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 800,
+                'maxOutputTokens': 100,
                 'topP': 0.95,
                 'topK': 40
             }
