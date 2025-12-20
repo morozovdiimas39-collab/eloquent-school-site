@@ -247,30 +247,30 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         print(f"[DEBUG get_session_words] Returning check word: {words}")
         return words
     
-    # Новые слова (40%)
+    # Новые слова (40%) - БЕЗ фильтра по dialog_uses
     new_limit = max(1, int(limit * 0.4))
     cur.execute(
         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
         f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' AND (wp.dialog_uses < 5 OR wp.dialog_uses IS NULL) "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
         f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
     )
     new_words = cur.fetchall()
-    print(f"[DEBUG get_session_words] new_words (status=new, dialog_uses<5): {len(new_words)} words")
+    print(f"[DEBUG get_session_words] new_words (status=new): {len(new_words)} words")
     
-    # Слова на повторение (40%)
+    # Слова на повторение (40%) - БЕЗ фильтра по dialog_uses
     review_limit = max(1, int(limit * 0.4))
     cur.execute(
         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
         f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
         f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
-        f"AND wp.next_review_date <= CURRENT_TIMESTAMP AND (wp.dialog_uses < 5 OR wp.dialog_uses IS NULL) "
+        f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
         f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
     )
     review_words = cur.fetchall()
     print(f"[DEBUG get_session_words] review_words (status=learning/learned, next_review_date<=NOW): {len(review_words)} words")
     
-    # Освоенные слова (20%)
+    # Освоенные слова (20%) - продолжаем практиковать для закрепления
     mastered_limit = max(1, limit - len(new_words) - len(review_words))
     cur.execute(
         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
@@ -3641,18 +3641,108 @@ No markdown, no explanations, just JSON.'''
                     
                     # Проверяем, есть ли у студента слова
                     if not session_words or len(session_words) == 0:
-                        send_telegram_message(
-                            chat_id,
-                            'У тебя пока нет слов для практики! 📚\n\n'
-                            'Чтобы начать обучение:\n'
-                            '1. Нажми /start\n'
-                            '2. Выбери режим обучения\n'
-                            '3. Я подберу слова специально для тебя!'
+                        # Проверяем: может быть слова есть, но все освоены?
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(
+                            f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {user['id']}"
                         )
-                        return {
-                            'statusCode': 200,
-                            'body': json.dumps({'ok': True})
-                        }
+                        total_words = cur.fetchone()[0]
+                        
+                        # Проверяем количество освоенных слов
+                        cur.execute(
+                            f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
+                            f"WHERE student_id = {user['id']} AND status = 'mastered'"
+                        )
+                        mastered_count = cur.fetchone()[0]
+                        cur.close()
+                        conn.close()
+                        
+                        # Если есть слова и много освоенных - поздравляем и генерируем новые
+                        if total_words > 0 and mastered_count >= 5:
+                            send_telegram_message(
+                                chat_id,
+                                f'🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n'
+                                f'⏳ Генерирую новую порцию слов для тебя...'
+                            )
+                            
+                            # Получаем данные пользователя для генерации
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute(
+                                f"SELECT learning_goal, language_level FROM {SCHEMA}.users "
+                                f"WHERE telegram_id = {user['id']}"
+                            )
+                            user_data = cur.fetchone()
+                            cur.close()
+                            conn.close()
+                            
+                            learning_goal = user_data[0] if user_data and user_data[0] else 'общение на английском'
+                            user_language_level = user_data[1] if user_data and user_data[1] else 'A1'
+                            
+                            # Генерируем новые слова через webapp-api
+                            try:
+                                webapp_api_url = os.environ.get('WEBAPP_API_URL', '')
+                                if webapp_api_url:
+                                    generate_payload = json.dumps({
+                                        'action': 'generate_unique_words',
+                                        'student_id': user['id'],
+                                        'learning_goal': learning_goal,
+                                        'language_level': user_language_level,
+                                        'count': 10
+                                    }).encode('utf-8')
+                                    
+                                    req = urllib.request.Request(
+                                        webapp_api_url,
+                                        data=generate_payload,
+                                        headers={'Content-Type': 'application/json'},
+                                        method='POST'
+                                    )
+                                    
+                                    with urllib.request.urlopen(req, timeout=30) as resp:
+                                        result = json.loads(resp.read().decode('utf-8'))
+                                        if result.get('success'):
+                                            new_words_count = result.get('count', 0)
+                                            send_telegram_message(
+                                                chat_id,
+                                                f'✅ Добавлено {new_words_count} новых слов!\n\n'
+                                                f'Продолжай практиковаться! 💪'
+                                            )
+                                            # Перезагружаем слова и продолжаем диалог
+                                            session_words = get_session_words(user['id'], limit=10)
+                                        else:
+                                            send_telegram_message(
+                                                chat_id,
+                                                '❌ Не удалось сгенерировать новые слова. Попробуй /start'
+                                            )
+                                            return {
+                                                'statusCode': 200,
+                                                'body': json.dumps({'ok': True})
+                                            }
+                            except Exception as gen_error:
+                                print(f"[ERROR] Failed to generate new words: {gen_error}")
+                                send_telegram_message(
+                                    chat_id,
+                                    '❌ Ошибка генерации новых слов. Попробуй /start'
+                                )
+                                return {
+                                    'statusCode': 200,
+                                    'body': json.dumps({'ok': True})
+                                }
+                        else:
+                            # Если вообще нет слов - предлагаем пройти /start
+                            send_telegram_message(
+                                chat_id,
+                                'У тебя пока нет слов для практики! 📚\n\n'
+                                'Чтобы начать обучение:\n'
+                                '1. Нажми /start\n'
+                                '2. Выбери режим обучения\n'
+                                '3. Я подберу слова специально для тебя!'
+                            )
+                            return {
+                                'statusCode': 200,
+                                'body': json.dumps({'ok': True})
+                            }
                 
                 # Анализируем использование слов в сообщении ученика
                 used_word_ids = []
