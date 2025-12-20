@@ -1063,7 +1063,12 @@ BEFORE responding, you MUST check the student's message for:
 5. **Wrong verb forms** (He go → He goes)
 6. **Wrong prepositions** (depend from → depend on)
 
-IF you find ANY mistake, you MUST show correction in this format FIRST:
+⚠️ DO NOT CORRECT:
+- Extra spaces before punctuation (I am okay . → this is just a typo, NOT an English mistake)
+- Typos in punctuation (? ! , . spacing is NOT grammar)
+- Only correct REAL English language errors (spelling, grammar, vocabulary)
+
+IF you find ANY REAL ENGLISH MISTAKE, you MUST show correction in this format FIRST:
 
 🔧 Fix / Correct:
 ❌ [their exact wrong sentence]
@@ -1091,6 +1096,9 @@ You: "🔧 Fix / Correct:
 🇷🇺 С 'yesterday' нужно прошедшее время (went), и артикль 'the' перед shop
 
 Great! What did you buy? 🛍️"
+
+Student: "I am okay. How are you ?" (extra space before ?)
+You: "I'm good, thanks! 😊 What did you do today?" (DO NOT correct spacing - it's just a typo, not grammar)
 """
         
         # КРИТИЧНО: Используем learning_mode для выбора промпта, НЕ наличие learning_goal!
