@@ -1748,6 +1748,38 @@ def edit_telegram_message(chat_id: int, message_id: int, text: str):
     with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode('utf-8'))
 
+def set_bot_commands():
+    """Устанавливает команды бота в меню Telegram"""
+    token = os.environ['TELEGRAM_BOT_TOKEN']
+    url = f'https://api.telegram.org/bot{token}/setMyCommands'
+    
+    commands = [
+        {
+            'command': 'start',
+            'description': '🔄 Начать заново / Изменить цель обучения'
+        }
+    ]
+    
+    payload = {
+        'commands': commands
+    }
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'},
+        method='POST'
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            print(f"[DEBUG] Bot commands set: {result}")
+            return result
+    except Exception as e:
+        print(f"[ERROR] Failed to set bot commands: {e}")
+        return None
+
 def download_telegram_file(file_id: str) -> bytes:
     """Скачивает файл из Telegram"""
     token = os.environ['TELEGRAM_BOT_TOKEN']
@@ -2444,6 +2476,12 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
     """
+    # Устанавливаем команды бота при первом запуске (идемпотентно)
+    try:
+        set_bot_commands()
+    except Exception as e:
+        print(f"[WARNING] Failed to set bot commands: {e}")
+    
     method = event.get('httpMethod', 'POST')
     path = event.get('path', '/')
     query_params = event.get('queryStringParameters', {}) or {}
