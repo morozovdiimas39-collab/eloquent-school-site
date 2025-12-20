@@ -2543,21 +2543,30 @@ Example: {{"russian": "путешествие"}}'''
                         # Финальный анализ уровня
                         history_str = '\n'.join([f"{i+1}. [{h['level']}] {h['item']} → {h['answer']} ({'✅' if h['correct'] else '❌'})" for i, h in enumerate(history)])
                         
-                        final_prompt = f'''Analyze student's English level based on test results.
+                        final_prompt = f'''Analyze student's English level based on their 10 test answers.
 
-Test history (10 questions from different levels):
+Test history (level of question → student answer → correct/wrong):
 {history_str}
 
-Determine real level. Return ONLY JSON:
-{{"level": "A1/A2/B1/B2/C1/C2", "reasoning": "brief explanation in Russian"}}
+Rules for level determination:
+- A1: knows only basic words (cat, home, family, water)
+- A2: knows everyday words (travel, weather, hobby)
+- B1: knows common phrases and expressions (take care, by the way)
+- B2: knows idioms and sophisticated vocabulary
+- C1: knows advanced academic vocabulary
+- C2: knows native-level expressions and subtle nuances
 
-Levels:
-- A1: basic words (family, water)
-- A2: everyday words (travel, weather)
-- B1: common expressions (take care)
-- B2: idioms, sophisticated vocabulary
-- C1: advanced academic vocabulary
-- C2: native-level expressions, subtle nuances'''
+IMPORTANT:
+- Count how many questions from each level (A1/A2/B1/B2/C1/C2) were answered correctly
+- If student answered correctly most B2/C1/C2 questions → level is B2 or higher
+- If student answered correctly most B1 questions → level is B1
+- If student answered correctly most A2 questions → level is A2
+- If student failed most questions → level is A1
+
+Return ONLY valid JSON with actual level (choose ONE from: A1, A2, B1, B2, C1, C2):
+{{"level": "B1", "reasoning": "Краткое объяснение на русском"}}
+
+No markdown, no explanations, just JSON.'''
                         
                         payload = {
                             'contents': [{'parts': [{'text': final_prompt}]}],
@@ -2573,7 +2582,9 @@ Levels:
                         with opener.open(req, timeout=30) as response:
                             final_result = json.loads(response.read().decode('utf-8'))
                             final_text = final_result['candidates'][0]['content']['parts'][0]['text']
+                            print(f"[DEBUG] Gemini level analysis response: {final_text}")
                             final_data = safe_json_parse(final_text, {'level': 'A2', 'reasoning': 'Базовый уровень'})
+                            print(f"[DEBUG] Parsed level data: {final_data}")
                         
                         actual_level = final_data.get('level', 'A1')
                         reasoning = final_data.get('reasoning', '')
