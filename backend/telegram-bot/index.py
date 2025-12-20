@@ -956,24 +956,24 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
     level_templates = templates.get(language_level, templates['A1'])
     sentence_template = random.choice(level_templates)
     
-    # Генерируем варианты ответов (правильный + 3 неправильных)
-    options = [word['russian']]  # Правильный ответ
+    # Генерируем варианты ответов (правильный + 3 неправильных) - НА АНГЛИЙСКОМ
+    options = [word['english']]  # Правильный ответ
     
     # Добавляем 3 случайных слова как отвлекатели
     if all_words and len(all_words) > 1:
         other_words = [w for w in all_words if w['id'] != word['id']]
         random.shuffle(other_words)
         for other in other_words[:3]:
-            options.append(other['russian'])
+            options.append(other['english'])
     else:
         # Fallback если нет других слов
-        options.extend(['другое слово', 'неправильно', 'ошибка'])
+        options.extend(['wrong', 'incorrect', 'mistake'])
     
     # Перемешиваем варианты
     random.shuffle(options)
     
     return (
-        f"📝 Вставь пропущенное слово:\n\n{sentence_template}\n\nВыбери правильный вариант:",
+        f"📝 Fill in the blank:\n\n{sentence_template}\n\nChoose the correct word:",
         word['english'],
         options
     )
@@ -3360,31 +3360,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'isBase64Encoded': False
                     }
                 
-                # Получаем правильный русский перевод
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(
-                    f"SELECT w.russian_translation FROM {SCHEMA}.words w "
-                    f"WHERE w.english_text = '{correct_answer.replace(chr(39), chr(39)+chr(39))}'"
-                )
-                row = cur.fetchone()
-                cur.close()
-                conn.close()
-                
-                if not row:
-                    edit_telegram_message(chat_id, message_id, '❌ Ошибка: слово не найдено в базе')
-                    return {
-                        'statusCode': 200,
-                        'headers': {'Content-Type': 'application/json'},
-                        'body': json.dumps({'ok': True}),
-                        'isBase64Encoded': False
-                    }
-                
-                correct_russian = row[0]
-                is_correct = (selected_answer == correct_russian)
+                # Сравниваем английские слова (теперь варианты на английском)
+                is_correct = (selected_answer.lower() == correct_answer.lower())
                 
                 if is_correct:
-                    edit_telegram_message(chat_id, message_id, f'✅ Правильно! Отличная работа! 🎉\n\n{correct_russian} = {correct_answer}')
+                    # Получаем русский перевод для показа
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SELECT w.russian_translation FROM {SCHEMA}.words w "
+                        f"WHERE w.english_text = '{correct_answer.replace(chr(39), chr(39)+chr(39))}'"
+                    )
+                    row = cur.fetchone()
+                    russian_translation = row[0] if row else ''
+                    cur.close()
+                    conn.close()
+                    
+                    edit_telegram_message(chat_id, message_id, f'✅ Correct! Great job! 🎉\n\n{correct_answer} = {russian_translation}')
                     
                     # Обновляем прогресс
                     if current_word_id:
@@ -3419,10 +3411,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         send_telegram_message(chat_id, '✅ Упражнения закончились!', get_reply_keyboard())
                         update_conversation_mode(user['id'], 'dialog')
                 else:
+                    # Получаем русский перевод для показа
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"SELECT w.russian_translation FROM {SCHEMA}.words w "
+                        f"WHERE w.english_text = '{correct_answer.replace(chr(39), chr(39)+chr(39))}'"
+                    )
+                    row = cur.fetchone()
+                    russian_translation = row[0] if row else ''
+                    cur.close()
+                    conn.close()
+                    
                     edit_telegram_message(
                         chat_id,
                         message_id,
-                        f'❌ Неправильно!\n\n✅ Правильный ответ: {correct_russian} = {correct_answer}\n\nПопробуй еще раз!'
+                        f'❌ Wrong!\n\n✅ Correct answer: {correct_answer} = {russian_translation}\n\nTry again!'
                     )
             
             return {
