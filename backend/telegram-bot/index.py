@@ -3840,27 +3840,27 @@ No markdown, no explanations, just JSON.'''
                     
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
-                    prompt = f'''Task: Generate 5-7 specific learning goals for urgent task.
+                    prompt = f'''Задача: Сгенерируй 5-7 конкретных целей для срочной задачи студента.
 
-Student wrote: "{text}"
+Студент написал: "{text}"
 
-Examples:
-- Task: "Flying to London next week"
-  Goals: ["Book hotel in English", "Order food at restaurant", "Ask for directions", "Pass passport control", "Buy transport tickets"]
+Примеры:
+- Задача: "Лечу в Лондон через неделю"
+  Цели: ["Забронировать отель на английском", "Заказать еду в ресторане", "Спросить дорогу у прохожих", "Пройти паспортный контроль в аэропорту", "Купить билеты на транспорт"]
 
-- Task: "Job interview tomorrow in English"
-  Goals: ["Introduce yourself (Self-introduction)", "Describe work experience", "Answer Why this company questions", "Ask interviewer questions", "Discuss salary and conditions"]
+- Задача: "Завтра собеседование на английском"
+  Цели: ["Рассказать о себе и опыте работы", "Описать свои сильные стороны", "Ответить на вопрос Почему эта компания", "Задать вопросы интервьюеру", "Обсудить зарплату и условия работы"]
 
-Output ONLY this JSON (no markdown, no extra text):
-{{"goals": ["Goal 1", "Goal 2", "Goal 3", "Goal 4", "Goal 5"], "timeline": "tomorrow"}}
+Выведи ТОЛЬКО этот JSON (без markdown, без лишнего текста):
+{{"goals": ["Цель 1", "Цель 2", "Цель 3", "Цель 4", "Цель 5"]}}
 
-Rules:
-- Goals must be SPECIFIC actions (not general "improve English")
-- Use action verbs: "Book...", "Ask...", "Tell..."
-- Consider urgency (if tomorrow - basic phrases, if in month - more details)
-- timeline: extract time from task ("tomorrow", "next week", "in 3 days", etc.)
+Правила:
+- Цели должны быть КОНКРЕТНЫМИ действиями (не общие "улучшить английский")
+- Используй глаголы действия: "Забронировать...", "Спросить...", "Рассказать..."
+- Учитывай срочность (если завтра - базовые фразы, если через месяц - больше деталей)
+- Все цели пиши НА РУССКОМ ЯЗЫКЕ
 
-⚠️ CRITICAL: Output ONLY valid JSON, nothing else.'''
+⚠️ ВАЖНО: Выводи ТОЛЬКО валидный JSON, ничего больше.'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': prompt}]}],
@@ -3890,12 +3890,11 @@ Rules:
                         
                         print(f"[DEBUG] Raw Gemini response: {goals_text}")
                         
-                        goals_data = safe_json_parse(goals_text, {'goals': [], 'timeline': ''})
+                        goals_data = safe_json_parse(goals_text, {'goals': []})
                         
                         print(f"[DEBUG] Parsed goals_data: {goals_data}")
                     
                     goals_list = goals_data.get('goals', [])
-                    timeline = goals_data.get('timeline', '')
                     
                     if not goals_list or len(goals_list) == 0:
                         print(f"[ERROR] Empty goals_list after parsing! goals_data: {goals_data}")
@@ -3903,16 +3902,18 @@ Rules:
                     
                     log_proxy_success(proxy_id)
                     
-                    # Формируем сообщение с целями
-                    goals_message = f"✅ Понял твою задачу: <b>{text}</b>\n\n"
-                    if timeline:
-                        goals_message += f"⏰ Срок: {timeline}\n\n"
+                    # Формируем красивое сообщение с целями
+                    goals_message = f"✅ <b>Понял! Готовлюсь к твоей задаче</b>\n\n"
+                    goals_message += f"📋 <i>{text}</i>\n\n"
+                    goals_message += "━━━━━━━━━━━━━━━━━━━\n\n"
+                    goals_message += "🎯 <b>Вот что нам нужно освоить:</b>\n\n"
                     
-                    goals_message += "🎯 Вот что нам нужно освоить:\n\n"
                     for i, goal in enumerate(goals_list, 1):
-                        goals_message += f"{i}. {goal}\n"
+                        goals_message += f"   {i}. {goal}\n"
                     
-                    goals_message += "\n⏳ Сейчас запущу адаптивный тест - он определит твой уровень, и мы подберем материалы..."
+                    goals_message += "\n━━━━━━━━━━━━━━━━━━━\n\n"
+                    goals_message += "⏳ Сейчас запущу адаптивный тест — он определит твой уровень, и мы подберём нужные материалы!\n\n"
+                    goals_message += "💡 <i>По мере изучения я буду автоматически добавлять новые слова и фразы</i>"
                     
                     send_telegram_message(chat_id, goals_message, parse_mode='HTML')
                     
@@ -3922,24 +3923,14 @@ Rules:
                     
                     goal_escaped = text.replace("'", "''")
                     goals_json = json.dumps(goals_list, ensure_ascii=False).replace("'", "''")
-                    timeline_escaped = timeline.replace("'", "''") if timeline else ''
                     
                     # Сохраняем основную цель + список подцелей
-                    if timeline:
-                        cur.execute(
-                            f"UPDATE {SCHEMA}.users SET "
-                            f"learning_goal = '{goal_escaped}', "
-                            f"learning_goal_details = '{timeline_escaped}', "
-                            f"urgent_goals = '{goals_json}'::jsonb "
-                            f"WHERE telegram_id = {user['id']}"
-                        )
-                    else:
-                        cur.execute(
-                            f"UPDATE {SCHEMA}.users SET "
-                            f"learning_goal = '{goal_escaped}', "
-                            f"urgent_goals = '{goals_json}'::jsonb "
-                            f"WHERE telegram_id = {user['id']}"
-                        )
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"learning_goal = '{goal_escaped}', "
+                        f"urgent_goals = '{goals_json}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
                     
                     cur.close()
                     conn.close()
