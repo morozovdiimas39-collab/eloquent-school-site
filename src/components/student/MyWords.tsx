@@ -256,26 +256,39 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                       {word.russian_translation}
                     </p>
                     
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                        <span>Прогресс в диалогах: {word.dialog_uses}/5</span>
-                        <span className="font-medium">{(word.dialog_uses / 5 * 100).toFixed(0)}%</span>
+                    {/* ПРОГРЕСС-БАР - КРУПНЫЙ И ЗАМЕТНЫЙ */}
+                    <div className="mt-3 bg-gradient-to-br from-blue-50 to-purple-50 p-3 rounded-lg border-2 border-blue-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-bold text-gray-800">🗣️ Использований Аней:</span>
+                        <span className="text-2xl font-black text-blue-600">{word.dialog_uses}/5</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-300 rounded-full h-6 shadow-inner">
                         <div 
-                          className={`h-2 rounded-full transition-all ${word.needs_check ? 'bg-orange-500 animate-pulse' : 'bg-gradient-to-r from-blue-500 to-purple-500'}`}
-                          style={{ width: `${(word.dialog_uses / 5 * 100)}%` }}
-                        />
+                          className={`h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${
+                            word.needs_check 
+                              ? 'bg-gradient-to-r from-orange-400 to-red-500 animate-pulse shadow-lg' 
+                              : 'bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 shadow-md'
+                          }`}
+                          style={{ width: `${Math.max(10, (word.dialog_uses / 5 * 100))}%` }}
+                        >
+                          <span className="text-xs font-bold text-white drop-shadow-md">
+                            {(word.dialog_uses / 5 * 100).toFixed(0)}%
+                          </span>
+                        </div>
                       </div>
                       {word.needs_check && (
-                        <p className="text-xs text-orange-600 font-medium mt-1">
-                          🎯 Готово к проверке! Аня спросит на следующем сообщении
-                        </p>
+                        <div className="mt-2 bg-orange-100 border-2 border-orange-400 rounded p-2">
+                          <p className="text-sm text-orange-800 font-bold text-center">
+                            🎯 Готово к проверке! Аня спросит на следующем сообщении
+                          </p>
+                        </div>
                       )}
                       {word.progress_status === 'mastered' && (
-                        <p className="text-xs text-purple-600 font-medium mt-1">
-                          ✅ Слово полностью освоено!
-                        </p>
+                        <div className="mt-2 bg-green-100 border-2 border-green-400 rounded p-2">
+                          <p className="text-sm text-green-800 font-bold text-center">
+                            ✅ Слово полностью освоено!
+                          </p>
+                        </div>
                       )}
                     </div>
                     
