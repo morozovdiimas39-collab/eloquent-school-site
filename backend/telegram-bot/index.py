@@ -4741,7 +4741,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                             payload = {
                                 'contents': [{'parts': [{'text': check_prompt}]}],
-                                'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 500}
+                                'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 2000}
                             }
                             
                             proxy_handler = urllib.request.ProxyHandler({
