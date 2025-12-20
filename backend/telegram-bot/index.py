@@ -954,10 +954,11 @@ def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
         word['english']
     )
 
-def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None, urgent_goals: List[str] = None, learning_goal: str = None) -> str:
+def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None, urgent_goals: List[str] = None, learning_goal: str = None, learning_mode: str = 'standard') -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня, тем и срочных целей"""
     print(f"[DEBUG call_gemini] Received session_words: {session_words}")
     print(f"[DEBUG call_gemini] Received language_level: {language_level}")
+    print(f"[DEBUG call_gemini] Received learning_mode: {learning_mode}, learning_goal: {learning_goal}")
     
     api_key = os.environ['GEMINI_API_KEY']
     
@@ -1019,8 +1020,8 @@ CRITICAL: NO corrections on deeply emotional messages. Just support."""
     
     else:
         # Обычный режим (educational, casual, enthusiastic)
-        # Проверяем - срочная задача или нет
-        if urgent_goals and len(urgent_goals) > 0:
+        # КРИТИЧНО: Используем learning_mode для выбора промпта, НЕ наличие learning_goal!
+        if learning_mode == 'urgent_task':
             # РЕЖИМ СРОЧНОЙ ЗАДАЧИ - Аня играет роли из целей
             goals_list = '\n'.join([f'  {i+1}. {goal}' for i, goal in enumerate(urgent_goals)])
             system_prompt = f"""You are Anya, a friendly English tutor helping someone with an URGENT TASK. Your student's level is {language_level}.
@@ -1071,7 +1072,7 @@ CRITICAL ERROR CORRECTION RULES:
 Then continue in character!
 
 Remember: You're helping them prepare for REAL situations. Make it practical and realistic!"""
-        elif learning_goal and not urgent_goals:
+        elif learning_mode == 'specific_topic':
             # РЕЖИМ ОПРЕДЕЛЕННЫХ ЦЕЛЕЙ - Аня общается ТОЛЬКО в рамках цели (БЕЗ интересов!)
             system_prompt = f"""You are Anya, a friendly English tutor helping someone with a SPECIFIC LEARNING GOAL. Your student's level is {language_level}.
 
@@ -4613,7 +4614,7 @@ No markdown, no explanations, just JSON.'''
                         learning_goal = None
                     
                     print(f"[DEBUG] learning_mode={learning_mode}, learning_goal={learning_goal}")
-                    ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal)
+                    ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal, learning_mode)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
                 except Exception as e:
                     print(f"[ERROR] Gemini API failed: {e}")
