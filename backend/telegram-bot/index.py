@@ -2594,52 +2594,116 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Обработка выбора режима обучения (НОВЫЙ ШАГ)
                 mode = data.replace('learning_mode_', '')
                 
-                mode_prompts = {
-                    'standard': {
-                        'text': '📚 Стандартное обучение\n\nТеперь расскажи своими словами - к какому результату ты хочешь прийти?\n\n'
-                               'Например:\n'
-                               '• "Через 2 месяца лечу в Таиланд, хочу свободно общаться"\n'
-                               '• "Нужен для работы программистом"\n'
-                               '• "Просто хочу подтянуть разговорный"',
-                        'mode_value': 'standard'
-                    },
-                    'specific': {
-                        'text': '🎯 Конкретная тема\n\nНапиши что именно хочешь освоить:\n\n'
-                               'Например:\n'
-                               '• "Хочу посмотреть сериал Friends в оригинале"\n'
-                               '• "Читаю книгу Harry Potter, нужна помощь"\n'
-                               '• "Изучаю IT-термины для работы"',
-                        'mode_value': 'specific_topic'
-                    },
-                    'urgent': {
-                        'text': '🚨 Срочная задача\n\nОпиши свою задачу и когда она нужна:\n\n'
-                               'Например:\n'
-                               '• "Через неделю лечу в США, нужно снять отель"\n'
-                               '• "Завтра собеседование на английском"\n'
-                               '• "В четверг встреча с иностранными партнерами"',
-                        'mode_value': 'urgent_task'
-                    }
-                }
+                if mode == 'standard':
+                    # СТАНДАРТНОЕ ОБУЧЕНИЕ: сразу к тесту, без ввода цели
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        '📚 Стандартное обучение\n\n'
+                        '✅ Отлично! Будем изучать общие темы.\n\n'
+                        '⏳ Сейчас запущу адаптивный тест - он САМ определит твой уровень через вопросы...'
+                    )
+                    
+                    # Сохраняем цель по умолчанию и сразу начинаем тест
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    default_goal = 'Хочу улучшить английский через общение'
+                    goal_escaped = default_goal.replace("'", "''")
+                    
+                    # Инициализируем тест
+                    test_state = json.dumps({
+                        'question_num': 0,
+                        'history': []
+                    }, ensure_ascii=False).replace("'", "''")
+                    
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"learning_goal = '{goal_escaped}', "
+                        f"learning_mode = 'standard', "
+                        f"conversation_mode = 'adaptive_level_test', "
+                        f"test_phrases = '{test_state}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    # Генерируем первый вопрос
+                    try:
+                        first_item = generate_adaptive_question('A1', [])
+                        
+                        type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                        emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
+                        
+                        question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
+                        question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
+                        
+                        send_telegram_message(chat_id, question_message)
+                        
+                        # Обновляем состояние с текущим вопросом
+                        test_state = {
+                            'current_item': first_item,
+                            'question_num': 1,
+                            'history': []
+                        }
+                        
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                    except Exception as e:
+                        print(f"[ERROR] Failed to start adaptive test: {e}")
+                        send_telegram_message(chat_id, f'❌ Ошибка запуска теста: {e}\n\nПопробуй /start')
                 
-                mode_info = mode_prompts.get(mode, mode_prompts['standard'])
+                elif mode == 'specific':
+                    # КОНКРЕТНАЯ ТЕМА: просим ввести тему (без изменений)
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        '🎯 Конкретная тема\n\nНапиши что именно хочешь освоить:\n\n'
+                        'Например:\n'
+                        '• "Хочу посмотреть сериал Friends в оригинале"\n'
+                        '• "Читаю книгу Harry Potter, нужна помощь"\n'
+                        '• "Изучаю IT-термины для работы"'
+                    )
+                    
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'awaiting_goal', "
+                        f"learning_mode = 'specific_topic' "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
                 
-                edit_telegram_message(
-                    chat_id,
-                    message_id,
-                    mode_info['text']
-                )
-                
-                # Сохраняем режим обучения и переводим в awaiting_goal
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(
-                    f"UPDATE {SCHEMA}.users SET "
-                    f"conversation_mode = 'awaiting_goal', "
-                    f"learning_mode = '{mode_info['mode_value']}' "
-                    f"WHERE telegram_id = {user['id']}"
-                )
-                cur.close()
-                conn.close()
+                elif mode == 'urgent':
+                    # СРОЧНАЯ ЗАДАЧА: просим ввести задачу + Gemini сгенерирует цели
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        '🚨 Срочная задача\n\nОпиши свою задачу и когда она нужна:\n\n'
+                        'Например:\n'
+                        '• "Через неделю лечу в Лондон"\n'
+                        '• "Завтра собеседование на английском"\n'
+                        '• "В четверг встреча с иностранными партнерами"'
+                    )
+                    
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'awaiting_urgent_task', "
+                        f"learning_mode = 'urgent_task' "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
             
             elif data.startswith('role_'):
                 role = data.replace('role_', '')
@@ -3754,6 +3818,185 @@ No markdown, no explanations, just JSON.'''
                 except Exception as e:
                     print(f"[ERROR] Failed to analyze goal: {e}")
                     send_telegram_message(chat_id, '❌ Не удалось проанализировать цель. Попробуй еще раз или напиши /start', parse_mode=None)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
+            # Проверяем - ждем ли мы описание СРОЧНОЙ ЗАДАЧИ (новое состояние)
+            elif conversation_mode == 'awaiting_urgent_task':
+                # Пользователь описал срочную задачу - Gemini генерирует конкретные цели
+                send_telegram_message(chat_id, '⏳ Анализирую твою задачу и подбираю конкретные цели...', parse_mode=None)
+                
+                try:
+                    # Генерируем цели через Gemini
+                    api_key = os.environ['GEMINI_API_KEY']
+                    proxy_id, proxy_url = get_active_proxy_from_db()
+                    if not proxy_url:
+                        proxy_url = os.environ.get('PROXY_URL', '')
+                    
+                    gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+                    
+                    prompt = f'''Студент описал срочную задачу: "{text}"
+
+Сгенерируй 5-7 КОНКРЕТНЫХ целей (действий), которые нужно освоить для этой задачи.
+
+Примеры:
+- Задача: "Через неделю лечу в Лондон"
+  Цели: ["Забронировать отель на английском", "Заказать еду в ресторане", "Спросить дорогу", "Пройти паспортный контроль", "Купить билеты на транспорт"]
+
+- Задача: "Завтра собеседование на английском"
+  Цели: ["Рассказать о себе (Self-introduction)", "Описать опыт работы", "Ответить на вопросы Why this company", "Задать вопросы интервьюеру", "Обсудить зарплату и условия"]
+
+Формат ответа (только JSON, без markdown):
+{{
+  "goals": [
+    "Цель 1: конкретное действие",
+    "Цель 2: конкретное действие",
+    "Цель 3: конкретное действие"
+  ],
+  "timeline": "через неделю" или "завтра" или "в четверг"
+}}
+
+⚠️ ВАЖНО:
+- Цели должны быть КОНКРЕТНЫМИ действиями (не общие "улучшить английский")
+- Формулируй цели как действия: "Забронировать...", "Спросить...", "Рассказать..."
+- Учитывай срочность задачи (если завтра - базовые фразы, если через месяц - больше деталей)
+
+Отвечай ТОЛЬКО валидным JSON.'''
+                    
+                    payload = {
+                        'contents': [{'parts': [{'text': prompt}]}],
+                        'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 1000}
+                    }
+                    
+                    proxy_handler = urllib.request.ProxyHandler({
+                        'http': f'http://{proxy_url}',
+                        'https': f'http://{proxy_url}'
+                    })
+                    opener = urllib.request.build_opener(proxy_handler)
+                    
+                    req = urllib.request.Request(
+                        gemini_url,
+                        data=json.dumps(payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'}
+                    )
+                    
+                    with opener.open(req, timeout=30) as response:
+                        gemini_result = json.loads(response.read().decode('utf-8'))
+                        goals_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        goals_data = safe_json_parse(goals_text, {'goals': [], 'timeline': ''})
+                    
+                    goals_list = goals_data.get('goals', [])
+                    timeline = goals_data.get('timeline', '')
+                    
+                    if not goals_list or len(goals_list) == 0:
+                        raise Exception("Gemini не смог сгенерировать цели")
+                    
+                    log_proxy_success(proxy_id)
+                    
+                    # Формируем сообщение с целями
+                    goals_message = f"✅ Понял твою задачу: <b>{text}</b>\n\n"
+                    if timeline:
+                        goals_message += f"⏰ Срок: {timeline}\n\n"
+                    
+                    goals_message += "🎯 Вот что нам нужно освоить:\n\n"
+                    for i, goal in enumerate(goals_list, 1):
+                        goals_message += f"{i}. {goal}\n"
+                    
+                    goals_message += "\n⏳ Сейчас запущу адаптивный тест - он определит твой уровень, и мы подберем материалы..."
+                    
+                    send_telegram_message(chat_id, goals_message, parse_mode='HTML')
+                    
+                    # Сохраняем цель и цели в БД
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    goal_escaped = text.replace("'", "''")
+                    goals_json = json.dumps(goals_list, ensure_ascii=False).replace("'", "''")
+                    timeline_escaped = timeline.replace("'", "''") if timeline else ''
+                    
+                    # Сохраняем основную цель + список подцелей
+                    if timeline:
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET "
+                            f"learning_goal = '{goal_escaped}', "
+                            f"learning_goal_details = '{timeline_escaped}', "
+                            f"urgent_goals = '{goals_json}'::jsonb "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                    else:
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET "
+                            f"learning_goal = '{goal_escaped}', "
+                            f"urgent_goals = '{goals_json}'::jsonb "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                    
+                    cur.close()
+                    conn.close()
+                    
+                    # Начинаем адаптивный тест (как в awaiting_goal)
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    
+                    test_state = json.dumps({
+                        'question_num': 0,
+                        'history': []
+                    }, ensure_ascii=False).replace("'", "''")
+                    
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"conversation_mode = 'adaptive_level_test', "
+                        f"test_phrases = '{test_state}'::jsonb "
+                        f"WHERE telegram_id = {user['id']}"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    # Генерируем первый вопрос теста
+                    try:
+                        first_item = generate_adaptive_question('A1', [])
+                        
+                        type_emojis = {'word': '📖', 'phrase': '💬', 'expression': '✨'}
+                        emoji = type_emojis.get(first_item.get('type', 'word'), '📖')
+                        
+                        question_message = f'{emoji} <b>Вопрос 1/10</b>\n\n'
+                        question_message += f'Переведи на русский:\n<b>{first_item["english"]}</b>'
+                        
+                        send_telegram_message(chat_id, question_message)
+                        
+                        test_state = {
+                            'current_item': first_item,
+                            'question_num': 1,
+                            'history': []
+                        }
+                        
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                        cur.execute(
+                            f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
+                            f"WHERE telegram_id = {user['id']}"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                    except Exception as e:
+                        print(f"[ERROR] Failed to start adaptive test: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        send_telegram_message(chat_id, '❌ Ошибка запуска теста. Попробуй /start')
+                
+                except Exception as e:
+                    print(f"[ERROR] Failed to generate urgent goals: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    log_proxy_failure(proxy_id, str(e))
+                    send_telegram_message(chat_id, '❌ Не удалось проанализировать задачу. Попробуй еще раз или напиши /start', parse_mode=None)
                 
                 return {
                     'statusCode': 200,
