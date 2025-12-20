@@ -1196,22 +1196,156 @@ def text_to_speech(text: str) -> str:
     """Генерирует озвучку через OpenAI TTS (было Yandex)"""
     return text_to_speech_openai(text)
 
+def get_template_words_for_topic(topic: str, language_level: str) -> Dict[str, Any]:
+    """Возвращает готовые слова по теме и уровню БЕЗ Gemini"""
+    
+    templates = {
+        '🍴 Еда и кулинария': {
+            'A1': {
+                'vocabulary': [
+                    {'english': 'food', 'russian': 'еда'},
+                    {'english': 'water', 'russian': 'вода'},
+                    {'english': 'bread', 'russian': 'хлеб'},
+                    {'english': 'meat', 'russian': 'мясо'},
+                    {'english': 'fruit', 'russian': 'фрукт'}
+                ],
+                'phrases': [
+                    {'english': 'I am hungry', 'russian': 'Я голоден'},
+                    {'english': 'I like pizza', 'russian': 'Мне нравится пицца'},
+                    {'english': 'This is delicious', 'russian': 'Это вкусно'}
+                ],
+                'expressions': [
+                    {'english': 'bon appetit', 'russian': 'приятного аппетита'},
+                    {'english': 'tastes good', 'russian': 'вкусно'}
+                ]
+            },
+            'A2': {
+                'vocabulary': [
+                    {'english': 'recipe', 'russian': 'рецепт'},
+                    {'english': 'ingredient', 'russian': 'ингредиент'},
+                    {'english': 'dish', 'russian': 'блюдо'},
+                    {'english': 'kitchen', 'russian': 'кухня'},
+                    {'english': 'taste', 'russian': 'вкус'}
+                ],
+                'phrases': [
+                    {'english': 'how do you cook this', 'russian': 'как это готовить'},
+                    {'english': 'could I have the menu', 'russian': 'можно меню'},
+                    {'english': 'I would like to order', 'russian': 'я хочу заказать'}
+                ],
+                'expressions': [
+                    {'english': 'piece of cake', 'russian': 'проще простого'},
+                    {'english': 'food for thought', 'russian': 'пища для размышлений'}
+                ]
+            }
+        },
+        '🎬 Фильмы': {
+            'A1': {
+                'vocabulary': [
+                    {'english': 'movie', 'russian': 'фильм'},
+                    {'english': 'cinema', 'russian': 'кинотеатр'},
+                    {'english': 'actor', 'russian': 'актёр'},
+                    {'english': 'watch', 'russian': 'смотреть'},
+                    {'english': 'ticket', 'russian': 'билет'}
+                ],
+                'phrases': [
+                    {'english': 'I love this movie', 'russian': 'Я люблю этот фильм'},
+                    {'english': 'let\'s watch something', 'russian': 'давай посмотрим что-нибудь'},
+                    {'english': 'who is your favorite actor', 'russian': 'кто твой любимый актёр'}
+                ],
+                'expressions': [
+                    {'english': 'blockbuster hit', 'russian': 'блокбастер'},
+                    {'english': 'must-see', 'russian': 'обязательно к просмотру'}
+                ]
+            }
+        },
+        '🎮 Игры': {
+            'A1': {
+                'vocabulary': [
+                    {'english': 'game', 'russian': 'игра'},
+                    {'english': 'play', 'russian': 'играть'},
+                    {'english': 'win', 'russian': 'выиграть'},
+                    {'english': 'lose', 'russian': 'проиграть'},
+                    {'english': 'team', 'russian': 'команда'}
+                ],
+                'phrases': [
+                    {'english': 'want to play', 'russian': 'хочешь поиграть'},
+                    {'english': 'good game', 'russian': 'хорошая игра'},
+                    {'english': 'I won', 'russian': 'я выиграл'}
+                ],
+                'expressions': [
+                    {'english': 'game over', 'russian': 'игра окончена'},
+                    {'english': 'level up', 'russian': 'повысить уровень'}
+                ]
+            }
+        },
+        '💻 IT и технологии': {
+            'A2': {
+                'vocabulary': [
+                    {'english': 'computer', 'russian': 'компьютер'},
+                    {'english': 'software', 'russian': 'программное обеспечение'},
+                    {'english': 'code', 'russian': 'код'},
+                    {'english': 'bug', 'russian': 'ошибка'},
+                    {'english': 'update', 'russian': 'обновление'}
+                ],
+                'phrases': [
+                    {'english': 'have you tried turning it off and on', 'russian': 'ты пробовал перезагрузить'},
+                    {'english': 'it works on my machine', 'russian': 'у меня работает'},
+                    {'english': 'let me google that', 'russian': 'дай я загуглю'}
+                ],
+                'expressions': [
+                    {'english': 'debugging hell', 'russian': 'ад отладки'},
+                    {'english': 'push to production', 'russian': 'выкатить на прод'}
+                ]
+            }
+        }
+    }
+    
+    # Находим подходящий шаблон
+    for topic_key in templates:
+        if topic_key in topic or topic in topic_key:
+            topic_data = templates[topic_key]
+            if language_level in topic_data:
+                return topic_data[language_level]
+            else:
+                # Используем A1 как fallback
+                return topic_data.get('A1', topic_data[list(topic_data.keys())[0]])
+    
+    # Fallback - базовые слова
+    return {
+        'vocabulary': [
+            {'english': 'hello', 'russian': 'привет'},
+            {'english': 'thank you', 'russian': 'спасибо'},
+            {'english': 'yes', 'russian': 'да'},
+            {'english': 'no', 'russian': 'нет'},
+            {'english': 'good', 'russian': 'хорошо'}
+        ],
+        'phrases': [
+            {'english': 'how are you', 'russian': 'как дела'},
+            {'english': 'see you later', 'russian': 'увидимся позже'},
+            {'english': 'nice to meet you', 'russian': 'приятно познакомиться'}
+        ],
+        'expressions': [
+            {'english': 'break the ice', 'russian': 'растопить лёд'},
+            {'english': 'piece of cake', 'russian': 'проще простого'}
+        ]
+    }
+
 def generate_plan_batch(student_id: int, learning_goal: str, language_level: str, preferred_topics: List[Dict[str, str]], batch_num: int) -> Dict[str, Any]:
     """
-    Генерирует ОДНУ ПАРТИЮ плана (2 недели).
-    batch_num: 1 (недели 1-2) или 2 (недели 3-4)
+    Генерирует план БЕЗ Gemini - использует готовые шаблоны.
+    МГНОВЕННАЯ генерация - нет таймаутов!
     
     Возвращает: {'success': True, 'weeks': [...], 'words_added': N}
     """
     try:
         print(f"[DEBUG] generate_plan_batch STARTED: batch={batch_num}")
-        api_key = os.environ['GEMINI_API_KEY']
-        proxy_id, proxy_url = get_active_proxy_from_db()
-        if not proxy_url:
-            proxy_url = os.environ.get('PROXY_URL', '')
         
-        print(f"[DEBUG] Proxy obtained: {proxy_url[:30]}... (id={proxy_id})")
-        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+        # Определяем тему из preferred_topics
+        topic_name = '💡 Общие темы'
+        if preferred_topics and len(preferred_topics) > 0:
+            topic_name = f"{preferred_topics[0].get('emoji', '💡')} {preferred_topics[0].get('topic', 'Общие темы')}"
+        
+        print(f"[DEBUG] Getting template words for: topic={topic_name}, level={language_level}")
         
         topics_display = ', '.join([f"{t.get('emoji', '💡')} {t.get('topic', 'Общие темы')}" for t in preferred_topics[:5]]) if preferred_topics else '💡 Общие темы'
         
