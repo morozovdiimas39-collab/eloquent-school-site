@@ -1022,7 +1022,7 @@ Return ONLY valid JSON:
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
+            'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 500}
         }
         
         proxy_handler = urllib.request.ProxyHandler({
