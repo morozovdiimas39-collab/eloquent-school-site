@@ -256,37 +256,37 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                       {word.russian_translation}
                     </p>
                     
-                    {/* ПРОГРЕСС-БАР - КРУПНЫЙ И ЗАМЕТНЫЙ */}
-                    <div className="mt-3 bg-gradient-to-br from-blue-50 to-purple-50 p-3 rounded-lg border-2 border-blue-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-bold text-gray-800">🗣️ Использований Аней:</span>
-                        <span className="text-2xl font-black text-blue-600">{word.dialog_uses}/5</span>
+                    {/* ПРОГРЕСС ИСПОЛЬЗОВАНИЯ АНЕ */}
+                    <div className="mt-4 bg-blue-600 p-4 rounded-xl shadow-2xl border-4 border-blue-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-lg font-black text-white">🗣️ Аня использовала:</span>
+                        <span className="text-4xl font-black text-yellow-300">{word.dialog_uses}/5</span>
                       </div>
-                      <div className="w-full bg-gray-300 rounded-full h-6 shadow-inner">
+                      <div className="w-full bg-blue-900 rounded-full h-10 shadow-inner border-2 border-blue-800">
                         <div 
-                          className={`h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2 ${
+                          className={`h-10 rounded-full transition-all duration-500 flex items-center justify-center ${
                             word.needs_check 
-                              ? 'bg-gradient-to-r from-orange-400 to-red-500 animate-pulse shadow-lg' 
-                              : 'bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 shadow-md'
+                              ? 'bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600 animate-pulse shadow-2xl' 
+                              : 'bg-gradient-to-r from-green-400 via-emerald-500 to-teal-600 shadow-xl'
                           }`}
-                          style={{ width: `${Math.max(10, (word.dialog_uses / 5 * 100))}%` }}
+                          style={{ width: `${Math.max(15, (word.dialog_uses / 5 * 100))}%` }}
                         >
-                          <span className="text-xs font-bold text-white drop-shadow-md">
+                          <span className="text-base font-black text-white drop-shadow-lg">
                             {(word.dialog_uses / 5 * 100).toFixed(0)}%
                           </span>
                         </div>
                       </div>
                       {word.needs_check && (
-                        <div className="mt-2 bg-orange-100 border-2 border-orange-400 rounded p-2">
-                          <p className="text-sm text-orange-800 font-bold text-center">
-                            🎯 Готово к проверке! Аня спросит на следующем сообщении
+                        <div className="mt-3 bg-yellow-400 border-4 border-yellow-500 rounded-xl p-3 shadow-lg">
+                          <p className="text-base text-yellow-900 font-black text-center">
+                            🎯 ГОТОВО К ПРОВЕРКЕ! Аня спросит на следующем сообщении
                           </p>
                         </div>
                       )}
                       {word.progress_status === 'mastered' && (
-                        <div className="mt-2 bg-green-100 border-2 border-green-400 rounded p-2">
-                          <p className="text-sm text-green-800 font-bold text-center">
-                            ✅ Слово полностью освоено!
+                        <div className="mt-3 bg-green-400 border-4 border-green-500 rounded-xl p-3 shadow-lg">
+                          <p className="text-base text-green-900 font-black text-center">
+                            ✅ СЛОВО ПОЛНОСТЬЮ ОСВОЕНО!
                           </p>
                         </div>
                       )}
