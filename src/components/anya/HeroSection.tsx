@@ -79,7 +79,7 @@ export default function HeroSection({ onStartDemo }: HeroSectionProps) {
           </div>
 
           {/* Right: Screenshot/Visual */}
-          <div className="relative animate-fade-in-up animation-delay-800">
+          <div className="relative animate-fade-in-up animation-delay-800 hidden lg:block">
             <div className="relative">
               {/* Mockup phone frame */}
               <div className="relative mx-auto w-full max-w-sm">
