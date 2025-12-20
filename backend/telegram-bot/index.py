@@ -766,7 +766,8 @@ Your approach:
 - Respond ONLY with your message, do NOT include conversation history or labels
 - Write 1-3 sentences per message (keep it SHORT!)
 - Use 1-2 emojis MAX per message
-- DON'T say "Hello/Hi/Great to hear" if you already greeted them recently
+- ⚠️ CRITICAL: NEVER start messages with "Hey there" / "Hi" / "Hello" unless it's the FIRST message of the day
+- If you see previous messages in history → DO NOT greet, just continue conversation
 - Sometimes just react (Cool / Nice / I see), sometimes ask ONE question
 - Be NATURAL like texting a friend - avoid teacher-like patterns
 - Don't be repetitive with greetings or phrases
@@ -872,9 +873,11 @@ IMPORTANT:
             system_prompt += f"- Use AT LEAST 1 word from this list in EVERY response\n"
             system_prompt += f"- Make it natural and conversational (not forced)\n"
             system_prompt += f"- If the word doesn't fit the context, create a context where it fits\n"
-            system_prompt += f"- Ask questions or share stories that naturally include these words\n\n"
-            system_prompt += f"Example: If the word is 'travel', ask 'Do you like to travel?' or share 'I love to travel!'\n"
-            system_prompt += f"Example: If the word is 'no', ask a yes/no question or use 'no' in your answer naturally\n\n"
+            system_prompt += f"- Ask questions or share stories that naturally include these words\n"
+            system_prompt += f"- ⚠️ CRITICAL: When you use a word from the list, wrap it in **bold** like: **travel**, **plausible**, **weekend**\n"
+            system_prompt += f"- This helps the student notice which vocabulary words they're learning\n\n"
+            system_prompt += f"Example: 'Do you like to **travel**?' or 'That story seems **plausible**!'\n"
+            system_prompt += f"Example: 'Do you usually work on the **weekends**?'\n\n"
             system_prompt += f"⚠️ CRITICAL: DO NOT respond without using at least one word from the list!"
     else:
         print(f"[DEBUG call_gemini] NO session_words provided!")
@@ -888,7 +891,11 @@ IMPORTANT:
     
     # Если есть история - указываем что это продолжение диалога
     if history and len(history) > 0:
-        system_prompt += "\n\n⚠️ CRITICAL: This is a CONTINUATION of an ongoing conversation. You already know this person. DO NOT greet them like it's the first meeting. Continue naturally from where you left off!"
+        system_prompt += "\n\n⚠️ CRITICAL: This is a CONTINUATION of an ongoing conversation. You already know this person.\n"
+        system_prompt += "- DO NOT say 'Hey there' / 'Hi' / 'Hello' / 'Glad we're back' - you're already talking\n"
+        system_prompt += "- Just continue from where you left off, like a normal texting conversation\n"
+        system_prompt += "- If they ask a question, answer it directly without greeting first\n"
+        system_prompt += "- If they make a statement, react naturally without 'Hey' or similar greetings"
     
     # Добавляем системный промпт как первое сообщение пользователя
     contents.append({
