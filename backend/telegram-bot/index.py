@@ -3631,6 +3631,21 @@ No markdown, no explanations, just JSON.'''
                         session_words = get_session_words(user['id'], limit=10)
                     except Exception as e:
                         print(f"[WARNING] Failed to load session words: {e}")
+                    
+                    # Проверяем, есть ли у студента слова
+                    if not session_words or len(session_words) == 0:
+                        send_telegram_message(
+                            chat_id,
+                            'У тебя пока нет слов для практики! 📚\n\n'
+                            'Чтобы начать обучение:\n'
+                            '1. Нажми /start\n'
+                            '2. Выбери режим обучения\n'
+                            '3. Я подберу слова специально для тебя!'
+                        )
+                        return {
+                            'statusCode': 200,
+                            'body': json.dumps({'ok': True})
+                        }
                 
                 # Анализируем использование слов в сообщении ученика
                 used_word_ids = []
