@@ -127,6 +127,35 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
     }
   };
 
+  const deleteWord = async (studentWordId: number, englishText: string) => {
+    if (!confirm(`Удалить слово "${englishText}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_student_word',
+          student_word_id: studentWordId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Слово удалено');
+        loadData(); // Перезагружаем список
+      } else {
+        toast.error('Ошибка удаления');
+      }
+    } catch (error) {
+      console.error('Ошибка удаления слова:', error);
+      toast.error('Ошибка удаления');
+    }
+  };
+
 
 
   const getStatusColor = (status: string) => {
@@ -291,6 +320,15 @@ export default function ImprovedMyWords({ studentId, languageLevel = 'A1', learn
                         </div>
                       )}
                     </div>
+                    
+                    <Button
+                      onClick={() => deleteWord(word.id, word.english_text)}
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                    >
+                      <Icon name="Trash2" size={16} />
+                    </Button>
                   </div>
                 </div>
               ))}

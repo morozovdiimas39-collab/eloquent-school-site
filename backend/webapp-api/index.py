@@ -949,6 +949,47 @@ def get_student_words(student_id: int) -> List[Dict[str, Any]]:
     conn.close()
     return words
 
+def delete_student_word(student_word_id: int) -> bool:
+    """Удаляет слово из списка студента"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Сначала получаем student_id и word_id
+        cur.execute(
+            f"SELECT student_id, word_id FROM {SCHEMA}.student_words WHERE id = {student_word_id}"
+        )
+        row = cur.fetchone()
+        
+        if not row:
+            print(f"[WARNING] Student word {student_word_id} not found")
+            cur.close()
+            conn.close()
+            return False
+        
+        student_id, word_id = row[0], row[1]
+        
+        # Удаляем прогресс по этому слову
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+        
+        # Удаляем связь студент-слово
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.student_words WHERE id = {student_word_id}"
+        )
+        
+        print(f"[INFO] Deleted student word: student={student_id}, word={word_id}")
+        
+        cur.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to delete student word: {e}")
+        cur.close()
+        conn.close()
+        return False
+
 def get_student_progress_stats(student_id: int) -> Dict[str, Any]:
     """Получает статистику прогресса студента"""
     conn = get_db_connection()
@@ -1352,6 +1393,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'delete_student_word':
+            student_word_id = body_data.get('student_word_id')
+            success = delete_student_word(student_word_id)
+            return {
+                'statusCode': 200 if success else 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
                 'isBase64Encoded': False
             }
         

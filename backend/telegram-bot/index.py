@@ -1180,6 +1180,20 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         week_start = (batch_num - 1) * 2 + 1
         week_end = batch_num * 2
         
+        # Получаем список уже добавленных слов студента
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT DISTINCT w.english_text FROM {SCHEMA}.student_words sw "
+            f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+            f"WHERE sw.student_id = {student_id}"
+        )
+        existing_words = [row[0] for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        
+        existing_words_str = ', '.join(existing_words[:100]) if existing_words else 'none'
+        print(f"[DEBUG] Student has {len(existing_words)} existing words")
         print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
         
         prompt = f'''Create a 2-week English learning plan. Return ONLY valid JSON, no markdown.
@@ -1247,6 +1261,8 @@ Requirements:
 - Each week must have 2 common expressions for level {language_level}
 - Words/phrases should match student's level and goal, NOT topics
 - Topics ({topics_display}) are ONLY for conversation practice, NOT for vocabulary selection
+- ⚠️ CRITICAL: DO NOT use these words that student already knows: {existing_words_str}
+- Generate ONLY NEW words that are not in the existing list
 - Return complete valid JSON with both weeks, no markdown blocks, no comments'''
         
         payload = {
