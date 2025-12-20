@@ -214,6 +214,137 @@ def get_user(telegram_id: int):
         }
     return None
 
+def auto_generate_new_words(student_id: int, how_many: int = 5) -> int:
+    """Автоматически генерирует новые слова когда старые освоены"""
+    try:
+        print(f"[DEBUG auto_generate_new_words] Generating {how_many} new words for student {student_id}")
+        
+        # Получаем данные пользователя
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            f"SELECT language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {student_id}"
+        )
+        user_data = cur.fetchone()
+        
+        if not user_data:
+            print(f"[ERROR] User {student_id} not found")
+            return 0
+        
+        language_level = user_data[0] or 'A1'
+        preferred_topics = user_data[1] or []
+        
+        # Получаем уже существующие слова
+        cur.execute(
+            f"SELECT DISTINCT w.english_text FROM {SCHEMA}.student_words sw "
+            f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+            f"WHERE sw.student_id = {student_id}"
+        )
+        existing_words = [row[0].lower() for row in cur.fetchall()]
+        cur.close()
+        conn.close()
+        
+        print(f"[DEBUG] Student has {len(existing_words)} existing words")
+        
+        # Генерируем новые слова через Gemini
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        if not proxy_url:
+            print(f"[ERROR] No proxy available")
+            return 0
+        
+        topics_text = ', '.join([t.get('topic', '') for t in preferred_topics[:3]]) if preferred_topics else 'general topics'
+        existing_sample = ', '.join(existing_words[:50]) if existing_words else 'none'
+        
+        prompt = f'''Generate {how_many} NEW English words for level {language_level}.
+Topics: {topics_text}
+
+⚠️ CRITICAL: DO NOT use these existing words: {existing_sample}
+
+Return ONLY valid JSON:
+{{"words": [{{"english": "word1", "russian": "перевод1"}}, {{"english": "word2", "russian": "перевод2"}}]}}'''
+
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 2000}
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with opener.open(req, timeout=25) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            data = safe_json_parse(text, {'words': []})
+            new_words = data.get('words', [])
+            
+            print(f"[DEBUG] Gemini generated {len(new_words)} words")
+            
+            # Сохраняем в БД
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            added_count = 0
+            for word_data in new_words:
+                english = word_data['english'].strip().lower()
+                russian = word_data['russian'].strip()
+                
+                # Пропускаем дубликаты
+                if english in existing_words:
+                    print(f"[DEBUG] Skipping duplicate: {english}")
+                    continue
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT DO NOTHING"
+                )
+                
+                existing_words.append(english)
+                added_count += 1
+                print(f"[DEBUG] Added new word: {english} = {russian}")
+            
+            cur.close()
+            conn.close()
+            
+            log_proxy_success(proxy_id)
+            
+            print(f"[DEBUG auto_generate_new_words] Successfully added {added_count} new words")
+            return added_count
+            
+    except Exception as e:
+        print(f"[ERROR auto_generate_new_words] Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
+
 def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     """Получает слова для практики в сессии"""
     conn = get_db_connection()
@@ -280,6 +411,19 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     )
     mastered_words = cur.fetchall()
     print(f"[DEBUG get_session_words] mastered_words (status=mastered): {len(mastered_words)} words")
+    
+    # ⚠️ CRITICAL: Автоматически генерируем новые слова если недостаточно активных
+    active_words_count = len(new_words) + len(review_words)
+    if active_words_count < 3:  # Если меньше 3 активных слов - генерируем новые
+        print(f"[WARNING] Only {active_words_count} active words - generating more!")
+        cur.close()
+        conn.close()
+        
+        added = auto_generate_new_words(student_id, how_many=5)
+        
+        if added > 0:
+            # Повторно запрашиваем слова после генерации
+            return get_session_words(student_id, limit)
     
     all_words = list(new_words) + list(review_words) + list(mastered_words)
     
