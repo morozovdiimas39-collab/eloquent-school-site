@@ -17,7 +17,7 @@ export default function Header() {
           </div>
           <div className="flex flex-col">
             <span className="text-2xl font-bold tracking-tight text-gray-900">
-              Anya
+              Anya<span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GPT</span>
             </span>
             <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase -mt-1">
               ИИ-репетитор английского
