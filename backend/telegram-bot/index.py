@@ -1253,7 +1253,7 @@ Requirements:
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 1000,
+                'maxOutputTokens': 3000,
                 'topP': 0.95,
                 'topK': 40
             }
