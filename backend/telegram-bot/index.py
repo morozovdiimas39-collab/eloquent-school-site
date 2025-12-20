@@ -4491,6 +4491,18 @@ No markdown, no explanations, just JSON.'''
                 preferred_topics = existing_user.get('preferred_topics', [])
                 
                 if existing_user.get('role') == 'student':
+                    # КРИТИЧНО: Если идет генерация плана - НЕ трогаем слова вообще!
+                    if existing_user.get('conversation_mode') == 'generating_plan':
+                        print(f"[DEBUG] User is generating plan - skipping word loading")
+                        send_telegram_message(
+                            chat_id,
+                            '⏳ Подожди, я все еще генерирую твой персональный план обучения...\n\nЭто займет еще ~20 секунд! 🚀'
+                        )
+                        return {
+                            'statusCode': 200,
+                            'body': json.dumps({'ok': True})
+                        }
+                    
                     try:
                         session_words = get_session_words(user['id'], limit=10)
                     except Exception as e:
