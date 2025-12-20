@@ -938,8 +938,8 @@ def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> str
     """Генерирует задание на составление предложения"""
     return f"✍️ Составь предложение со словом: {word['english']} ({word['russian']})"
 
-def generate_context_exercise(word: Dict[str, Any], language_level: str) -> tuple:
-    """Генерирует упражнение Fill in the blanks"""
+def generate_context_exercise(word: Dict[str, Any], language_level: str, all_words: List[Dict[str, Any]] = None) -> tuple:
+    """Генерирует упражнение Fill in the blanks с вариантами ответа"""
     templates = {
         'A1': [
             f"I ___ {word['english']} every day",
@@ -956,9 +956,26 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str) -> tupl
     level_templates = templates.get(language_level, templates['A1'])
     sentence_template = random.choice(level_templates)
     
+    # Генерируем варианты ответов (правильный + 3 неправильных)
+    options = [word['russian']]  # Правильный ответ
+    
+    # Добавляем 3 случайных слова как отвлекатели
+    if all_words and len(all_words) > 1:
+        other_words = [w for w in all_words if w['id'] != word['id']]
+        random.shuffle(other_words)
+        for other in other_words[:3]:
+            options.append(other['russian'])
+    else:
+        # Fallback если нет других слов
+        options.extend(['другое слово', 'неправильно', 'ошибка'])
+    
+    # Перемешиваем варианты
+    random.shuffle(options)
+    
     return (
-        f"📝 Вставь пропущенное слово:\n\n{sentence_template}\n\nСлово: {word['russian']}",
-        word['english']
+        f"📝 Вставь пропущенное слово:\n\n{sentence_template}\n\nВыбери правильный вариант:",
+        word['english'],
+        options
     )
 
 def generate_association_exercise(word: Dict[str, Any], language_level: str) -> tuple:
@@ -3316,6 +3333,98 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 cur.close()
                 conn.close()
             
+            elif data.startswith('context_answer:'):
+                # Обработка ответа в режиме контекста (multiple choice)
+                selected_answer = data.replace('context_answer:', '')
+                
+                # Получаем данные пользователя
+                existing_user = get_user(user['id'])
+                if not existing_user:
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True}),
+                        'isBase64Encoded': False
+                    }
+                
+                current_word_id = existing_user.get('current_exercise_word_id')
+                correct_answer = existing_user.get('current_exercise_answer')
+                language_level = existing_user.get('language_level', 'A1')
+                
+                if not correct_answer:
+                    edit_telegram_message(chat_id, message_id, '❌ Ошибка: не найдено текущее упражнение')
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True}),
+                        'isBase64Encoded': False
+                    }
+                
+                # Получаем правильный русский перевод
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT w.russian_translation FROM {SCHEMA}.words w "
+                    f"WHERE w.english_text = '{correct_answer.replace(chr(39), chr(39)+chr(39))}'"
+                )
+                row = cur.fetchone()
+                cur.close()
+                conn.close()
+                
+                if not row:
+                    edit_telegram_message(chat_id, message_id, '❌ Ошибка: слово не найдено в базе')
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True}),
+                        'isBase64Encoded': False
+                    }
+                
+                correct_russian = row[0]
+                is_correct = (selected_answer == correct_russian)
+                
+                if is_correct:
+                    edit_telegram_message(chat_id, message_id, f'✅ Правильно! Отличная работа! 🎉\n\n{correct_russian} = {correct_answer}')
+                    
+                    # Обновляем прогресс
+                    if current_word_id:
+                        update_word_progress_api(user['id'], current_word_id, True)
+                    
+                    clear_exercise_state(user['id'])
+                    
+                    # Генерируем следующее упражнение
+                    word = get_random_word(user['id'], language_level)
+                    if word:
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(
+                            f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
+                            f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+                            f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                        )
+                        all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
+                        cur.close()
+                        conn.close()
+                        
+                        exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
+                        update_exercise_state(user['id'], word['id'], answer)
+                        
+                        inline_keyboard = {
+                            'inline_keyboard': [
+                                [{'text': opt, 'callback_data': f'context_answer:{opt}'}] for opt in options
+                            ]
+                        }
+                        send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
+                    else:
+                        send_telegram_message(chat_id, '✅ Упражнения закончились!', get_reply_keyboard())
+                        update_conversation_mode(user['id'], 'dialog')
+                else:
+                    edit_telegram_message(
+                        chat_id,
+                        message_id,
+                        f'❌ Неправильно!\n\n✅ Правильный ответ: {correct_russian} = {correct_answer}\n\nПопробуй еще раз!'
+                    )
+            
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json'},
@@ -3642,9 +3751,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             update_exercise_state(user['id'], word['id'], word['english'])
                             send_telegram_message(chat_id, exercise_text, parse_mode=None)
                         elif mode == 'context':
-                            exercise_text, answer = generate_context_exercise(word, language_level)
+                            # Получаем все слова студента для генерации вариантов
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute(
+                                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
+                                f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+                                f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                            )
+                            all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
+                            cur.close()
+                            conn.close()
+                            
+                            exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                            
+                            # Создаем inline keyboard с вариантами ответов
+                            inline_keyboard = {
+                                'inline_keyboard': [
+                                    [{'text': opt, 'callback_data': f'context_answer:{opt}'}] for opt in options
+                                ]
+                            }
+                            send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
                         elif mode == 'association':
                             exercise_text, answer = generate_association_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], answer)
@@ -4854,9 +4982,27 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             word = get_random_word(user['id'], language_level)
                             if word:
                                 if conversation_mode == 'context':
-                                    exercise_text, answer = generate_context_exercise(word, language_level)
+                                    # Получаем все слова для генерации вариантов
+                                    conn = get_db_connection()
+                                    cur = conn.cursor()
+                                    cur.execute(
+                                        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
+                                        f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+                                        f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                                    )
+                                    all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
+                                    cur.close()
+                                    conn.close()
+                                    
+                                    exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
                                     update_exercise_state(user['id'], word['id'], answer)
-                                    send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
+                                    
+                                    inline_keyboard = {
+                                        'inline_keyboard': [
+                                            [{'text': opt, 'callback_data': f'context_answer:{opt}'}] for opt in options
+                                        ]
+                                    }
+                                    send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
                                 elif conversation_mode == 'association':
                                     exercise_text, answer = generate_association_exercise(word, language_level)
                                     update_exercise_state(user['id'], word['id'], answer)
