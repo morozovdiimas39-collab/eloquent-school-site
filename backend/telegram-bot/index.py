@@ -4705,26 +4705,38 @@ No markdown, no explanations, just JSON.'''
                                 proxy_id = None
                                 proxy_url = os.environ.get('PROXY_URL', '')
                             
-                            check_prompt = f'''Check if this English sentence is correct and uses the word "{correct_answer}" properly.
+                            check_prompt = f'''Check if this English sentence is grammatically correct and uses the word "{correct_answer}" properly.
 
 Student's sentence: "{user_answer}"
 Required word: {correct_answer}
 Student level: {language_level}
+
+⚠️ CRITICAL - Check for these errors:
+1. Subject-verb agreement (I am/he is, I have/he has)
+2. Verb tenses (present/past/future)
+3. Articles (a/an/the)
+4. Word order
+5. Does sentence contain the required word?
 
 Respond ONLY with this JSON:
 {{
   "is_correct": true/false,
   "has_word": true/false,
   "grammar_ok": true/false,
-  "feedback": "short explanation in Russian",
+  "feedback": "short explanation in Russian about the mistake",
   "corrected": "corrected sentence if needed (or empty string if correct)"
 }}
 
 Rules:
-- is_correct = true if sentence uses word correctly AND has no major errors
-- has_word = true if sentence contains the required word
-- grammar_ok = true if grammar is acceptable for {language_level} level
-- Minor mistakes are OK for A1-A2 students!'''
+- is_correct = true ONLY if: has_word=true AND grammar_ok=true AND no major errors
+- has_word = true if sentence contains the required word "{correct_answer}"
+- grammar_ok = true if there are NO grammar mistakes (even small ones!)
+- feedback should explain the error clearly in Russian
+- corrected should show the fixed sentence
+
+Example:
+Input: "I has a voice"
+Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback": "Ошибка: 'I has' неправильно. С местоимением 'I' используется 'have', а не 'has'", "corrected": "I have a voice"}}'''
                             
                             gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                             payload = {{
