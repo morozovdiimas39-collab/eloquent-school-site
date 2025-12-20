@@ -979,20 +979,84 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
     )
 
 def generate_association_exercise(word: Dict[str, Any], language_level: str) -> tuple:
-    """Генерирует упражнение с ассоциациями"""
-    associations = {
-        'cat': ['meow', 'furry', 'pet'],
-        'book': ['read', 'pages', 'story'],
-        'water': ['drink', 'liquid', 'H2O']
-    }
-    
-    hints = associations.get(word['english'].lower(), ['word', 'english', 'language'])
-    hints_text = ', '.join(hints[:3])
-    
-    return (
-        f"🎯 Угадай слово по ассоциациям:\n\n{hints_text}\n\nПереведи на русский: {word['russian']}",
-        word['english']
-    )
+    """Генерирует упражнение с ассоциациями через Gemini"""
+    try:
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        if not proxy_url:
+            # Fallback на дефолтные ассоциации если нет прокси
+            hints = ['word', 'thing', 'item']
+            hints_text = ', '.join(hints)
+            return (
+                f"🎯 Guess the word by associations:\n\n{hints_text}\n\nRussian translation: {word['russian']}",
+                word['english']
+            )
+        
+        # Генерируем 3 ассоциации через Gemini
+        prompt = f'''Generate 3 short English associations (1-2 words each) for the word "{word['english']}".
+
+Rules:
+- Make hints clear but not too obvious
+- Use simple English words for level {language_level}
+- Don't use the word itself or direct translations
+- Focus on: what it does, how it looks, where you find it, related concepts
+
+Examples:
+- "cat" → meow, furry, pet
+- "travel" → journey, explore, adventure
+- "book" → read, pages, story
+- "music" → sound, melody, listen
+
+Return ONLY valid JSON:
+{{"associations": ["hint1", "hint2", "hint3"]}}'''
+
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 200}
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with opener.open(req, timeout=15) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            data = safe_json_parse(text, {'associations': ['word', 'thing', 'item']})
+            hints = data.get('associations', ['word', 'thing', 'item'])[:3]
+            
+            log_proxy_success(proxy_id)
+            
+            hints_text = ', '.join(hints)
+            
+            return (
+                f"🎯 Guess the word by associations:\n\n{hints_text}\n\nRussian translation: {word['russian']}",
+                word['english']
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] Failed to generate associations: {e}")
+        # Fallback на простые ассоциации
+        hints = ['word', 'thing', 'item']
+        hints_text = ', '.join(hints)
+        return (
+            f"🎯 Guess the word by associations:\n\n{hints_text}\n\nRussian translation: {word['russian']}",
+            word['english']
+        )
 
 def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
     """Генерирует упражнение на перевод"""
