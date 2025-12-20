@@ -3866,7 +3866,7 @@ No markdown, no explanations, just JSON.'''
                         'contents': [{'parts': [{'text': prompt}]}],
                         'generationConfig': {
                             'temperature': 0.7,
-                            'maxOutputTokens': 800,
+                            'maxOutputTokens': 1500,
                             'topP': 0.9,
                             'topK': 40
                         }
