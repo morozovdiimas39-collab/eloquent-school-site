@@ -3664,7 +3664,7 @@ No markdown, no explanations, just JSON.'''
                     if session_words:
                         mastered_word = next((w for w in session_words if w['english'].lower() == word_text.lower()), None)
                         if mastered_word:
-                            mark_word_as_mastered(user['id'], mastered_word['id'])
+                            update_word_progress_api(user['id'], mastered_word['id'], is_correct=True)
                             print(f"[SUCCESS] Word '{word_text}' marked as mastered!")
                     
                     # Убираем маркер из ответа пользователю

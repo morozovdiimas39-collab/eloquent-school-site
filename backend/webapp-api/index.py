@@ -1346,6 +1346,38 @@ def update_student_settings(telegram_id: int, language_level: str = None, prefer
     conn.close()
     return True
 
+def update_word_progress(student_id: int, word_id: int, is_correct: bool) -> Dict[str, Any]:
+    """Обновляет прогресс изучения слова"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if is_correct:
+        cur.execute(
+            f"UPDATE {SCHEMA}.word_progress SET "
+            f"dialog_uses = dialog_uses + 1, "
+            f"last_practiced = CURRENT_TIMESTAMP, "
+            f"status = CASE "
+            f"  WHEN dialog_uses + 1 >= 20 THEN 'mastered' "
+            f"  WHEN dialog_uses + 1 >= 10 THEN 'learned' "
+            f"  WHEN dialog_uses + 1 >= 5 THEN 'learning' "
+            f"  ELSE 'new' "
+            f"END, "
+            f"mastery_score = LEAST(100, mastery_score + 5), "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+    else:
+        cur.execute(
+            f"UPDATE {SCHEMA}.word_progress SET "
+            f"mastery_score = GREATEST(0, mastery_score - 3), "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE student_id = {student_id} AND word_id = {word_id}"
+        )
+    
+    cur.close()
+    conn.close()
+    return {'success': True}
+
 def get_all_proxies() -> List[Dict[str, Any]]:
     """Получает все прокси со статистикой"""
     conn = get_db_connection()
@@ -1745,6 +1777,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_word_progress':
+            student_id = body_data.get('student_id')
+            word_id = body_data.get('word_id')
+            is_correct = body_data.get('is_correct', True)
+            result = update_word_progress(student_id, word_id, is_correct)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         
