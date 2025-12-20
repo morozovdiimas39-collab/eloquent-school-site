@@ -349,8 +349,208 @@ def generate_learning_goal_suggestions(user_input: str) -> Dict[str, Any]:
     except Exception as e:
         return {'error': str(e), 'suggestions': []}
 
+def generate_unique_words(student_id: int, learning_goal: str, language_level: str, count: int = 7) -> Dict[str, Any]:
+    """Генерирует УНИКАЛЬНЫЕ персональные слова (без дубликатов с существующими)"""
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return {'error': 'GEMINI_API_KEY not found', 'words': []}
+    
+    # Получаем все существующие слова студента
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT DISTINCT w.english_text FROM {SCHEMA}.student_words sw "
+        f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+        f"WHERE sw.student_id = {student_id}"
+    )
+    existing_words = [row[0] for row in cur.fetchall()]
+    cur.close()
+    conn.close()
+    
+    existing_words_str = ', '.join(existing_words[:150]) if existing_words else 'none'
+    print(f"[DEBUG] Student {student_id} has {len(existing_words)} existing words")
+    
+    level_descriptions = {
+        'A1': 'начальный уровень (простые базовые слова)',
+        'A2': 'элементарный уровень (повседневная лексика)',
+        'B1': 'средний уровень (распространенная лексика)',
+        'B2': 'продвинутый уровень (профессиональная лексика)',
+        'C1': 'высокий уровень (сложная лексика)',
+        'C2': 'свободное владение (нативная лексика)'
+    }
+    
+    level_desc = level_descriptions.get(language_level, level_descriptions['A1'])
+    
+    prompt = f"""Ты — эксперт по практическому изучению английского языка. 
+
+Студент изучает английский:
+- Цель обучения: {learning_goal}
+- Уровень: {language_level} ({level_desc})
+
+Твоя задача: подобрать {count} САМЫХ ПРАКТИЧНЫХ английских слов для РЕАЛЬНЫХ разговоров на эту тему.
+
+⚠️ КРИТИЧЕСКИЕ ПРАВИЛА:
+
+1. НЕ ИСПОЛЬЗУЙ банальные слова: hello, yes, no, cat, dog, book, red, blue, one, two
+2. НЕ ИСПОЛЬЗУЙ слишком простые слова, которые все знают
+3. ИСПОЛЬЗУЙ глаголы, прилагательные, фразовые глаголы - то что РЕАЛЬНО нужно в разговоре
+4. ФОКУС на словах, которые студент будет использовать в диалогах по своей цели
+5. ⚠️ CRITICAL: DO NOT use these words (student already knows them): {existing_words_str}
+6. Generate ONLY NEW words that are NOT in the existing list
+
+Примеры ХОРОШИХ слов для разных целей:
+
+Цель "Путешествия" → НЕ "airport, ticket", А "delay, boarding, luggage, customs, exchange rate"
+Цель "Работа" → НЕ "work, job", А "deadline, collaborate, prioritize, efficiency, feedback"
+Цель "Общение" → НЕ "talk, speak", А "suggest, clarify, hesitate, convinced, relevant"
+Цель "IT" → НЕ "computer, internet", А "implement, deploy, debugging, optimize, integrate"
+
+Если уровень A1-A2: выбирай САМЫЕ частотные глаголы (want, need, feel, think, understand, explain, prefer)
+Если уровень B1-B2: выбирай разговорные конструкции и phrasal verbs (figure out, deal with, come up with, get along)
+Если уровень C1-C2: выбирай идиомы и продвинутую лексику
+
+Формат ответа (только JSON, без markdown):
+{{
+  "words": [
+    {{
+      "english": "practical_word",
+      "russian": "перевод"
+    }}
+  ]
+}}
+
+КРИТИЧНО: 
+- Отвечай ТОЛЬКО валидным JSON массивом из {count} слов
+- БЕЗ комментариев в JSON
+- БЕЗ trailing commas
+- БЕЗ markdown форматирования
+- Только практичные слова для реальных разговоров!
+- НИКАКИХ дубликатов из списка уже известных слов!"""
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.9,
+            "maxOutputTokens": 2000,
+            "responseMimeType": "application/json"
+        }
+    }
+    
+    try:
+        proxies = get_proxies()
+        response = requests.post(url, json=payload, proxies=proxies, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if 'candidates' in data and len(data['candidates']) > 0:
+            text = data['candidates'][0]['content']['parts'][0]['text']
+            text = text.replace('```json', '').replace('```', '').strip()
+            
+            # Удаляем trailing commas
+            import re
+            text = re.sub(r',\s*}', '}', text)
+            text = re.sub(r',\s*]', ']', text)
+            
+            result = json.loads(text)
+            generated_words = result.get('words', [])
+            
+            # ФИЛЬТРУЕМ дубликаты ПОСЛЕ генерации
+            unique_words = []
+            duplicates = []
+            for word_data in generated_words:
+                word_lower = word_data['english'].strip().lower()
+                if word_lower not in existing_words:
+                    unique_words.append(word_data)
+                else:
+                    duplicates.append(word_lower)
+            
+            print(f"[DEBUG] Generated {len(generated_words)}, unique: {len(unique_words)}, duplicates: {len(duplicates)}")
+            
+            # Если есть дубликаты - запрашиваем замену
+            if duplicates and len(unique_words) < count:
+                needed = count - len(unique_words)
+                print(f"[DEBUG] Requesting {needed} replacement words...")
+                
+                replacement_prompt = f"""Generate {needed} NEW English words for level {language_level}.
+Goal: {learning_goal}
+
+⚠️ CRITICAL: DO NOT use these words (duplicates): {', '.join(duplicates)}
+⚠️ ALSO DO NOT use: {existing_words_str}
+
+Return ONLY valid JSON:
+{{"words": [{{"english": "word", "russian": "перевод"}}]}}"""
+                
+                replacement_payload = {
+                    "contents": [{"parts": [{"text": replacement_prompt}]}],
+                    "generationConfig": {"temperature": 0.95, "maxOutputTokens": 1500, "responseMimeType": "application/json"}
+                }
+                
+                replacement_response = requests.post(url, json=replacement_payload, proxies=proxies, timeout=25)
+                replacement_data = replacement_response.json()
+                
+                if 'candidates' in replacement_data:
+                    replacement_text = replacement_data['candidates'][0]['content']['parts'][0]['text']
+                    replacement_text = replacement_text.replace('```json', '').replace('```', '').strip()
+                    replacement_result = json.loads(replacement_text)
+                    
+                    for repl_word in replacement_result.get('words', []):
+                        if repl_word['english'].strip().lower() not in existing_words:
+                            unique_words.append(repl_word)
+                    
+                    print(f"[DEBUG] Added {len(replacement_result.get('words', []))} replacement words")
+            
+            # Сохраняем ТОЛЬКО уникальные слова в БД
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            added_words = []
+            for word_data in unique_words[:count]:
+                english = word_data['english'].strip().lower()
+                russian = word_data['russian'].strip()
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                # Проверяем что слово НЕ добавлено студенту
+                cur.execute(
+                    f"SELECT id FROM {SCHEMA}.student_words WHERE student_id = {student_id} AND word_id = {word_id}"
+                )
+                if not cur.fetchone():
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                        f"VALUES ({student_id}, {word_id}, {student_id})"
+                    )
+                    added_words.append({
+                        'id': word_id,
+                        'english': english,
+                        'russian': russian
+                    })
+            
+            cur.close()
+            conn.close()
+            
+            return {'success': True, 'words': added_words, 'count': len(added_words), 'duplicates_found': len(duplicates)}
+        
+        return {'error': 'No response from Gemini', 'words': []}
+    
+    except Exception as e:
+        return {'error': str(e), 'words': []}
+
 def generate_personalized_words(student_id: int, learning_goal: str, language_level: str, count: int = 7) -> Dict[str, Any]:
-    """Генерирует персональные слова через Gemini на основе цели и уровня студента"""
+    """Генерирует персональные слова через Gemini на основе цели и уровня студента (DEPRECATED: use generate_unique_words)"""
     api_key = os.environ.get('GEMINI_API_KEY')
     if not api_key:
         return {'error': 'GEMINI_API_KEY not found', 'words': []}
@@ -1468,6 +1668,19 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'suggest_learning_goal':
             user_input = body_data.get('user_input', '')
             result = generate_learning_goal_suggestions(user_input)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'generate_unique_words':
+            student_id = body_data.get('student_id')
+            learning_goal = body_data.get('learning_goal', '')
+            language_level = body_data.get('language_level', 'A1')
+            count = body_data.get('count', 7)
+            result = generate_unique_words(student_id, learning_goal, language_level, count)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},

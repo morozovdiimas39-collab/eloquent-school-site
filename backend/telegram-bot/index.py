@@ -1315,12 +1315,68 @@ Requirements:
         
         plan_weeks = batch_weeks
         
+        # Фильтруем дубликаты ПОСЛЕ генерации Gemini
+        print(f"[DEBUG] Filtering duplicates from generated words...")
+        all_generated_words = []
+        for week_data in plan_weeks:
+            all_generated_words.extend([w['english'].strip().lower() for w in week_data.get('vocabulary', [])])
+            all_generated_words.extend([p['english'].strip().lower() for p in week_data.get('phrases', [])])
+            all_generated_words.extend([e['english'].strip().lower() for e in week_data.get('expressions', [])])
+        
+        # Проверяем какие слова РЕАЛЬНО есть дубликаты
+        duplicates = [w for w in all_generated_words if w in existing_words]
+        
+        if duplicates:
+            print(f"[WARNING] Found {len(duplicates)} duplicates: {duplicates[:10]}")
+            
+            # Запрашиваем замену у Gemini для дубликатов
+            replacement_prompt = f'''Generate {len(duplicates)} NEW English words/phrases for level {language_level}.
+Goal: {learning_goal}
+
+⚠️ CRITICAL: DO NOT use these words (they are duplicates): {', '.join(duplicates)}
+⚠️ ALSO DO NOT use existing words: {existing_words_str}
+
+Return ONLY valid JSON:
+{{"words": [{{"english": "word1", "russian": "перевод1"}}, {{"english": "word2", "russian": "перевод2"}}]}}'''
+            
+            try:
+                replacement_payload = {
+                    'contents': [{'parts': [{'text': replacement_prompt}]}],
+                    'generationConfig': {'temperature': 0.9, 'maxOutputTokens': 2000}
+                }
+                
+                replacement_req = urllib.request.Request(
+                    gemini_url,
+                    data=json.dumps(replacement_payload).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'}
+                )
+                
+                with opener.open(replacement_req, timeout=25) as resp:
+                    replacement_result = json.loads(resp.read().decode('utf-8'))
+                    replacement_text = replacement_result['candidates'][0]['content']['parts'][0]['text']
+                    replacement_data = safe_json_parse(replacement_text, {'words': []})
+                    
+                    print(f"[DEBUG] Got {len(replacement_data.get('words', []))} replacement words")
+                    
+                    # Заменяем дубликаты в plan_weeks
+                    replacement_idx = 0
+                    for week_data in plan_weeks:
+                        for category in ['vocabulary', 'phrases', 'expressions']:
+                            for i, item in enumerate(week_data.get(category, [])):
+                                if item['english'].strip().lower() in duplicates and replacement_idx < len(replacement_data['words']):
+                                    week_data[category][i] = replacement_data['words'][replacement_idx]
+                                    replacement_idx += 1
+                                    print(f"[DEBUG] Replaced duplicate '{item['english']}' with '{replacement_data['words'][replacement_idx-1]['english']}'")
+            except Exception as e:
+                print(f"[ERROR] Failed to get replacements: {e}")
+        
         # Сохраняем ВСЕ слова и фразы в БД
         print(f"[DEBUG] Saving {len(plan_weeks)} weeks to DB...")
         conn = get_db_connection()
         cur = conn.cursor()
         
         total_words_added = 0
+        actually_added = 0
         for week_data in plan_weeks:
             # Добавляем vocabulary
             for word_data in week_data.get('vocabulary', []):
@@ -1338,11 +1394,19 @@ Requirements:
                 )
                 word_id = cur.fetchone()[0]
                 
+                # Проверяем добавилось ли слово студенту
                 cur.execute(
-                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
-                    f"VALUES ({student_id}, {word_id}, {student_id}) "
-                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                    f"SELECT id FROM {SCHEMA}.student_words WHERE student_id = {student_id} AND word_id = {word_id}"
                 )
+                already_exists = cur.fetchone()
+                
+                if not already_exists:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                        f"VALUES ({student_id}, {word_id}, {student_id})"
+                    )
+                    actually_added += 1
+                
                 total_words_added += 1
             
             # Добавляем phrases
@@ -1362,10 +1426,17 @@ Requirements:
                 word_id = cur.fetchone()[0]
                 
                 cur.execute(
-                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
-                    f"VALUES ({student_id}, {word_id}, {student_id}) "
-                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                    f"SELECT id FROM {SCHEMA}.student_words WHERE student_id = {student_id} AND word_id = {word_id}"
                 )
+                already_exists = cur.fetchone()
+                
+                if not already_exists:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                        f"VALUES ({student_id}, {word_id}, {student_id})"
+                    )
+                    actually_added += 1
+                
                 total_words_added += 1
             
             # Добавляем expressions
@@ -1385,11 +1456,20 @@ Requirements:
                 word_id = cur.fetchone()[0]
                 
                 cur.execute(
-                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
-                    f"VALUES ({student_id}, {word_id}, {student_id}) "
-                    f"ON CONFLICT (student_id, word_id) DO NOTHING"
+                    f"SELECT id FROM {SCHEMA}.student_words WHERE student_id = {student_id} AND word_id = {word_id}"
                 )
+                already_exists = cur.fetchone()
+                
+                if not already_exists:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                        f"VALUES ({student_id}, {word_id}, {student_id})"
+                    )
+                    actually_added += 1
+                
                 total_words_added += 1
+        
+        print(f"[DEBUG] Total: {total_words_added}, Actually added (new): {actually_added}")
         
         # Сохраняем сам план в БД (в поле learning_plan как JSONB)
         plan_json = json.dumps(plan_weeks, ensure_ascii=False).replace("'", "''")

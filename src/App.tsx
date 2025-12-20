@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
+import AdminGenerateWords from "./pages/AdminGenerateWords";
 import AngryBirdsGame from "./pages/AngryBirdsGame";
 import SystemTest from "./pages/SystemTest";
 import TimezoneSetup from "./pages/TimezoneSetup";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/generate-words" element={<AdminGenerateWords />} />
           <Route path="/game" element={<AngryBirdsGame />} />
           <Route path="/system-test" element={<SystemTest />} />
           <Route path="/timezone-setup" element={<TimezoneSetup />} />

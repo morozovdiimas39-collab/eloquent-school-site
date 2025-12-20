@@ -351,6 +351,14 @@ export default function Admin() {
               <Icon name="Globe" size={16} className="mr-1.5" />
               Прокси
             </Button>
+            <Button
+              onClick={() => window.location.href = '/admin/generate-words'}
+              variant="outline"
+              className="flex-1 sm:flex-none h-11 text-sm font-medium bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+            >
+              <Icon name="Sparkles" size={16} className="mr-1.5" />
+              Генерация слов
+            </Button>
           </div>
         </div>
 
