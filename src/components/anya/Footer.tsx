@@ -7,13 +7,12 @@ export default function Footer() {
         <div className="grid md:grid-cols-4 gap-8 mb-8">
           <div className="space-y-4">
             <div className="flex flex-col">
-              <span className="text-2xl font-black tracking-tight">
-                <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-orange-400 bg-clip-text text-transparent">A</span>
-                <span className="text-white">nya</span>
+              <span className="text-xl font-black tracking-tight">
+                <span className="text-white">Anya</span>
                 <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">GPT</span>
               </span>
-              <span className="text-[10px] text-gray-500 font-medium tracking-wide uppercase">
-                ИИ-репетитор английского
+              <span className="text-[9px] text-gray-500 font-medium tracking-wide uppercase -mt-0.5">
+                ИИ-РЕПЕТИТОР АНГЛИЙСКОГО
               </span>
             </div>
             <p className="text-gray-400 text-sm">
