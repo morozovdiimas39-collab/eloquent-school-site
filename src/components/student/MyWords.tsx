@@ -207,47 +207,47 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                   key={word.id}
                   className="p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-base font-bold text-blue-600 truncate">
-                          {word.english_text}
-                        </h3>
-                        <Badge className={`text-xs px-1.5 py-0 ${getStatusColor(word.progress_status)}`}>
-                          {getStatusText(word.progress_status)}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-gray-700">
-                        {word.russian_translation}
-                      </p>
-                      
-                      {word.attempts > 0 && (
-                        <div className="mt-2">
-                          <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                            <span>Прогресс: {Math.round(word.mastery_score)}%</span>
-                            <span>{word.correct_uses}/{word.attempts} правильно</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div 
-                              className="bg-gradient-to-r from-blue-500 to-green-500 h-1.5 rounded-full transition-all"
-                              style={{ width: `${word.mastery_score}%` }}
-                            />
-                          </div>
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="text-base font-bold text-blue-600 truncate">
+                        {word.english_text}
+                      </h3>
+                      <Badge className={`text-xs px-1.5 py-0 ${getStatusColor(word.progress_status)}`}>
+                        {getStatusText(word.progress_status)}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-700">
+                      {word.russian_translation}
+                    </p>
+                    
+                    {word.attempts > 0 && (
+                      <div className="mt-2">
+                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                          <span>Прогресс: {Math.round(word.mastery_score)}%</span>
+                          <span>{word.correct_uses}/{word.attempts} правильно</span>
                         </div>
-                      )}
-                      
-                      <p className="text-xs text-gray-400 mt-1">
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div 
+                            className="bg-gradient-to-r from-blue-500 to-green-500 h-1.5 rounded-full transition-all"
+                            style={{ width: `${word.mastery_score}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-gray-400">
                         Назначено: {new Date(word.assigned_at).toLocaleDateString('ru-RU')}
                       </p>
+                      <button
+                        onClick={() => deleteWord(word.id)}
+                        className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
+                        title="Удалить слово"
+                      >
+                        <Icon name="Trash2" size={14} />
+                        <span>Удалить</span>
+                      </button>
                     </div>
-                    
-                    <button
-                      onClick={() => deleteWord(word.id)}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
-                      title="Удалить слово"
-                    >
-                      <Icon name="Trash2" size={18} />
-                    </button>
                   </div>
                 </div>
               ))}
