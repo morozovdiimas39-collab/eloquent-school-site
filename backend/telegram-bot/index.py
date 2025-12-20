@@ -2354,20 +2354,55 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 plan_message += f"  • {expr['english']} — {expr['russian']}\n"
                             plan_message += "\n"
                         
-                        plan_message += "Начинаем практику?"
+                        plan_message += "Начинаем практику! 🚀"
                         
                         send_telegram_message(
                             chat_id,
                             plan_message,
-                            {
-                                'inline_keyboard': [
-                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                    [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                ]
-                            },
                             parse_mode=None
                         )
                         print(f"[DEBUG] ASYNC: Plan message sent successfully")
+                        
+                        # Переключаем в режим диалога
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'dialog' WHERE telegram_id = {user_id}")
+                        cur.close()
+                        conn.close()
+                        
+                        # Получаем данные пользователя для call_gemini
+                        user_data = get_user(user_id)
+                        session_words = get_session_words(user_id, limit=10)
+                        
+                        # Аня инициирует диалог ПЕРВОЙ
+                        try:
+                            anya_greeting = call_gemini(
+                                user_message='[SYSTEM: Start conversation naturally based on student\'s goal and level]',
+                                history=[],
+                                session_words=session_words,
+                                language_level=language_level,
+                                preferred_topics=preferred_topics,
+                                urgent_goals=user_data.get('urgent_goals', []),
+                                learning_goal=learning_goal,
+                                learning_mode=user_data.get('learning_mode', 'standard')
+                            )
+                            
+                            # Отправляем приветствие от Ани
+                            send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
+                            
+                            # Сохраняем в историю
+                            save_message(user_id, 'assistant', anya_greeting)
+                            
+                            print(f"[DEBUG] ASYNC: Anya's greeting sent")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to send Anya's greeting: {e}")
+                            # Fallback - просто отправляем стандартное сообщение
+                            send_telegram_message(
+                                chat_id,
+                                '💬 Режим диалога активен! Напиши мне что-нибудь на английском 😊',
+                                get_reply_keyboard(),
+                                parse_mode=None
+                            )
                 
                 return {
                     'statusCode': 200,
@@ -2472,20 +2507,55 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 plan_message += f"  • {expr['english']} — {expr['russian']}\n"
                             plan_message += "\n"
                         
-                        plan_message += "Начинаем практику?"
+                        plan_message += "Начинаем практику! 🚀"
                         
                         send_telegram_message(
                             chat_id,
                             plan_message,
-                            {
-                                'inline_keyboard': [
-                                    [{'text': '✅ Да, начинаем!', 'callback_data': 'confirm_plan'}],
-                                    [{'text': '✏️ Хочу изменить', 'callback_data': 'edit_plan'}]
-                                ]
-                            },
                             parse_mode=None
                         )
                         print(f"[DEBUG] ASYNC: Plan message sent successfully")
+                        
+                        # Переключаем в режим диалога
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'dialog' WHERE telegram_id = {user_id}")
+                        cur.close()
+                        conn.close()
+                        
+                        # Получаем данные пользователя для call_gemini
+                        user_data = get_user(user_id)
+                        session_words = get_session_words(user_id, limit=10)
+                        
+                        # Аня инициирует диалог ПЕРВОЙ
+                        try:
+                            anya_greeting = call_gemini(
+                                user_message='[SYSTEM: Start conversation naturally based on student\'s goal and level]',
+                                history=[],
+                                session_words=session_words,
+                                language_level=language_level,
+                                preferred_topics=preferred_topics,
+                                urgent_goals=user_data.get('urgent_goals', []),
+                                learning_goal=learning_goal,
+                                learning_mode=user_data.get('learning_mode', 'standard')
+                            )
+                            
+                            # Отправляем приветствие от Ани
+                            send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
+                            
+                            # Сохраняем в историю
+                            save_message(user_id, 'assistant', anya_greeting)
+                            
+                            print(f"[DEBUG] ASYNC: Anya's greeting sent")
+                        except Exception as e:
+                            print(f"[ERROR] Failed to send Anya's greeting: {e}")
+                            # Fallback - просто отправляем стандартное сообщение
+                            send_telegram_message(
+                                chat_id,
+                                '💬 Режим диалога активен! Напиши мне что-нибудь на английском 😊',
+                                get_reply_keyboard(),
+                                parse_mode=None
+                            )
                 
                 return {
                     'statusCode': 200,
@@ -3151,12 +3221,44 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 edit_telegram_message(
                     chat_id,
                     message_id,
-                    '🚀 Отлично! Начинаем обучение!\n\nПросто напиши мне что-нибудь на английском или используй кнопки внизу 👇'
+                    '🚀 Отлично! Начинаем обучение!'
                 )
                 
                 # Переключаем в режим диалога
                 update_conversation_mode(user['id'], 'dialog')
-                send_telegram_message(chat_id, '💬 Режим диалога активен!', get_reply_keyboard(), parse_mode=None)
+                
+                # Получаем данные пользователя для call_gemini
+                existing_user = get_user(user['id'])
+                session_words = get_session_words(user['id'], limit=10)
+                
+                # Аня инициирует диалог ПЕРВОЙ
+                try:
+                    anya_greeting = call_gemini(
+                        user_message='[SYSTEM: Start conversation naturally based on student\'s goal and level]',
+                        history=[],
+                        session_words=session_words,
+                        language_level=existing_user.get('language_level', 'A1'),
+                        preferred_topics=existing_user.get('preferred_topics', []),
+                        urgent_goals=existing_user.get('urgent_goals', []),
+                        learning_goal=existing_user.get('learning_goal', 'Общее развитие английского'),
+                        learning_mode=existing_user.get('learning_mode', 'standard')
+                    )
+                    
+                    # Отправляем приветствие от Ани
+                    send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
+                    
+                    # Сохраняем в историю
+                    save_message(user['id'], 'assistant', anya_greeting)
+                    
+                except Exception as e:
+                    print(f"[ERROR] Failed to send Anya's greeting: {e}")
+                    # Fallback - просто отправляем стандартное сообщение
+                    send_telegram_message(
+                        chat_id,
+                        '💬 Режим диалога активен! Напиши мне что-нибудь на английском 😊',
+                        get_reply_keyboard(),
+                        parse_mode=None
+                    )
             
             elif data == 'edit_plan':
                 # Пользователь хочет изменить план
