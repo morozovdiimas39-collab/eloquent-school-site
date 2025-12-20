@@ -1234,23 +1234,19 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         print(f"[DEBUG] Student has {len(existing_words)} existing words")
         print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
         
-        prompt = f'''Generate English vocabulary for level {language_level}. Goal: {learning_goal}
+        prompt = f'''Generate English learning plan. Level: {language_level}. Goal: {learning_goal}
 
-Return ONLY this JSON (no markdown, no extra text):
+Return valid JSON (no markdown):
 
-{{"plan": [{{"week": 1, "focus": "Week 1", "conversation_topics": ["{topics_display}"], "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}, {{"english": "word4", "russian": "слово4"}}, {{"english": "word5", "russian": "слово5"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}, {{"english": "phrase3", "russian": "фраза3"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}, {{"english": "expr2", "russian": "выражение2"}}], "actions": ["Practice"]}}]}}
+{{"plan": [{{"week": 1, "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}, {{"english": "word4", "russian": "слово4"}}, {{"english": "word5", "russian": "слово5"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}, {{"english": "phrase3", "russian": "фраза3"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}, {{"english": "expr2", "russian": "выражение2"}}]}}]}}
 
-Rules:
-- Level {language_level} words
-- 5 words, 3 phrases, 2 expressions
-- ⚠️ SKIP: {existing_words_str[:200]}...
-- ONE week only'''
+Generate NEW words for level {language_level} that help achieve: {learning_goal}'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 800,
+                'maxOutputTokens': 2000,
                 'topP': 0.95,
                 'topK': 40
             }
