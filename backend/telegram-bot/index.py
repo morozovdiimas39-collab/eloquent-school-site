@@ -3377,9 +3377,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
             
             try:
-                send_telegram_message(chat_id, '🎧 Слушаю твое сообщение...')
-                
-                # Скачиваем аудио
+                # Скачиваем аудио (БЕЗ текстовых уведомлений - только голос!)
                 audio_data = download_telegram_file(voice['file_id'])
                 
                 # Распознаем речь
@@ -3393,8 +3391,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         'body': json.dumps({'ok': True}),
                         'isBase64Encoded': False
                     }
-                
-                send_telegram_message(chat_id, f'📝 Ты сказал:\n<i>{recognized_text}</i>')
                 
                 language_level = existing_user.get('language_level', 'A1')
                 preferred_topics = existing_user.get('preferred_topics', [])
