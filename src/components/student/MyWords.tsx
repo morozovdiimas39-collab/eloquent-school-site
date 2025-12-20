@@ -48,6 +48,14 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
   useEffect(() => {
     loadWords();
     loadStats();
+    
+    // Автообновление данных каждые 10 секунд
+    const interval = setInterval(() => {
+      loadWords();
+      loadStats();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, [studentId]);
 
   const loadWords = async () => {
@@ -62,7 +70,8 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
         })
       });
       const data = await response.json();
-      setWords(data.words || []);
+      // API возвращает массив напрямую, НЕ {words: [...]}
+      setWords(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Ошибка загрузки слов:', error);
     } finally {
