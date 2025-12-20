@@ -3681,6 +3681,44 @@ No markdown, no explanations, just JSON.'''
                         feedback = '✅ Правильно!' if is_correct else f'❌ Правильный ответ: {expected}'
                         send_telegram_message(chat_id, feedback, parse_mode=None)
                         
+                        # ⚠️ КРИТИЧНО: Проверяем режим обучения - для срочных задач НЕ спрашиваем интересы!
+                        learning_mode = existing_user.get('learning_mode', 'standard')
+                        
+                        if learning_mode == 'urgent_task':
+                            # СРОЧНАЯ ЗАДАЧА - пропускаем интересы, сразу генерируем план
+                            response_text = f"\n📊 РЕЗУЛЬТАТЫ ТЕСТА\n\n"
+                            response_text += f"✅ Правильных ответов: {correct_count}/10\n"
+                            response_text += f"🎯 Твой уровень: <b>{actual_level}</b>\n\n"
+                            response_text += f"💡 {reasoning}\n\n"
+                            response_text += "⏳ Сейчас сгенерирую план обучения для твоей срочной задачи..."
+                            
+                            send_telegram_message(chat_id, response_text, parse_mode='HTML')
+                            
+                            # Обновляем уровень и сразу переходим к генерации плана
+                            conn = get_db_connection()
+                            cur = conn.cursor()
+                            cur.execute(
+                                f"UPDATE {SCHEMA}.users SET "
+                                f"language_level = '{actual_level}', "
+                                f"conversation_mode = 'generating_plan', "
+                                f"test_phrases = NULL "
+                                f"WHERE telegram_id = {user['id']}"
+                            )
+                            cur.close()
+                            conn.close()
+                            
+                            # Запускаем асинхронную генерацию плана (как в topics_done)
+                            import threading
+                            thread = threading.Thread(
+                                target=generate_plan_async,
+                                args=(chat_id, user['id'])
+                            )
+                            thread.daemon = True
+                            thread.start()
+                            
+                            return {'statusCode': 200, 'headers': {'Content-Type': 'application/json'}, 'body': json.dumps({'ok': True}), 'isBase64Encoded': False}
+                        
+                        # СТАНДАРТНЫЙ РЕЖИМ - показываем выбор интересов
                         response_text = f"\n📊 РЕЗУЛЬТАТЫ ТЕСТА\n\n"
                         response_text += f"✅ Правильных ответов: {correct_count}/10\n"
                         response_text += f"🎯 Твой уровень: <b>{actual_level}</b>\n\n"
