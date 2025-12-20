@@ -7,7 +7,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-white/80 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-24 flex items-center justify-between">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <button 
           onClick={() => navigate('/')}
           className="group hover:opacity-80 transition-opacity flex flex-col"
@@ -38,17 +38,10 @@ export default function Header() {
 
         <div className="flex items-center gap-3">
           <Button
-            variant="ghost"
-            onClick={() => navigate('/app')}
-            className="font-medium"
-          >
-            Войти
-          </Button>
-          <Button
-            onClick={() => navigate('/app')}
+            onClick={() => window.open('https://t.me/eloquent_school_bot', '_blank')}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold shadow-lg"
           >
-            Начать учиться
+            Начать учиться в TG
             <Icon name="ArrowRight" size={16} className="ml-2" />
           </Button>
         </div>
