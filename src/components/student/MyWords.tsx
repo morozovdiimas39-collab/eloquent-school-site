@@ -19,6 +19,8 @@ interface AssignedWord {
   attempts: number;
   correct_uses: number;
   progress_status: 'new' | 'learning' | 'learned' | 'mastered';
+  dialog_uses: number;
+  needs_check: boolean;
 }
 
 interface ProgressStats {
@@ -105,6 +107,32 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
     }
   };
 
+  const autoAssignWords = async () => {
+    setAutoAssigning(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'auto_assign_basic_words',
+          student_id: studentId,
+          count: 15
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        await loadWords();
+        await loadStats();
+        alert(`Добавлено ${data.count} новых слов!`);
+      }
+    } catch (error) {
+      console.error('Ошибка добавления слов:', error);
+      alert('Не удалось добавить слова');
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'new': return 'bg-blue-100 text-blue-700';
@@ -188,8 +216,15 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
               Пока нет слов для изучения
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Ваш преподаватель добавит слова позже
+              Добавьте базовые слова для начала
             </p>
+            <button
+              onClick={autoAssignWords}
+              disabled={autoAssigning}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {autoAssigning ? 'Добавление...' : '+ Добавить базовые слова'}
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -220,17 +255,33 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                       {word.russian_translation}
                     </p>
                     
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                        <span>Прогресс в диалогах: {word.dialog_uses}/5</span>
+                        <span className="font-medium">{(word.dialog_uses / 5 * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${word.needs_check ? 'bg-orange-500 animate-pulse' : 'bg-gradient-to-r from-blue-500 to-purple-500'}`}
+                          style={{ width: `${(word.dialog_uses / 5 * 100)}%` }}
+                        />
+                      </div>
+                      {word.needs_check && (
+                        <p className="text-xs text-orange-600 font-medium mt-1">
+                          🎯 Готово к проверке! Аня спросит на следующем сообщении
+                        </p>
+                      )}
+                      {word.progress_status === 'mastered' && (
+                        <p className="text-xs text-purple-600 font-medium mt-1">
+                          ✅ Слово полностью освоено!
+                        </p>
+                      )}
+                    </div>
+                    
                     {word.attempts > 0 && (
                       <div className="mt-2">
-                        <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                          <span>Прогресс: {Math.round(word.mastery_score)}%</span>
-                          <span>{word.correct_uses}/{word.attempts} правильно</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-green-500 h-1.5 rounded-full transition-all"
-                            style={{ width: `${word.mastery_score}%` }}
-                          />
+                        <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                          <span>Упражнения: {word.correct_uses}/{word.attempts}</span>
                         </div>
                       </div>
                     )}

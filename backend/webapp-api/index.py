@@ -1121,6 +1121,33 @@ def assign_words_to_student(student_id: int, word_ids: List[int]) -> bool:
     conn.close()
     return True
 
+def auto_assign_basic_words(student_id: int, count: int = 15) -> Dict[str, Any]:
+    """Автоматически назначает базовые слова студенту"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Получаем базовые слова (id < 30 - простые слова)
+    cur.execute(
+        f"SELECT id FROM {SCHEMA}.words "
+        f"WHERE id NOT IN (SELECT word_id FROM {SCHEMA}.student_words WHERE student_id = {student_id}) "
+        f"AND id < 30 "
+        f"ORDER BY id LIMIT {count}"
+    )
+    
+    word_ids = [row[0] for row in cur.fetchall()]
+    
+    if word_ids:
+        for word_id in word_ids:
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.student_words (student_id, word_id) "
+                f"VALUES ({student_id}, {word_id})"
+            )
+    
+    cur.close()
+    conn.close()
+    
+    return {'success': True, 'count': len(word_ids), 'word_ids': word_ids}
+
 def get_student_words(student_id: int) -> List[Dict[str, Any]]:
     """Получает все слова студента с прогрессом"""
     conn = get_db_connection()
@@ -1132,7 +1159,9 @@ def get_student_words(student_id: int) -> List[Dict[str, Any]]:
         f"COALESCE(wp.mastery_score, 0) as mastery_score, "
         f"COALESCE(wp.attempts, 0) as attempts, "
         f"COALESCE(wp.correct_uses, 0) as correct_uses, "
-        f"COALESCE(wp.status, 'new') as progress_status "
+        f"COALESCE(wp.status, 'new') as progress_status, "
+        f"COALESCE(wp.dialog_uses, 0) as dialog_uses, "
+        f"COALESCE(wp.needs_check, false) as needs_check "
         f"FROM {SCHEMA}.student_words sw "
         f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
         f"LEFT JOIN {SCHEMA}.word_progress wp ON wp.student_id = sw.student_id AND wp.word_id = sw.word_id "
@@ -1153,7 +1182,9 @@ def get_student_words(student_id: int) -> List[Dict[str, Any]]:
             'mastery_score': float(row[7]) if row[7] is not None else 0.0,
             'attempts': row[8],
             'correct_uses': row[9],
-            'progress_status': row[10]
+            'progress_status': row[10],
+            'dialog_uses': row[11],
+            'needs_check': row[12]
         })
     
     cur.close()
@@ -1625,6 +1656,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'auto_assign_basic_words':
+            student_id = body_data.get('student_id')
+            count = body_data.get('count', 15)
+            result = auto_assign_basic_words(student_id, count)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         
