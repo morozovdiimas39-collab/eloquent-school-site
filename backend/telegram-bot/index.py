@@ -517,6 +517,17 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     if active_words_count < 5:  # Если меньше 5 активных слов - генерируем новые
         print(f"[WARNING] Only {active_words_count} active words - generating more!")
         
+        # Проверяем режим пользователя - НЕ генерируем если идет генерация плана
+        cur.execute(f"SELECT conversation_mode FROM {SCHEMA}.users WHERE telegram_id = {student_id}")
+        mode_row = cur.fetchone()
+        conversation_mode = mode_row[0] if mode_row else 'dialog'
+        
+        if conversation_mode == 'generating_plan':
+            print(f"[DEBUG] User is in generating_plan mode - skipping auto-generation")
+            cur.close()
+            conn.close()
+            return []  # Возвращаем пустой список, план сгенерируется асинхронно
+        
         # Считаем сколько слов освоено
         cur.execute(
             f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
@@ -3066,13 +3077,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
                     preferred_topics = row[2] if row and row[2] else []
-                    
-                    # КРИТИЧНО: Удаляем ВСЕ старые слова перед генерацией новых
-                    # Это предотвращает "зависание" на старых словах при смене интересов
-                    print(f"[DEBUG] Clearing old words for student {user['id']} before generating new plan...")
-                    cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {user['id']}")
-                    cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {user['id']}")
-                    print(f"[DEBUG] Old words cleared successfully!")
                     
                     # Обновляем режим на generating_plan
                     cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'generating_plan' WHERE telegram_id = {user['id']}")
