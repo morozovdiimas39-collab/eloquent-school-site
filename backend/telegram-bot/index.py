@@ -684,6 +684,9 @@ def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
 
 def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None) -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня и тем"""
+    print(f"[DEBUG call_gemini] Received session_words: {session_words}")
+    print(f"[DEBUG call_gemini] Received language_level: {language_level}")
+    
     api_key = os.environ['GEMINI_API_KEY']
     
     # Получаем прокси из БД (приоритет) или из env как fallback
@@ -839,9 +842,11 @@ IMPORTANT:
 - Be encouraging but don't skip corrections!"""
     
     if session_words:
+        print(f"[DEBUG call_gemini] Adding {len(session_words)} words to prompt")
         check_word = next((w for w in session_words if w.get('needs_check')), None)
         
         if check_word:
+            print(f"[DEBUG call_gemini] Found check word: {check_word}")
             system_prompt += f"\n\n🎯 CRITICAL TASK - WORD MASTERY CHECK:\n"
             system_prompt += f"The word '{check_word['english']}' ({check_word['russian']}) has been used 5 times in conversations.\n"
             system_prompt += f"NOW you must CHECK if the student truly knows this word.\n\n"
@@ -858,7 +863,10 @@ IMPORTANT:
             system_prompt += f"If NO or incorrectly → continue teaching naturally"
         else:
             words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
+            print(f"[DEBUG call_gemini] Adding word list to prompt: {words_list}")
             system_prompt += f"\n\nTarget vocabulary for this session: {', '.join(words_list)}\nTry to use these words naturally in the conversation."
+    else:
+        print(f"[DEBUG call_gemini] NO session_words provided!")
     
     if preferred_topics and len(preferred_topics) > 0:
         topics_list = [f"{t['emoji']} {t['topic']}" for t in preferred_topics[:5]]
@@ -3625,6 +3633,7 @@ No markdown, no explanations, just JSON.'''
                 # Получаем ответ AI с учетом слов, уровня и тем
                 try:
                     print(f"[DEBUG] Calling Gemini with message: {text}")
+                    print(f"[DEBUG] session_words={session_words}, language_level={language_level}")
                     ai_response = call_gemini(text, history, session_words, language_level, preferred_topics)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
                 except Exception as e:
