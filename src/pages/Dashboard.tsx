@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
 import { useNavigate } from 'react-router-dom';
-import funcUrls from '../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 import StudentSettings from '@/components/student/StudentSettings';
 import ImprovedMyWords from '@/components/student/ImprovedMyWords';
 

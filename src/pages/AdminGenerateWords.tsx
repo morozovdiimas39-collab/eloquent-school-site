@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
-import funcUrls from '../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 
 const API_URL = funcUrls['webapp-api'];
 

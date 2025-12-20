@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
-import funcUrls from '../../../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 
 const API_URL = funcUrls['webapp-api'];
 

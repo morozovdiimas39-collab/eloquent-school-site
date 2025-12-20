@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import { useNavigate } from 'react-router-dom';
-import funcUrls from '../../../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 
 const API_URL = funcUrls['webapp-api'];
 

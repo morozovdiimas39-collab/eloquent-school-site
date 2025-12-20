@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
-import funcUrls from '../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 import VocabularyManager from '@/components/admin/VocabularyManager';
 import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';

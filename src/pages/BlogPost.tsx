@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import Header from '@/components/anya/Header';
 import Footer from '@/components/anya/Footer';
-import funcUrls from '../../backend/func2url.json';
+import { funcUrls } from '@/config/funcUrls';
 
 const API_URL = funcUrls['webapp-api'];
 
