@@ -1239,7 +1239,7 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
 
 Return valid JSON (no markdown):
 
-{{"plan": [{{"week": 1, "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}, {{"english": "word4", "russian": "слово4"}}, {{"english": "word5", "russian": "слово5"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}, {{"english": "phrase3", "russian": "фраза3"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}, {{"english": "expr2", "russian": "выражение2"}}]}}]}}
+{{"plan": [{{"week": 1, "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}]}}]}}
 
 Generate NEW words for level {language_level} that help achieve: {learning_goal}'''
         
@@ -1247,7 +1247,7 @@ Generate NEW words for level {language_level} that help achieve: {learning_goal}
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 2000,
+                'maxOutputTokens': 800,
                 'topP': 0.95,
                 'topK': 40
             }
