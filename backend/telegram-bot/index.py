@@ -2374,35 +2374,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         user_data = get_user(user_id)
                         session_words = get_session_words(user_id, limit=10)
                         
-                        # Аня инициирует диалог ПЕРВОЙ
-                        try:
-                            anya_greeting = call_gemini(
-                                user_message='[SYSTEM: Start conversation naturally based on student\'s goal and level]',
-                                history=[],
-                                session_words=session_words,
-                                language_level=language_level,
-                                preferred_topics=preferred_topics,
-                                urgent_goals=user_data.get('urgent_goals', []),
-                                learning_goal=learning_goal,
-                                learning_mode=user_data.get('learning_mode', 'standard')
-                            )
-                            
-                            # Отправляем приветствие от Ани
-                            send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
-                            
-                            # Сохраняем в историю
-                            save_message(user_id, 'assistant', anya_greeting)
-                            
-                            print(f"[DEBUG] ASYNC: Anya's greeting sent")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to send Anya's greeting: {e}")
-                            # Fallback - просто отправляем стандартное сообщение
-                            send_telegram_message(
-                                chat_id,
-                                '💬 Режим диалога активен! Напиши мне что-нибудь на английском 😊',
-                                get_reply_keyboard(),
-                                parse_mode=None
-                            )
+                        # Просто отправляем приветствие и ждём что пользователь напишет первым
+                        send_telegram_message(
+                            chat_id,
+                            '💬 Готова начать! Напиши мне что-нибудь на английском 😊',
+                            get_reply_keyboard(),
+                            parse_mode=None
+                        )
                 
                 return {
                     'statusCode': 200,
@@ -2527,35 +2505,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         user_data = get_user(user_id)
                         session_words = get_session_words(user_id, limit=10)
                         
-                        # Аня инициирует диалог ПЕРВОЙ
-                        try:
-                            anya_greeting = call_gemini(
-                                user_message='[SYSTEM: Start conversation naturally based on student\'s goal and level]',
-                                history=[],
-                                session_words=session_words,
-                                language_level=language_level,
-                                preferred_topics=preferred_topics,
-                                urgent_goals=user_data.get('urgent_goals', []),
-                                learning_goal=learning_goal,
-                                learning_mode=user_data.get('learning_mode', 'standard')
-                            )
-                            
-                            # Отправляем приветствие от Ани
-                            send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
-                            
-                            # Сохраняем в историю
-                            save_message(user_id, 'assistant', anya_greeting)
-                            
-                            print(f"[DEBUG] ASYNC: Anya's greeting sent")
-                        except Exception as e:
-                            print(f"[ERROR] Failed to send Anya's greeting: {e}")
-                            # Fallback - просто отправляем стандартное сообщение
-                            send_telegram_message(
-                                chat_id,
-                                '💬 Режим диалога активен! Напиши мне что-нибудь на английском 😊',
-                                get_reply_keyboard(),
-                                parse_mode=None
-                            )
+                        # Просто отправляем приветствие и ждём что пользователь напишет первым
+                        send_telegram_message(
+                            chat_id,
+                            '💬 Готова начать! Напиши мне что-нибудь на английском 😊',
+                            get_reply_keyboard(),
+                            parse_mode=None
+                        )
                 
                 return {
                     'statusCode': 200,
