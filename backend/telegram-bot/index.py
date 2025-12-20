@@ -4759,7 +4759,10 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             with opener.open(req, timeout=15) as response:
                                 result = json.loads(response.read().decode('utf-8'))
                                 check_text = result['candidates'][0]['content']['parts'][0]['text']
-                                check_data = safe_json_parse(check_text, {'is_correct': False, 'feedback': 'Ошибка проверки'})
+                                print(f'[DEBUG] Gemini raw response for sentence check: {check_text}')
+                                
+                                check_data = safe_json_parse(check_text, {'is_correct': False, 'feedback': 'Ошибка проверки', 'corrected': '', 'has_word': False, 'grammar_ok': False})
+                                print(f'[DEBUG] Parsed check_data: {check_data}')
                                 
                                 log_proxy_success(proxy_id)
                                 
