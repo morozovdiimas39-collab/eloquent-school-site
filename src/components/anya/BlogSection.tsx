@@ -1,21 +1,30 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import { useNavigate } from 'react-router-dom';
+import funcUrls from '../../../backend/func2url.json';
+
+const API_URL = funcUrls['webapp-api'];
 
 export interface BlogPost {
-  id: string;
+  id: number;
   title: string;
+  slug: string;
   excerpt: string;
   content: string;
-  image: string;
-  date: string;
-  readTime: string;
-  category: string;
-  categoryColor: string;
+  cover_image: string;
+  author: string;
+  published: boolean;
+  views_count: number;
+  reading_time: number;
+  created_at: string;
+  updated_at: string;
 }
 
-export const blogPosts: BlogPost[] = [
+// Удалено: статичные данные заменены на загрузку из API
+const oldBlogPosts: BlogPost[] = [
   {
     id: '1',
     title: '5 ошибок, которые делают все при изучении английского',
@@ -280,11 +289,49 @@ interface BlogSectionProps {
 
 export default function BlogSection({ showAll = false }: BlogSectionProps) {
   const navigate = useNavigate();
-  const displayPosts = showAll ? blogPosts : blogPosts.slice(0, 3);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleReadMore = (postId: string) => {
-    navigate(`/blog/${postId}`);
+  useEffect(() => {
+    loadPosts();
+  }, []);
+
+  const loadPosts = async () => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_blog_posts', published_only: true })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setPosts(data.posts);
+      }
+    } catch (error) {
+      console.error('Error loading blog posts:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const displayPosts = showAll ? posts : posts.slice(0, 3);
+
+  const handleReadMore = (slug: string) => {
+    navigate(`/blog/${slug}`);
+  };
+
+  if (loading) {
+    return (
+      <section className="relative py-20">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="relative py-20 overflow-hidden bg-gradient-to-b from-white via-purple-50/30 to-white">
@@ -309,31 +356,40 @@ export default function BlogSection({ showAll = false }: BlogSectionProps) {
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-            {displayPosts.map((post, idx) => (
+            {displayPosts.map((post) => (
               <Card 
                 key={post.id}
                 className="group overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 bg-white cursor-pointer"
-                onClick={() => handleReadMore(post.id)}
+                onClick={() => handleReadMore(post.slug)}
               >
-                <div className="relative h-48 overflow-hidden">
-                  <img 
-                    src={post.image} 
-                    alt={post.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className={`absolute top-4 left-4 px-3 py-1 rounded-full bg-gradient-to-r ${post.categoryColor} text-white text-xs font-semibold shadow-lg`}>
-                    {post.category}
+                {post.cover_image && (
+                  <div className="relative h-48 overflow-hidden">
+                    <img 
+                      src={post.cover_image} 
+                      alt={post.title}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute top-4 right-4">
+                      <Badge className="bg-white/90 text-gray-900 backdrop-blur-sm">
+                        <Icon name="Clock" size={12} className="mr-1" />
+                        {post.reading_time} мин
+                      </Badge>
+                    </div>
                   </div>
-                </div>
+                )}
                 <CardContent className="p-6">
                   <div className="flex items-center gap-3 text-sm text-gray-500 mb-3">
                     <div className="flex items-center gap-1">
                       <Icon name="Calendar" size={14} />
-                      {post.date}
+                      {new Date(post.created_at).toLocaleDateString('ru-RU', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
                     </div>
                     <div className="flex items-center gap-1">
-                      <Icon name="Clock" size={14} />
-                      {post.readTime}
+                      <Icon name="Eye" size={14} />
+                      {post.views_count}
                     </div>
                   </div>
                   <h3 className="text-xl font-bold mb-3 text-gray-900 group-hover:text-purple-600 transition-colors line-clamp-2">

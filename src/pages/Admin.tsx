@@ -8,6 +8,7 @@ import Icon from '@/components/ui/icon';
 import funcUrls from '../../backend/func2url.json';
 import VocabularyManager from '@/components/admin/VocabularyManager';
 import ProxyManager from '@/components/admin/ProxyManager';
+import BlogManager from '@/components/admin/BlogManager';
 
 interface User {
   telegram_id: number;
@@ -48,7 +49,7 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog'>('teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [schedulerRunning, setSchedulerRunning] = useState(false);
@@ -350,6 +351,14 @@ export default function Admin() {
             >
               <Icon name="Globe" size={16} className="mr-1.5" />
               Прокси
+            </Button>
+            <Button
+              onClick={() => setActiveTab('blog')}
+              variant={activeTab === 'blog' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-11 text-sm font-medium"
+            >
+              <Icon name="FileText" size={16} className="mr-1.5" />
+              Блог
             </Button>
             <Button
               onClick={() => window.location.href = '/admin/generate-words'}

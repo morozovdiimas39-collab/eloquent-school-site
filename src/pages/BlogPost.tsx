@@ -1,21 +1,91 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import Header from '@/components/anya/Header';
 import Footer from '@/components/anya/Footer';
-import { blogPosts } from '@/components/anya/BlogSection';
+import funcUrls from '../../backend/func2url.json';
+
+const API_URL = funcUrls['webapp-api'];
+
+interface BlogPost {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string;
+  content: string;
+  cover_image: string;
+  author: string;
+  published: boolean;
+  views_count: number;
+  reading_time: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function BlogPost() {
-  const { id } = useParams();
+  const { id: slug } = useParams();
   const navigate = useNavigate();
-  
-  const post = blogPosts.find(p => p.id === id);
+  const [post, setPost] = useState<BlogPost | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [otherPosts, setOtherPosts] = useState<BlogPost[]>([]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [id]);
+    loadPost();
+  }, [slug]);
+
+  const loadPost = async () => {
+    if (!slug) return;
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_blog_post', slug })
+      });
+
+      const data = await response.json();
+      if (data.success && data.post) {
+        setPost(data.post);
+        loadOtherPosts();
+      }
+    } catch (error) {
+      console.error('Error loading post:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadOtherPosts = async () => {
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_blog_posts', published_only: true })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setOtherPosts(data.posts.filter((p: BlogPost) => p.slug !== slug).slice(0, 3));
+      }
+    } catch (error) {
+      console.error('Error loading other posts:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <Header />
+        <div className="flex items-center justify-center h-screen">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-indigo-600"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -36,8 +106,6 @@ export default function BlogPost() {
     );
   }
 
-  const otherPosts = blogPosts.filter(p => p.id !== id).slice(0, 3);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       <Header />
@@ -54,9 +122,9 @@ export default function BlogPost() {
           </Button>
 
           <div className="mb-8">
-            <div className={`inline-block px-4 py-2 rounded-full bg-gradient-to-r ${post.categoryColor} text-white text-sm font-semibold mb-6 shadow-lg`}>
-              {post.category}
-            </div>
+            <Badge className="mb-6 text-sm px-4 py-2">
+              {post.author}
+            </Badge>
             
             <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight text-gray-900">
               {post.title}
@@ -65,22 +133,32 @@ export default function BlogPost() {
             <div className="flex items-center gap-6 text-gray-600">
               <div className="flex items-center gap-2">
                 <Icon name="Calendar" size={18} />
-                {post.date}
+                {new Date(post.created_at).toLocaleDateString('ru-RU', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
               </div>
               <div className="flex items-center gap-2">
                 <Icon name="Clock" size={18} />
-                {post.readTime}
+                {post.reading_time} мин
+              </div>
+              <div className="flex items-center gap-2">
+                <Icon name="Eye" size={18} />
+                {post.views_count} просмотров
               </div>
             </div>
           </div>
 
-          <div className="relative rounded-3xl overflow-hidden shadow-2xl mb-12">
-            <img 
-              src={post.image} 
-              alt={post.title}
-              className="w-full h-[400px] object-cover"
-            />
-          </div>
+          {post.cover_image && (
+            <div className="relative rounded-3xl overflow-hidden shadow-2xl mb-12">
+              <img 
+                src={post.cover_image} 
+                alt={post.title}
+                className="w-full h-[400px] object-cover"
+              />
+            </div>
+          )}
 
           <Card className="border-2 border-gray-200 shadow-xl mb-12">
             <CardContent className="p-8 md:p-12">
@@ -168,17 +246,19 @@ export default function BlogPost() {
                     key={otherPost.id}
                     className="group overflow-hidden border-2 border-gray-200 hover:border-purple-400 transition-all duration-300 hover:shadow-xl hover:-translate-y-2 cursor-pointer"
                     onClick={() => {
-                      navigate(`/blog/${otherPost.id}`);
+                      navigate(`/blog/${otherPost.slug}`);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
-                    <div className="relative h-40 overflow-hidden">
-                      <img 
-                        src={otherPost.image} 
-                        alt={otherPost.title}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                      />
-                    </div>
+                    {otherPost.cover_image && (
+                      <div className="relative h-40 overflow-hidden">
+                        <img 
+                          src={otherPost.cover_image} 
+                          alt={otherPost.title}
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                      </div>
+                    )}
                     <CardContent className="p-4">
                       <h4 className="font-bold mb-2 text-gray-900 group-hover:text-purple-600 transition-colors line-clamp-2">
                         {otherPost.title}

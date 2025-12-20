@@ -35,6 +35,9 @@ export default function Header() {
           <a href="#pricing" className="text-gray-700 hover:text-blue-600 transition-colors font-medium">
             Тарифы
           </a>
+          <button onClick={() => navigate('/blog')} className="text-gray-700 hover:text-blue-600 transition-colors font-medium">
+            Блог
+          </button>
         </nav>
 
         <div className="flex items-center gap-3">

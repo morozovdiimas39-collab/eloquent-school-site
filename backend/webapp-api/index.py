@@ -1589,6 +1589,183 @@ def reset_proxy_stats(proxy_id: int) -> bool:
     conn.close()
     return True
 
+def get_all_blog_posts(published_only: bool = False) -> List[Dict[str, Any]]:
+    """Получает все статьи блога"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = f"SELECT id, title, slug, excerpt, content, cover_image, author, published, views_count, reading_time, created_at, updated_at FROM {SCHEMA}.blog_posts"
+    if published_only:
+        query += " WHERE published = true"
+    query += " ORDER BY created_at DESC"
+    
+    cur.execute(query)
+    
+    posts = []
+    for row in cur.fetchall():
+        posts.append({
+            'id': row[0],
+            'title': row[1],
+            'slug': row[2],
+            'excerpt': row[3],
+            'content': row[4],
+            'cover_image': row[5],
+            'author': row[6],
+            'published': row[7],
+            'views_count': row[8],
+            'reading_time': row[9],
+            'created_at': row[10].isoformat() if row[10] else None,
+            'updated_at': row[11].isoformat() if row[11] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return posts
+
+def get_blog_post_by_slug(slug: str) -> Dict[str, Any]:
+    """Получает статью по slug"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    slug_escaped = slug.replace("'", "''")
+    
+    cur.execute(
+        f"SELECT id, title, slug, excerpt, content, cover_image, author, published, views_count, reading_time, created_at, updated_at "
+        f"FROM {SCHEMA}.blog_posts WHERE slug = '{slug_escaped}'"
+    )
+    
+    row = cur.fetchone()
+    
+    if row:
+        # Увеличиваем счетчик просмотров
+        cur.execute(f"UPDATE {SCHEMA}.blog_posts SET views_count = views_count + 1 WHERE slug = '{slug_escaped}'")
+        
+        post = {
+            'id': row[0],
+            'title': row[1],
+            'slug': row[2],
+            'excerpt': row[3],
+            'content': row[4],
+            'cover_image': row[5],
+            'author': row[6],
+            'published': row[7],
+            'views_count': row[8] + 1,
+            'reading_time': row[9],
+            'created_at': row[10].isoformat() if row[10] else None,
+            'updated_at': row[11].isoformat() if row[11] else None
+        }
+        
+        cur.close()
+        conn.close()
+        return post
+    
+    cur.close()
+    conn.close()
+    return None
+
+def create_blog_post(title: str, slug: str, excerpt: str, content: str, cover_image: str, author: str, published: bool, reading_time: int) -> Dict[str, Any]:
+    """Создает новую статью блога"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    title_escaped = title.replace("'", "''")
+    slug_escaped = slug.replace("'", "''")
+    excerpt_escaped = excerpt.replace("'", "''") if excerpt else ''
+    content_escaped = content.replace("'", "''")
+    cover_image_escaped = cover_image.replace("'", "''") if cover_image else ''
+    author_escaped = author.replace("'", "''")
+    
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.blog_posts (title, slug, excerpt, content, cover_image, author, published, reading_time) "
+        f"VALUES ('{title_escaped}', '{slug_escaped}', '{excerpt_escaped}', '{content_escaped}', '{cover_image_escaped}', '{author_escaped}', {published}, {reading_time}) "
+        f"RETURNING id, title, slug, excerpt, content, cover_image, author, published, views_count, reading_time, created_at, updated_at"
+    )
+    
+    row = cur.fetchone()
+    
+    post = {
+        'id': row[0],
+        'title': row[1],
+        'slug': row[2],
+        'excerpt': row[3],
+        'content': row[4],
+        'cover_image': row[5],
+        'author': row[6],
+        'published': row[7],
+        'views_count': row[8],
+        'reading_time': row[9],
+        'created_at': row[10].isoformat() if row[10] else None,
+        'updated_at': row[11].isoformat() if row[11] else None
+    }
+    
+    cur.close()
+    conn.close()
+    return post
+
+def update_blog_post(post_id: int, title: str, slug: str, excerpt: str, content: str, cover_image: str, author: str, published: bool, reading_time: int) -> Dict[str, Any]:
+    """Обновляет статью блога"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    title_escaped = title.replace("'", "''")
+    slug_escaped = slug.replace("'", "''")
+    excerpt_escaped = excerpt.replace("'", "''") if excerpt else ''
+    content_escaped = content.replace("'", "''")
+    cover_image_escaped = cover_image.replace("'", "''") if cover_image else ''
+    author_escaped = author.replace("'", "''")
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.blog_posts SET "
+        f"title = '{title_escaped}', "
+        f"slug = '{slug_escaped}', "
+        f"excerpt = '{excerpt_escaped}', "
+        f"content = '{content_escaped}', "
+        f"cover_image = '{cover_image_escaped}', "
+        f"author = '{author_escaped}', "
+        f"published = {published}, "
+        f"reading_time = {reading_time}, "
+        f"updated_at = CURRENT_TIMESTAMP "
+        f"WHERE id = {post_id} "
+        f"RETURNING id, title, slug, excerpt, content, cover_image, author, published, views_count, reading_time, created_at, updated_at"
+    )
+    
+    row = cur.fetchone()
+    
+    if row:
+        post = {
+            'id': row[0],
+            'title': row[1],
+            'slug': row[2],
+            'excerpt': row[3],
+            'content': row[4],
+            'cover_image': row[5],
+            'author': row[6],
+            'published': row[7],
+            'views_count': row[8],
+            'reading_time': row[9],
+            'created_at': row[10].isoformat() if row[10] else None,
+            'updated_at': row[11].isoformat() if row[11] else None
+        }
+        
+        cur.close()
+        conn.close()
+        return post
+    
+    cur.close()
+    conn.close()
+    return None
+
+def delete_blog_post(post_id: int) -> bool:
+    """Удаляет статью блога"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(f"DELETE FROM {SCHEMA}.blog_posts WHERE id = {post_id}")
+    
+    cur.close()
+    conn.close()
+    return True
+
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
     Вызывает Gemini API для демо-чата на лендинге
@@ -1981,6 +2158,81 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'delete_proxy':
             proxy_id = body_data.get('proxy_id')
             delete_proxy(proxy_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_blog_posts':
+            published_only = body_data.get('published_only', False)
+            posts = get_all_blog_posts(published_only)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'posts': posts}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_blog_post':
+            slug = body_data.get('slug')
+            post = get_blog_post_by_slug(slug)
+            if post:
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True, 'post': post}),
+                    'isBase64Encoded': False
+                }
+            else:
+                return {
+                    'statusCode': 404,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': False, 'error': 'Post not found'}),
+                    'isBase64Encoded': False
+                }
+        
+        elif action == 'create_blog_post':
+            title = body_data.get('title')
+            slug = body_data.get('slug')
+            excerpt = body_data.get('excerpt', '')
+            content = body_data.get('content')
+            cover_image = body_data.get('cover_image', '')
+            author = body_data.get('author', 'Команда Anya')
+            published = body_data.get('published', False)
+            reading_time = body_data.get('reading_time', 5)
+            
+            post = create_blog_post(title, slug, excerpt, content, cover_image, author, published, reading_time)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'post': post}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_blog_post':
+            post_id = body_data.get('post_id')
+            title = body_data.get('title')
+            slug = body_data.get('slug')
+            excerpt = body_data.get('excerpt', '')
+            content = body_data.get('content')
+            cover_image = body_data.get('cover_image', '')
+            author = body_data.get('author', 'Команда Anya')
+            published = body_data.get('published', False)
+            reading_time = body_data.get('reading_time', 5)
+            
+            post = update_blog_post(post_id, title, slug, excerpt, content, cover_image, author, published, reading_time)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'post': post}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'delete_blog_post':
+            post_id = body_data.get('post_id')
+            delete_blog_post(post_id)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
