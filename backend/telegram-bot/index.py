@@ -42,25 +42,63 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
         cleaned = clean_gemini_json(text)
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
-        print(f"[WARNING] JSON parse failed: {e}, trying regex extraction...")
+        print(f"[WARNING] JSON parse failed: {e}, trying aggressive fix...")
         
-        # Fallback: извлекаем поля через regex
-        result = fallback_fields.copy() if fallback_fields else {}
-        
-        # Извлекаем строковые поля: "key": "value"
-        string_pattern = r'"(\w+)"\s*:\s*"([^"]*)"'
-        for match in re.finditer(string_pattern, text):
-            key, value = match.groups()
-            result[key] = value
-        
-        # Извлекаем boolean поля: "key": true/false
-        bool_pattern = r'"(\w+)"\s*:\s*(true|false)'
-        for match in re.finditer(bool_pattern, text):
-            key, value = match.groups()
-            result[key] = value == 'true'
-        
-        print(f"[WARNING] Extracted fields via regex: {result}")
-        return result
+        # Агрессивная починка JSON
+        try:
+            fixed = clean_gemini_json(text)
+            
+            # Удаляем trailing commas
+            fixed = re.sub(r',\s*}', '}', fixed)
+            fixed = re.sub(r',\s*]', ']', fixed)
+            
+            # Удаляем незавершенные элементы после последней запятой
+            last_comma_idx = fixed.rfind(',')
+            last_closing_brace = max(fixed.rfind('}'), fixed.rfind(']'))
+            
+            if last_comma_idx > last_closing_brace and last_comma_idx != -1:
+                # Есть запятая после последней закрывающей скобки - обрезаем
+                fixed = fixed[:last_comma_idx]
+            
+            # Закрываем незакрытые скобки
+            open_braces = fixed.count('{')
+            close_braces = fixed.count('}')
+            if open_braces > close_braces:
+                fixed += '}' * (open_braces - close_braces)
+            
+            open_brackets = fixed.count('[')
+            close_brackets = fixed.count(']')
+            if open_brackets > close_brackets:
+                fixed += ']' * (open_brackets - close_brackets)
+            
+            print(f"[DEBUG] Attempting to parse fixed JSON...")
+            result = json.loads(fixed)
+            print(f"[SUCCESS] Fixed JSON successfully!")
+            return result
+            
+        except Exception as fix_error:
+            print(f"[ERROR] Failed to fix JSON: {fix_error}")
+            
+            # Последний fallback: извлекаем поля через regex
+            if fallback_fields is None:
+                return {}
+            
+            result = fallback_fields.copy()
+            
+            # Извлекаем строковые поля: "key": "value"
+            string_pattern = r'"(\w+)"\s*:\s*"([^"]*)"'
+            for match in re.finditer(string_pattern, text):
+                key, value = match.groups()
+                result[key] = value
+            
+            # Извлекаем boolean поля: "key": true/false
+            bool_pattern = r'"(\w+)"\s*:\s*(true|false)'
+            for match in re.finditer(bool_pattern, text):
+                key, value = match.groups()
+                result[key] = value == 'true'
+            
+            print(f"[WARNING] Extracted fields via regex: {result}")
+            return result
 
 def get_db_connection():
     """Создает подключение к БД"""
@@ -1295,15 +1333,22 @@ Requirements:
                 plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
                 
                 print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
-                print(f"[DEBUG] Raw Gemini response: {plan_text[:500]}...")
+                print(f"[DEBUG] Raw Gemini response (full): {plan_text}")
                 
                 # Используем safe_json_parse для обработки кривого JSON
-                batch_data = safe_json_parse(plan_text, {'plan': []})
+                batch_data = safe_json_parse(plan_text, None)
+                
+                if not batch_data or 'plan' not in batch_data:
+                    print(f"[ERROR] Failed to parse JSON for weeks {week_start}-{week_end}")
+                    print(f"[ERROR] Parsed result: {batch_data}")
+                    return {'success': False, 'error': f'Failed to parse Gemini response. Raw text length: {len(plan_text)}'}
+                
                 batch_weeks = batch_data.get('plan', [])
                 
-                if not batch_weeks:
-                    print(f"[ERROR] Empty plan for weeks {week_start}-{week_end}")
-                    return {'success': False, 'error': f'Empty plan for weeks {week_start}-{week_end}'}
+                if not batch_weeks or len(batch_weeks) == 0:
+                    print(f"[ERROR] Empty plan array for weeks {week_start}-{week_end}")
+                    print(f"[ERROR] batch_data keys: {list(batch_data.keys())}")
+                    return {'success': False, 'error': f'Gemini returned empty plan array'}
                 
                 log_proxy_success(proxy_id)
                 print(f"[DEBUG] Generated {len(batch_weeks)} weeks successfully")
