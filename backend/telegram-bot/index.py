@@ -1325,38 +1325,62 @@ Requirements:
             headers={'Content-Type': 'application/json'}
         )
             
-        print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=25s)")
-        try:
-            with opener.open(req, timeout=25) as response:
-                print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
-                gemini_result = json.loads(response.read().decode('utf-8'))
-                plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
-                
-                print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
-                print(f"[DEBUG] Raw Gemini response (full): {plan_text}")
-                
-                # Используем safe_json_parse для обработки кривого JSON
-                batch_data = safe_json_parse(plan_text, None)
-                
-                if not batch_data or 'plan' not in batch_data:
-                    print(f"[ERROR] Failed to parse JSON for weeks {week_start}-{week_end}")
-                    print(f"[ERROR] Parsed result: {batch_data}")
-                    return {'success': False, 'error': f'Failed to parse Gemini response. Raw text length: {len(plan_text)}'}
-                
-                batch_weeks = batch_data.get('plan', [])
-                
-                if not batch_weeks or len(batch_weeks) == 0:
-                    print(f"[ERROR] Empty plan array for weeks {week_start}-{week_end}")
-                    print(f"[ERROR] batch_data keys: {list(batch_data.keys())}")
-                    return {'success': False, 'error': f'Gemini returned empty plan array'}
-                
-                log_proxy_success(proxy_id)
-                print(f"[DEBUG] Generated {len(batch_weeks)} weeks successfully")
-                
-        except Exception as api_error:
-            print(f"[ERROR] Gemini API call failed for weeks {week_start}-{week_end}: {api_error}")
-            log_proxy_failure(proxy_id, str(api_error))
-            return {'success': False, 'error': f'Gemini API error on weeks {week_start}-{week_end}: {str(api_error)}'}
+        # Пытаемся сгенерировать план с retry
+        max_retries = 2
+        for attempt in range(max_retries):
+            print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=35s, attempt {attempt+1}/{max_retries})")
+            try:
+                with opener.open(req, timeout=35) as response:
+                    print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
+                    gemini_result = json.loads(response.read().decode('utf-8'))
+                    plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                    
+                    print(f"[DEBUG] Parsing JSON for weeks {week_start}-{week_end}...")
+                    print(f"[DEBUG] Raw Gemini response length: {len(plan_text)} chars")
+                    
+                    # Используем safe_json_parse для обработки кривого JSON
+                    batch_data = safe_json_parse(plan_text, None)
+                    
+                    if not batch_data or 'plan' not in batch_data:
+                        print(f"[WARNING] Failed to parse JSON on attempt {attempt+1}")
+                        print(f"[DEBUG] Raw response (first 1000 chars): {plan_text[:1000]}")
+                        if attempt < max_retries - 1:
+                            print(f"[DEBUG] Retrying...")
+                            continue
+                        else:
+                            return {'success': False, 'error': f'Failed to parse Gemini response after {max_retries} attempts'}
+                    
+                    batch_weeks = batch_data.get('plan', [])
+                    
+                    if not batch_weeks or len(batch_weeks) == 0:
+                        print(f"[WARNING] Empty plan array on attempt {attempt+1}")
+                        if attempt < max_retries - 1:
+                            print(f"[DEBUG] Retrying...")
+                            continue
+                        else:
+                            return {'success': False, 'error': f'Gemini returned empty plan after {max_retries} attempts'}
+                    
+                    log_proxy_success(proxy_id)
+                    print(f"[DEBUG] Generated {len(batch_weeks)} weeks successfully on attempt {attempt+1}")
+                    break
+                    
+            except Exception as api_error:
+                print(f"[ERROR] Gemini API call failed on attempt {attempt+1}: {api_error}")
+                log_proxy_failure(proxy_id, str(api_error))
+                if attempt < max_retries - 1:
+                    print(f"[DEBUG] Retrying with new proxy...")
+                    # Получаем новый прокси для retry
+                    proxy_id, proxy_url = get_active_proxy_from_db()
+                    if not proxy_url:
+                        proxy_url = os.environ.get('PROXY_URL', '')
+                    proxy_handler = urllib.request.ProxyHandler({
+                        'http': f'http://{proxy_url}',
+                        'https': f'http://{proxy_url}'
+                    })
+                    opener = urllib.request.build_opener(proxy_handler)
+                    continue
+                else:
+                    return {'success': False, 'error': f'Gemini API error after {max_retries} attempts: {str(api_error)}'}
         
         plan_weeks = batch_weeks
         
