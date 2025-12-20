@@ -193,7 +193,7 @@ def get_user(telegram_id: int):
     conn = get_db_connection()
     cur = conn.cursor()
     
-    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics, conversation_mode, current_exercise_word_id, current_exercise_answer, learning_goal, urgent_goals FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    cur.execute(f"SELECT telegram_id, username, first_name, last_name, role, language_level, preferred_topics, conversation_mode, current_exercise_word_id, current_exercise_answer, learning_goal, urgent_goals, learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     row = cur.fetchone()
     
     cur.close()
@@ -212,7 +212,8 @@ def get_user(telegram_id: int):
             'current_exercise_word_id': row[8],
             'current_exercise_answer': row[9],
             'learning_goal': row[10],
-            'urgent_goals': row[11] if row[11] else []
+            'urgent_goals': row[11] if row[11] else [],
+            'learning_mode': row[12] or 'standard'
         }
     return None
 
@@ -4602,7 +4603,16 @@ No markdown, no explanations, just JSON.'''
                     print(f"[DEBUG] Calling Gemini with message: {text}")
                     print(f"[DEBUG] session_words={session_words}, language_level={language_level}")
                     urgent_goals = existing_user.get('urgent_goals', [])
-                    learning_goal = existing_user.get('learning_goal')
+                    learning_mode = existing_user.get('learning_mode', 'standard')
+                    
+                    # КРИТИЧНО: learning_goal используется ТОЛЬКО для specific_topic и urgent_task
+                    # В стандартном режиме learning_goal игнорируется (там используются preferred_topics)
+                    if learning_mode in ['specific_topic', 'urgent_task']:
+                        learning_goal = existing_user.get('learning_goal')
+                    else:
+                        learning_goal = None
+                    
+                    print(f"[DEBUG] learning_mode={learning_mode}, learning_goal={learning_goal}")
                     ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
                 except Exception as e:
