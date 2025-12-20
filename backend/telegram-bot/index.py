@@ -503,20 +503,15 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     review_words = cur.fetchall()
     print(f"[DEBUG get_session_words] review_words (status=learning/learned, next_review_date<=NOW): {len(review_words)} words")
     
-    # Освоенные слова (20%) - продолжаем практиковать для закрепления
-    mastered_limit = max(1, limit - len(new_words) - len(review_words))
-    cur.execute(
-        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
-        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-        f"WHERE wp.student_id = {student_id} AND wp.status = 'mastered' "
-        f"ORDER BY wp.last_practiced ASC NULLS FIRST LIMIT {mastered_limit}"
-    )
-    mastered_words = cur.fetchall()
-    print(f"[DEBUG get_session_words] mastered_words (status=mastered): {len(mastered_words)} words")
+    # ⚠️ CRITICAL: НЕ ВКЛЮЧАЕМ освоенные слова в активную практику!
+    # Освоенные слова (status=mastered) НЕ должны постоянно повторяться
+    # Они уже изучены на 100% - фокусируемся только на новых и learning/learned
+    
+    print(f"[DEBUG get_session_words] Skipping mastered words - they are already 100% learned")
     
     # ⚠️ CRITICAL: Автоматически генерируем новые слова если недостаточно активных
     active_words_count = len(new_words) + len(review_words)
-    if active_words_count < 3:  # Если меньше 3 активных слов - генерируем новые
+    if active_words_count < 5:  # Если меньше 5 активных слов - генерируем новые
         print(f"[WARNING] Only {active_words_count} active words - generating more!")
         
         # Считаем сколько слов освоено
@@ -554,11 +549,12 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             # Повторно запрашиваем слова после генерации
             return get_session_words(student_id, limit)
     
-    all_words = list(new_words) + list(review_words) + list(mastered_words)
+    # ⚠️ CRITICAL: Возвращаем ТОЛЬКО новые и review слова (БЕЗ mastered!)
+    all_words = list(new_words) + list(review_words)
     
     words = [{'id': row[0], 'english': row[1], 'russian': row[2], 'needs_check': False} for row in all_words]
     
-    print(f"[DEBUG get_session_words] FINAL RESULT: returning {len(words)} words total")
+    print(f"[DEBUG get_session_words] FINAL RESULT: returning {len(words)} words total (NEW + REVIEW only, NO mastered)")
     if words:
         print(f"[DEBUG get_session_words] First word: {words[0]}")
     
@@ -1187,25 +1183,39 @@ IMPORTANT:
             words_list = [f"{w['english']} ({w['russian']})" for w in session_words[:10]]
             print(f"[DEBUG call_gemini] Adding word list to prompt: {words_list}")
             
-            # ЖОРСТКИЙ НАКАЗ використовувати слова + иногда истории
+            # ЖОРСТКИЙ НАКАЗ використовувати слова + примеры + короткие истории
             system_prompt += f"\n\n🎯 CRITICAL VOCABULARY TASK:\n"
             system_prompt += f"You MUST use these words in your responses: {', '.join(words_list)}\n\n"
             system_prompt += f"RULES:\n"
             system_prompt += f"- Use AT LEAST 1 word from this list in EVERY response\n"
-            system_prompt += f"- Make it natural and conversational (not forced)\n"
-            system_prompt += f"- ⚠️ CRITICAL: When you use a word from the list, wrap it in **bold** like: **travel**, **plausible**, **weekend**\n"
-            system_prompt += f"- This helps the student notice which vocabulary words they're learning\n\n"
-            system_prompt += f"RESPONSE STYLE MIX:\n"
-            system_prompt += f"- 40% Simple reactions: 'Cool!', 'Nice!', 'I see', 'That makes sense!', 'Interesting!'\n"
-            system_prompt += f"- 30% Simple questions: 'Why?', 'How come?', 'Really?', 'What happened next?'\n"
-            system_prompt += f"- 20% Corrections with praise\n"
-            system_prompt += f"- 10% RARELY tell a story (only sometimes for variety!)\n\n"
-            system_prompt += f"Examples of GOOD simple responses:\n"
-            system_prompt += f"- 'That sounds **plausible**! Makes sense to me.'\n"
-            system_prompt += f"- 'Hmm, not sure that's **plausible** though. What do you think?'\n"
-            system_prompt += f"- 'Nice! So you think it's **plausible**?' \n\n"
-            system_prompt += f"⚠️ CRITICAL: DO NOT respond without using at least one word from the list!\n"
-            system_prompt += f"⚠️ CRITICAL: MOST responses should be SHORT and simple, NOT long stories!"
+            system_prompt += f"- ⚠️ CRITICAL: When you use a word, wrap it in **bold**: **travel**, **plausible**, **weekend**\n"
+            system_prompt += f"- Make examples or mini-stories with the word to make it memorable!\n"
+            system_prompt += f"- Show the word in CONTEXT so student understands usage\n\n"
+            
+            system_prompt += f"🎨 HOW TO TEACH WORDS EFFECTIVELY:\n\n"
+            system_prompt += f"1. **Simple usage** (30% of time):\n"
+            system_prompt += f"   'That sounds **plausible**! Makes sense.'\n\n"
+            
+            system_prompt += f"2. **Quick example** (40% of time):\n"
+            system_prompt += f"   'Nice! So you want to **emmerse** yourself in the game world? Like when you play and forget about everything else?'\n"
+            system_prompt += f"   'That's **plausible**! Like saying a story could really happen in real life.'\n\n"
+            
+            system_prompt += f"3. **Mini-story** (20% of time - 2-3 sentences):\n"
+            system_prompt += f"   'Speaking of **travel** ✈️ - I once met a guy who traveled to 30 countries in one year! He said the best part was trying local food. Have you traveled anywhere cool?'\n"
+            system_prompt += f"   'You know, **plausible** is interesting! 🤔 My friend told me he saw a UFO - I said 'hmm, not very plausible!' But then he showed me a photo! Was it **plausible** after all? What do you think?'\n\n"
+            
+            system_prompt += f"4. **Comparison** (10% of time):\n"
+            system_prompt += f"   'So **plausible** means believable - like 'that excuse sounds plausible' vs 'that excuse sounds ridiculous'. Make sense?'\n\n"
+            
+            system_prompt += f"⚠️ IMPORTANT RULES:\n"
+            system_prompt += f"- VARY your approach - don't always use same pattern!\n"
+            system_prompt += f"- Each word should appear in DIFFERENT context every time\n"
+            system_prompt += f"- After giving example/story, ask a follow-up question\n"
+            system_prompt += f"- Keep it conversational and fun, not like a textbook\n"
+            system_prompt += f"- Use emojis sparingly (1-2 max per message)\n\n"
+            
+            system_prompt += f"⚠️ CRITICAL: DO NOT just repeat the same word without showing HOW to use it!\n"
+            system_prompt += f"⚠️ CRITICAL: ROTATE through words - don't use same word every message!"
     else:
         print(f"[DEBUG call_gemini] NO session_words provided!")
     
