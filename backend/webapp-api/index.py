@@ -989,6 +989,17 @@ def delete_category(category_id: int) -> bool:
     conn.close()
     return True
 
+def delete_word(word_id: int) -> bool:
+    """Удаляет слово из БД"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(f"DELETE FROM {SCHEMA}.words WHERE id = {word_id}")
+    
+    cur.close()
+    conn.close()
+    return True
+
 def get_all_words() -> List[Dict[str, Any]]:
     """Получает список всех слов"""
     conn = get_db_connection()
