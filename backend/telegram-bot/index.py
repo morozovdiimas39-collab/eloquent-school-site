@@ -48,6 +48,11 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
         try:
             fixed = clean_gemini_json(text)
             
+            # ⚠️ CRITICAL: Удаляем незавершенные строки внутри массивов
+            # Ищем последнюю открывающую кавычку без закрывающей
+            # Паттерн: "текст без закрывающей кавычки до конца строки/файла
+            fixed = re.sub(r'"[^"]*$', '"', fixed)  # Закрываем последнюю незавершенную строку
+            
             # Удаляем trailing commas
             fixed = re.sub(r',\s*}', '}', fixed)
             fixed = re.sub(r',\s*]', ']', fixed)
@@ -57,8 +62,11 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
             last_closing_brace = max(fixed.rfind('}'), fixed.rfind(']'))
             
             if last_comma_idx > last_closing_brace and last_comma_idx != -1:
-                # Есть запятая после последней закрывающей скобки - обрезаем
-                fixed = fixed[:last_comma_idx]
+                # Есть запятая после последней закрывающей скобки - обрезаем до последней завершенной строки
+                # Ищем последнюю завершенную строку перед этой запятой
+                last_complete_string = fixed.rfind('"', 0, last_comma_idx)
+                if last_complete_string != -1:
+                    fixed = fixed[:last_complete_string + 1]
             
             # Закрываем незакрытые скобки
             open_braces = fixed.count('{')
@@ -79,9 +87,9 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
         except Exception as fix_error:
             print(f"[ERROR] Failed to fix JSON: {fix_error}")
             
-            # Последний fallback: извлекаем поля через regex
+            # Последний fallback: извлекаем массивы через regex
             if fallback_fields is None:
-                return {}
+                fallback_fields = {}
             
             result = fallback_fields.copy()
             
@@ -96,6 +104,17 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
             for match in re.finditer(bool_pattern, text):
                 key, value = match.groups()
                 result[key] = value == 'true'
+            
+            # ⚠️ CRITICAL: Извлекаем массивы строк для "goals"
+            # Паттерн: "goals": ["Цель 1", "Цель 2", ...]
+            goals_pattern = r'"goals"\s*:\s*\[(.*?)\]'
+            goals_match = re.search(goals_pattern, text, re.DOTALL)
+            if goals_match:
+                goals_array_content = goals_match.group(1)
+                # Извлекаем все строки из массива
+                string_items = re.findall(r'"([^"]+)"', goals_array_content)
+                result['goals'] = string_items
+                print(f"[DEBUG] Extracted {len(string_items)} goals via regex")
             
             print(f"[WARNING] Extracted fields via regex: {result}")
             return result
@@ -4132,7 +4151,7 @@ No markdown, no explanations, just JSON.'''
                         'contents': [{'parts': [{'text': prompt}]}],
                         'generationConfig': {
                             'temperature': 0.7,
-                            'maxOutputTokens': 1500,
+                            'maxOutputTokens': 3000,
                             'topP': 0.9,
                             'topK': 40
                         }
