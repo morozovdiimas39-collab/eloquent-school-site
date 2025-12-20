@@ -3840,37 +3840,36 @@ No markdown, no explanations, just JSON.'''
                     
                     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
                     
-                    prompt = f'''Студент описал срочную задачу: "{text}"
+                    prompt = f'''Task: Generate 5-7 specific learning goals for urgent task.
 
-Сгенерируй 5-7 КОНКРЕТНЫХ целей (действий), которые нужно освоить для этой задачи.
+Student wrote: "{text}"
 
-Примеры:
-- Задача: "Через неделю лечу в Лондон"
-  Цели: ["Забронировать отель на английском", "Заказать еду в ресторане", "Спросить дорогу", "Пройти паспортный контроль", "Купить билеты на транспорт"]
+Examples:
+- Task: "Flying to London next week"
+  Goals: ["Book hotel in English", "Order food at restaurant", "Ask for directions", "Pass passport control", "Buy transport tickets"]
 
-- Задача: "Завтра собеседование на английском"
-  Цели: ["Рассказать о себе (Self-introduction)", "Описать опыт работы", "Ответить на вопросы Why this company", "Задать вопросы интервьюеру", "Обсудить зарплату и условия"]
+- Task: "Job interview tomorrow in English"
+  Goals: ["Introduce yourself (Self-introduction)", "Describe work experience", "Answer Why this company questions", "Ask interviewer questions", "Discuss salary and conditions"]
 
-Формат ответа (только JSON, без markdown):
-{{
-  "goals": [
-    "Цель 1: конкретное действие",
-    "Цель 2: конкретное действие",
-    "Цель 3: конкретное действие"
-  ],
-  "timeline": "через неделю" или "завтра" или "в четверг"
-}}
+Output ONLY this JSON (no markdown, no extra text):
+{{"goals": ["Goal 1", "Goal 2", "Goal 3", "Goal 4", "Goal 5"], "timeline": "tomorrow"}}
 
-⚠️ ВАЖНО:
-- Цели должны быть КОНКРЕТНЫМИ действиями (не общие "улучшить английский")
-- Формулируй цели как действия: "Забронировать...", "Спросить...", "Рассказать..."
-- Учитывай срочность задачи (если завтра - базовые фразы, если через месяц - больше деталей)
+Rules:
+- Goals must be SPECIFIC actions (not general "improve English")
+- Use action verbs: "Book...", "Ask...", "Tell..."
+- Consider urgency (if tomorrow - basic phrases, if in month - more details)
+- timeline: extract time from task ("tomorrow", "next week", "in 3 days", etc.)
 
-Отвечай ТОЛЬКО валидным JSON.'''
+⚠️ CRITICAL: Output ONLY valid JSON, nothing else.'''
                     
                     payload = {
                         'contents': [{'parts': [{'text': prompt}]}],
-                        'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 1000}
+                        'generationConfig': {
+                            'temperature': 0.7,
+                            'maxOutputTokens': 800,
+                            'topP': 0.9,
+                            'topK': 40
+                        }
                     }
                     
                     proxy_handler = urllib.request.ProxyHandler({
@@ -3888,13 +3887,19 @@ No markdown, no explanations, just JSON.'''
                     with opener.open(req, timeout=30) as response:
                         gemini_result = json.loads(response.read().decode('utf-8'))
                         goals_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
+                        
+                        print(f"[DEBUG] Raw Gemini response: {goals_text}")
+                        
                         goals_data = safe_json_parse(goals_text, {'goals': [], 'timeline': ''})
+                        
+                        print(f"[DEBUG] Parsed goals_data: {goals_data}")
                     
                     goals_list = goals_data.get('goals', [])
                     timeline = goals_data.get('timeline', '')
                     
                     if not goals_list or len(goals_list) == 0:
-                        raise Exception("Gemini не смог сгенерировать цели")
+                        print(f"[ERROR] Empty goals_list after parsing! goals_data: {goals_data}")
+                        raise Exception(f"Gemini returned empty goals. Raw response: {goals_text[:200]}")
                     
                     log_proxy_success(proxy_id)
                     
