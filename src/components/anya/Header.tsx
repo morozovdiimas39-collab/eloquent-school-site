@@ -10,19 +10,15 @@ export default function Header() {
       <div className="container mx-auto px-4 h-24 flex items-center justify-between">
         <button 
           onClick={() => navigate('/')}
-          className="group hover:opacity-80 transition-opacity flex items-center gap-2.5"
+          className="group hover:opacity-80 transition-opacity flex flex-col"
         >
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-            <span className="text-2xl font-bold text-white">A</span>
+          <div className="text-3xl font-bold tracking-tight">
+            <span className="text-gray-900">Anya</span>
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GPT</span>
           </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-bold tracking-tight text-gray-900">
-              Anya<span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">GPT</span>
-            </span>
-            <span className="text-[9px] text-gray-500 font-medium tracking-wide uppercase -mt-0.5">
-              ИИ-РЕПЕТИТОР АНГЛИЙСКОГО
-            </span>
-          </div>
+          <span className="text-[11px] text-gray-500 font-medium tracking-wide uppercase -mt-1">
+            ИИ-РЕПЕТИТОР АНГЛИЙСКОГО
+          </span>
         </button>
 
         <nav className="hidden md:flex items-center gap-6">
