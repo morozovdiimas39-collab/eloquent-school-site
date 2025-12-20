@@ -3693,7 +3693,9 @@ No markdown, no explanations, just JSON.'''
                 if session_words:
                     ai_used_words = detect_words_in_text(ai_response, session_words)
                     if ai_used_words:
-                        increment_dialog_uses(user['id'], ai_used_words)
+                        # Обновляем прогресс для каждого слова которое Аня использовала
+                        for word_id in ai_used_words:
+                            update_word_progress_api(user['id'], word_id, True)
                         print(f"[DEBUG] Anya used words in response: {ai_used_words}")
                 
                 # Сохраняем ответ AI
