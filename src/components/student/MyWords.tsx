@@ -85,7 +85,7 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
     }
   };
 
-  const deleteWord = async (wordId: number) => {
+  const deleteWord = async (studentWordId: number) => {
     if (!confirm('Удалить это слово из изучения?')) return;
     
     try {
@@ -93,8 +93,8 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'delete_word',
-          word_id: wordId
+          action: 'delete_student_word',
+          student_word_id: studentWordId
         })
       });
       await loadWords();
@@ -242,7 +242,7 @@ export default function MyWords({ studentId, teacherId, languageLevel = 'A1' }: 
                     </div>
                     
                     <button
-                      onClick={() => deleteWord(word.word_id)}
+                      onClick={() => deleteWord(word.id)}
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
                       title="Удалить слово"
                     >
