@@ -4,6 +4,7 @@ import Header from '@/components/anya/Header';
 import HeroSection from '@/components/anya/HeroSection';
 import DemoChat from '@/components/anya/DemoChat';
 import FeaturesSection from '@/components/anya/FeaturesSection';
+import ScreenshotsSection from '@/components/anya/ScreenshotsSection';
 import ComparisonSection from '@/components/anya/ComparisonSection';
 import HowItWorks from '@/components/anya/HowItWorks';
 import StatsSection from '@/components/anya/StatsSection';
@@ -38,6 +39,7 @@ export default function Index() {
       <DemoChat />
       <StatsSection />
       <FeaturesSection />
+      <ScreenshotsSection />
       <ComparisonSection />
       <HowItWorks />
       <LevelSection />
