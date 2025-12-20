@@ -498,6 +498,8 @@ export default function Admin() {
 
         {activeTab === 'proxies' && <ProxyManager />}
 
+        {activeTab === 'blog' && <BlogManager />}
+
         {activeTab === 'analytics' && (
           <div className="space-y-4">
             <Card className="border border-green-200 shadow-sm">
