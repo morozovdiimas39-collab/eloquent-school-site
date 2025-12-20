@@ -1234,80 +1234,23 @@ def generate_plan_batch(student_id: int, learning_goal: str, language_level: str
         print(f"[DEBUG] Student has {len(existing_words)} existing words")
         print(f"[DEBUG] Generating weeks {week_start}-{week_end}...")
         
-        prompt = f'''Create a 2-week English learning plan. Return ONLY valid JSON, no markdown.
+        prompt = f'''Generate English vocabulary for level {language_level}. Goal: {learning_goal}
 
-Student: Level {language_level}, Goal: {learning_goal}
-Topics for conversation practice: {topics_display}
+Return ONLY this JSON (no markdown, no extra text):
 
-{{
-  "plan": [
-    {{
-      "week": 1,
-      "focus": "Getting started with basics",
-      "conversation_topics": ["{topics_display}"],
-      "vocabulary": [
-        {{"english": "word1", "russian": "слово1"}},
-        {{"english": "word2", "russian": "слово2"}},
-        {{"english": "word3", "russian": "слово3"}},
-        {{"english": "word4", "russian": "слово4"}},
-        {{"english": "word5", "russian": "слово5"}}
-      ],
-      "phrases": [
-        {{"english": "phrase1", "russian": "фраза1"}},
-        {{"english": "phrase2", "russian": "фраза2"}},
-        {{"english": "phrase3", "russian": "фраза3"}},
-        {{"english": "phrase4", "russian": "фраза4"}},
-        {{"english": "phrase5", "russian": "фраза5"}}
-      ],
-      "expressions": [
-        {{"english": "expression1", "russian": "выражение1", "context": "when..."}},
-        {{"english": "expression2", "russian": "выражение2", "context": "when..."}}
-      ],
-      "actions": ["Practice daily", "Review vocabulary"]
-    }},
-    {{
-      "week": 2,
-      "focus": "Building on week 1",
-      "conversation_topics": ["{topics_display}"],
-      "vocabulary": [
-        {{"english": "word6", "russian": "слово6"}},
-        {{"english": "word7", "russian": "слово7"}},
-        {{"english": "word8", "russian": "слово8"}},
-        {{"english": "word9", "russian": "слово9"}},
-        {{"english": "word10", "russian": "слово10"}}
-      ],
-      "phrases": [
-        {{"english": "phrase6", "russian": "фраза6"}},
-        {{"english": "phrase7", "russian": "фраза7"}},
-        {{"english": "phrase8", "russian": "фраза8"}},
-        {{"english": "phrase9", "russian": "фраза9"}},
-        {{"english": "phrase10", "russian": "фраза10"}}
-      ],
-      "expressions": [
-        {{"english": "expression3", "russian": "выражение3", "context": "when..."}},
-        {{"english": "expression4", "russian": "выражение4", "context": "when..."}}
-      ],
-      "actions": ["Continue practice", "Review week 1 and 2"]
-    }}
-  ]
-}}
+{{"plan": [{{"week": 1, "focus": "Week 1", "conversation_topics": ["{topics_display}"], "vocabulary": [{{"english": "word1", "russian": "слово1"}}, {{"english": "word2", "russian": "слово2"}}, {{"english": "word3", "russian": "слово3"}}, {{"english": "word4", "russian": "слово4"}}, {{"english": "word5", "russian": "слово5"}}], "phrases": [{{"english": "phrase1", "russian": "фраза1"}}, {{"english": "phrase2", "russian": "фраза2"}}, {{"english": "phrase3", "russian": "фраза3"}}], "expressions": [{{"english": "expr1", "russian": "выражение1"}}, {{"english": "expr2", "russian": "выражение2"}}], "actions": ["Practice"]}}]}}
 
-Requirements:
-- EXACTLY 2 weeks in the plan array
-- Each week must have 5 vocabulary words for level {language_level} that help achieve: {learning_goal}
-- Each week must have 5 phrases for level {language_level} that help achieve: {learning_goal}
-- Each week must have 2 common expressions for level {language_level}
-- Words/phrases should match student's level and goal, NOT topics
-- Topics ({topics_display}) are ONLY for conversation practice, NOT for vocabulary selection
-- ⚠️ CRITICAL: DO NOT use these words that student already knows: {existing_words_str}
-- Generate ONLY NEW words that are not in the existing list
-- Return complete valid JSON with both weeks, no markdown blocks, no comments'''
+Rules:
+- Level {language_level} words
+- 5 words, 3 phrases, 2 expressions
+- ⚠️ SKIP: {existing_words_str[:200]}...
+- ONE week only'''
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 3000,
+                'maxOutputTokens': 800,
                 'topP': 0.95,
                 'topK': 40
             }
@@ -1328,9 +1271,9 @@ Requirements:
         # Пытаемся сгенерировать план с retry
         max_retries = 2
         for attempt in range(max_retries):
-            print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=35s, attempt {attempt+1}/{max_retries})")
+            print(f"[DEBUG] Calling Gemini API for weeks {week_start}-{week_end}... (timeout=25s, attempt {attempt+1}/{max_retries})")
             try:
-                with opener.open(req, timeout=35) as response:
+                with opener.open(req, timeout=25) as response:
                     print(f"[DEBUG] Gemini API responded for weeks {week_start}-{week_end}!")
                     gemini_result = json.loads(response.read().decode('utf-8'))
                     plan_text = gemini_result['candidates'][0]['content']['parts'][0]['text']
