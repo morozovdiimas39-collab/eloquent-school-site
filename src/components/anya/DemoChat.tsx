@@ -295,9 +295,9 @@ export default function DemoChat() {
             </div>
 
             {/* Mobile: Full-width chat without phone frame */}
-            <div className="lg:hidden">
-              <div className="relative mx-auto w-full">
-                <Card className="overflow-hidden border-0 shadow-2xl rounded-3xl">
+            <div className="lg:hidden px-4">
+              <div className="relative mx-auto w-full max-w-2xl">
+                <Card className="overflow-hidden border-0 shadow-2xl rounded-2xl">
                   {/* Chat header */}
                   <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4 flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center relative">
@@ -314,7 +314,7 @@ export default function DemoChat() {
                   </div>
 
                   {/* Chat messages */}
-                  <div className="h-[500px] overflow-y-auto p-5 space-y-4 bg-gray-50">
+                  <div className="h-[400px] overflow-y-auto p-4 space-y-3 bg-gray-50">
                     {messages.map((message) => (
                       <div
                         key={message.id}
