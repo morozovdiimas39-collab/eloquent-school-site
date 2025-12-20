@@ -1073,7 +1073,7 @@ Return ONLY valid JSON:
 def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
     """Генерирует упражнение на перевод"""
     return (
-        f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n<b>{word['russian']}</b>",
+        f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n{word['russian']}",
         word['english']
     )
 
@@ -5128,7 +5128,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                 send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
                                 update_conversation_mode(user['id'], 'dialog')
                         else:
-                            # При ошибке - показываем правильный ответ и просим повторить
+                            # При ошибке - показываем правильный ответ и ДУБЛИРУЕМ вопрос
                             response_text = '🔧 Fix / Correct:\n'
                             response_text += f'❌ {user_answer}\n'
                             response_text += f'✅ {correct_answer}\n'
@@ -5137,12 +5137,38 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             
                             send_telegram_message(chat_id, response_text, get_reply_keyboard(), parse_mode=None)
                             
+                            # ДУБЛИРУЕМ вопрос - отправляем тот же самый вопрос заново
+                            if current_word_id:
+                                conn = get_db_connection()
+                                cur = conn.cursor()
+                                cur.execute(
+                                    f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.words w "
+                                    f"WHERE w.id = {current_word_id}"
+                                )
+                                word_row = cur.fetchone()
+                                cur.close()
+                                conn.close()
+                                
+                                if word_row:
+                                    word = {'id': word_row[0], 'english': word_row[1], 'russian': word_row[2]}
+                                    
+                                    # Генерируем тот же тип упражнения заново
+                                    if conversation_mode == 'association':
+                                        exercise_text, answer = generate_association_exercise(word, language_level)
+                                        send_telegram_message(chat_id, exercise_text, get_reply_keyboard(), parse_mode=None)
+                                    elif conversation_mode == 'translation':
+                                        exercise_text, answer = generate_translation_exercise(word)
+                                        send_telegram_message(chat_id, exercise_text, get_reply_keyboard(), parse_mode=None)
+                                    
+                                    # НЕ обновляем exercise_state - оставляем то же слово!
+                            
                             # НЕ обновляем прогресс и НЕ меняем слово
-                            return {{
+                            return {
                                 'statusCode': 200,
-                                'headers': {{'Content-Type': 'application/json'}},
-                                'body': json.dumps({{'status': 'retry_same_word'}})
-                            }}
+                                'headers': {'Content-Type': 'application/json'},
+                                'body': json.dumps({'status': 'retry_same_word'}),
+                                'isBase64Encoded': False
+                            }
                 
             else:
                 # Режим диалога или голосового - обрабатываем через Gemini
