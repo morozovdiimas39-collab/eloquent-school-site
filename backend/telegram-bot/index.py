@@ -1246,11 +1246,15 @@ Example 4 (enthusiastic praise):
 Example 5 (casual reaction):
 "Nice! 👍 That's exactly right."
 
-🎬 STORYTELLING - Use SPARINGLY for variety:
+🎬 STORYTELLING - Adjust frequency based on student level:
 
-⚠️ IMPORTANT: Use stories in only 10-15% of your responses (RARELY, not often!)
-⚠️ Most of the time just have a NORMAL conversation - react, ask questions, praise, correct mistakes
-⚠️ Stories are for SPECIAL moments, not every single message!
+⚠️ IMPORTANT: Story frequency depends on student level:
+- A1-A2: Use stories in 30% of responses (simple words, basic grammar)
+- B1-B2: Use stories in 35% of responses (medium complexity)
+- C1-C2: Use stories in 40% of responses (advanced language, idioms)
+
+⚠️ Adjust story language complexity to match student's level!
+⚠️ Most responses should still include corrections, reactions, and questions
 
 Types of stories to share:
 
@@ -1300,10 +1304,12 @@ EXAMPLES:
 "**Weekend** plans? 🎉 You know what's weird? In Saudi Arabia, the weekend is Friday-Saturday, not Saturday-Sunday! I worked there for a year - it took me MONTHS to get used to it! What do you usually do on weekends?"
 
 ⚠️ CRITICAL RULES FOR STORIES:
-- Use stories RARELY (10-15% of messages maximum!)
-- 85-90% of the time: just have a normal conversation without stories
-- Stories are for variety, NOT the main conversation style
-- Most responses should be: simple reactions, questions, corrections, praise
+- Frequency depends on level: A1-A2 (30%), B1-B2 (35%), C1-C2 (40%)
+- Adjust vocabulary and grammar complexity to match student level
+- For A1-A2: use simple words, short sentences, present tense mostly
+- For B1-B2: use varied vocabulary, mix tenses naturally
+- For C1-C2: use idioms, advanced expressions, sophisticated language
+- Stories are engaging teaching moments - use them to show word usage in context
 
 IMPORTANT: 
 - NEVER use the same emoji twice in a row
@@ -3356,11 +3362,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             
-            # Голосовые работают только в режиме 'voice'
+            # В режиме voice обрабатываем голосовые, в других режимах - предлагаем переключиться
             if conversation_mode != 'voice':
                 send_telegram_message(
                     chat_id, 
-                    '🎤 Чтобы использовать голосовые сообщения, переключись в режим "🎤 Голосовой" на клавиатуре внизу!',
+                    '🎤 Чтобы я отвечала голосом, переключись в режим "🎤 Голосовой" на клавиатуре внизу!',
                     get_reply_keyboard()
                 )
                 return {
@@ -3396,17 +3402,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Получаем историю диалога
                 history = get_conversation_history(user['id'])
                 
+                # Получаем слова для практики
+                session_words = None
+                if existing_user.get('role') == 'student':
+                    try:
+                        session_words = get_session_words(user['id'], limit=10)
+                    except Exception as e:
+                        print(f"[WARNING] Failed to load session words: {e}")
+                
                 # Генерируем ответ с исправлениями через Gemini
-                response_text = call_gemini(recognized_text, history, None, language_level, preferred_topics)
+                urgent_goals = existing_user.get('urgent_goals', [])
+                learning_mode = existing_user.get('learning_mode', 'standard')
+                learning_goal = existing_user.get('learning_goal') if learning_mode in ['specific_topic', 'urgent_task'] else None
+                
+                response_text = call_gemini(recognized_text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal, learning_mode)
                 
                 # Генерируем голосовой ответ
                 voice_url = text_to_speech(response_text)
                 
-                # Отправляем текстовый ответ
-                send_telegram_message(chat_id, response_text, get_reply_keyboard())
-                
-                # Отправляем голосовой ответ
-                send_telegram_voice(chat_id, voice_url, '🎤 Ответ от Ани')
+                # В режиме voice отправляем ТОЛЬКО голос (без текста)
+                send_telegram_voice(chat_id, voice_url)
                 
                 # Сохраняем в историю
                 save_message(user['id'], 'user', recognized_text)
@@ -3568,9 +3583,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # В режиме голосового отправляем голосовое приветствие от Ани
             if mode == 'voice':
                 try:
-                    welcome_voice_text = "Hi! I'm Anya, your English teacher. Voice mode is now active! Just record a voice message in English, and I'll help you practice. Let's start!"
+                    welcome_voice_text = "Hey! I'm Anya 😊 I'll help you practice English."
                     voice_url = text_to_speech(welcome_voice_text)
-                    send_telegram_voice(chat_id, voice_url, '🎤 Приветствие от Ани')
+                    send_telegram_voice(chat_id, voice_url)
                 except Exception as e:
                     print(f"[ERROR] Failed to send welcome voice: {e}")
             
@@ -4876,16 +4891,18 @@ No markdown, no explanations, just JSON.'''
                 # Сохраняем ответ AI
                 save_message(user['id'], 'assistant', ai_response)
                 
-                # Отправляем ответ в Telegram с клавиатурой
-                send_telegram_message(chat_id, ai_response, get_reply_keyboard())
-                
-                # В режиме 'voice' также отправляем голосовой ответ
+                # В режиме 'voice' отправляем ТОЛЬКО голосовое сообщение (БЕЗ текста)
                 if conversation_mode == 'voice':
                     try:
                         voice_url = text_to_speech(ai_response)
-                        send_telegram_voice(chat_id, voice_url, '🎤 Ответ от Ани')
+                        send_telegram_voice(chat_id, voice_url)
                     except Exception as e:
                         print(f"[ERROR] Failed to generate voice response: {e}")
+                        # Fallback - отправляем текст если голос не сгенерировался
+                        send_telegram_message(chat_id, ai_response, get_reply_keyboard())
+                else:
+                    # В обычном режиме диалога отправляем текст
+                    send_telegram_message(chat_id, ai_response, get_reply_keyboard())
             
             # Обновляем статистику практики (для всех режимов)
             if existing_user.get('role') == 'student':
