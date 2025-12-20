@@ -4739,27 +4739,27 @@ Input: "I has a voice"
 Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback": "Ошибка: 'I has' неправильно. С местоимением 'I' используется 'have', а не 'has'", "corrected": "I have a voice"}}'''
                             
                             gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
-                            payload = {{
-                                'contents': [{{'parts': [{{'text': check_prompt}}]}}],
-                                'generationConfig': {{'temperature': 0.3, 'maxOutputTokens': 500}}
-                            }}
+                            payload = {
+                                'contents': [{'parts': [{'text': check_prompt}]}],
+                                'generationConfig': {'temperature': 0.3, 'maxOutputTokens': 500}
+                            }
                             
-                            proxy_handler = urllib.request.ProxyHandler({{
-                                'http': f'http://{{proxy_url}}',
-                                'https': f'http://{{proxy_url}}'
-                            }})
+                            proxy_handler = urllib.request.ProxyHandler({
+                                'http': f'http://{proxy_url}',
+                                'https': f'http://{proxy_url}'
+                            })
                             opener = urllib.request.build_opener(proxy_handler)
                             
                             req = urllib.request.Request(
                                 gemini_url,
                                 data=json.dumps(payload).encode('utf-8'),
-                                headers={{'Content-Type': 'application/json'}}
+                                headers={'Content-Type': 'application/json'}
                             )
                             
                             with opener.open(req, timeout=15) as response:
                                 result = json.loads(response.read().decode('utf-8'))
                                 check_text = result['candidates'][0]['content']['parts'][0]['text']
-                                check_data = safe_json_parse(check_text, {{'is_correct': False, 'feedback': 'Ошибка проверки'}})
+                                check_data = safe_json_parse(check_text, {'is_correct': False, 'feedback': 'Ошибка проверки'})
                                 
                                 log_proxy_success(proxy_id)
                                 
