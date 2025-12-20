@@ -1243,7 +1243,7 @@ Return JSON: {{"plan": [{{"week": 1, "vocabulary": [{{"english": "word", "russia
             'contents': [{'parts': [{'text': prompt}]}],
             'generationConfig': {
                 'temperature': 0.7, 
-                'maxOutputTokens': 100,
+                'maxOutputTokens': 2000,
                 'topP': 0.95,
                 'topK': 40
             }
