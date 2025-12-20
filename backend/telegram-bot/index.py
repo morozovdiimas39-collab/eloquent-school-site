@@ -214,10 +214,10 @@ def get_user(telegram_id: int):
         }
     return None
 
-def auto_generate_new_words(student_id: int, how_many: int = 5) -> int:
-    """Автоматически генерирует новые слова когда старые освоены"""
+def auto_generate_new_words(student_id: int, how_many: int = 10) -> Dict[str, Any]:
+    """Автоматически генерирует новые слова, фразы и выражения когда старые освоены"""
     try:
-        print(f"[DEBUG auto_generate_new_words] Generating {how_many} new words for student {student_id}")
+        print(f"[DEBUG auto_generate_new_words] Generating {how_many} new items for student {student_id}")
         
         # Получаем данные пользователя
         conn = get_db_connection()
@@ -230,24 +230,25 @@ def auto_generate_new_words(student_id: int, how_many: int = 5) -> int:
         
         if not user_data:
             print(f"[ERROR] User {student_id} not found")
-            return 0
+            return {'added_count': 0, 'new_items': []}
         
         language_level = user_data[0] or 'A1'
         preferred_topics = user_data[1] or []
         
-        # Получаем уже существующие слова
+        # Получаем ВСЕ существующие слова/фразы/выражения
         cur.execute(
             f"SELECT DISTINCT w.english_text FROM {SCHEMA}.student_words sw "
             f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
             f"WHERE sw.student_id = {student_id}"
         )
-        existing_words = [row[0].lower() for row in cur.fetchall()]
+        existing_words = [row[0].lower().strip() for row in cur.fetchall()]
         cur.close()
         conn.close()
         
-        print(f"[DEBUG] Student has {len(existing_words)} existing words")
+        print(f"[DEBUG] Student level: {language_level}")
+        print(f"[DEBUG] Student has {len(existing_words)} existing items")
         
-        # Генерируем новые слова через Gemini
+        # Генерируем новый контент через Gemini
         api_key = os.environ['GEMINI_API_KEY']
         proxy_id, proxy_url = get_active_proxy_from_db()
         if not proxy_url:
@@ -255,24 +256,56 @@ def auto_generate_new_words(student_id: int, how_many: int = 5) -> int:
         
         if not proxy_url:
             print(f"[ERROR] No proxy available")
-            return 0
+            return {'added_count': 0, 'new_items': []}
         
         topics_text = ', '.join([t.get('topic', '') for t in preferred_topics[:3]]) if preferred_topics else 'general topics'
-        existing_sample = ', '.join(existing_words[:50]) if existing_words else 'none'
         
-        prompt = f'''Generate {how_many} NEW English words for level {language_level}.
+        # Показываем ВСЕ существующие слова для избежания дубликатов
+        existing_sample = ', '.join(existing_words[:200]) if existing_words else 'none'
+        
+        # Определяем сколько чего генерировать в зависимости от уровня
+        if language_level in ['A1', 'A2']:
+            words_count = 7
+            phrases_count = 2
+            expressions_count = 1
+        elif language_level == 'B1':
+            words_count = 5
+            phrases_count = 3
+            expressions_count = 2
+        else:  # B2, C1, C2
+            words_count = 4
+            phrases_count = 3
+            expressions_count = 3
+        
+        prompt = f'''Generate NEW English learning materials for level {language_level}.
 Topics: {topics_text}
 
-⚠️ CRITICAL: DO NOT use these existing words: {existing_sample}
+⚠️ CRITICAL: DO NOT use ANY of these existing words/phrases/expressions: {existing_sample}
+⚠️ EVERY item must be 100% UNIQUE and NOT in the list above!
+
+Generate:
+- {words_count} vocabulary words (single words like "achieve", "comfortable")
+- {phrases_count} common phrases (2-3 word phrases like "take care", "by the way")
+- {expressions_count} idioms/expressions (like "break the ice", "piece of cake")
+
+Level guidelines:
+- A1/A2: simple everyday vocabulary
+- B1: common abstract concepts
+- B2+: sophisticated vocabulary and idioms
+- C1/C2: advanced expressions and nuanced language
 
 Return ONLY valid JSON:
-{{"words": [{{"english": "word1", "russian": "перевод1"}}, {{"english": "word2", "russian": "перевод2"}}]}}'''
+{{
+  "vocabulary": [{{"english": "word1", "russian": "перевод1"}}, {{"english": "word2", "russian": "перевод2"}}],
+  "phrases": [{{"english": "phrase1", "russian": "перевод1"}}, {{"english": "phrase2", "russian": "перевод2"}}],
+  "expressions": [{{"english": "expression1", "russian": "перевод1"}}, {{"english": "expression2", "russian": "перевод2"}}]
+}}'''
 
         gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
         
         payload = {
             'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 2000}
+            'generationConfig': {'temperature': 0.9, 'maxOutputTokens': 3000, 'topP': 0.95}
         }
         
         proxy_handler = urllib.request.ProxyHandler({
@@ -287,27 +320,29 @@ Return ONLY valid JSON:
             headers={'Content-Type': 'application/json'}
         )
         
-        with opener.open(req, timeout=25) as response:
+        with opener.open(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             text = result['candidates'][0]['content']['parts'][0]['text']
             
-            data = safe_json_parse(text, {'words': []})
-            new_words = data.get('words', [])
+            data = safe_json_parse(text, {'vocabulary': [], 'phrases': [], 'expressions': []})
             
-            print(f"[DEBUG] Gemini generated {len(new_words)} words")
+            print(f"[DEBUG] Gemini generated: {len(data.get('vocabulary', []))} words, {len(data.get('phrases', []))} phrases, {len(data.get('expressions', []))} expressions")
             
             # Сохраняем в БД
             conn = get_db_connection()
             cur = conn.cursor()
             
             added_count = 0
-            for word_data in new_words:
-                english = word_data['english'].strip().lower()
-                russian = word_data['russian'].strip()
+            new_items = []
+            
+            # Добавляем vocabulary
+            for item in data.get('vocabulary', []):
+                english = item['english'].strip().lower()
+                russian = item['russian'].strip()
                 
-                # Пропускаем дубликаты
+                # СТРОГАЯ проверка дубликатов
                 if english in existing_words:
-                    print(f"[DEBUG] Skipping duplicate: {english}")
+                    print(f"[WARNING] Skipping DUPLICATE vocabulary: {english}")
                     continue
                 
                 english_escaped = english.replace("'", "''")
@@ -329,21 +364,88 @@ Return ONLY valid JSON:
                 
                 existing_words.append(english)
                 added_count += 1
-                print(f"[DEBUG] Added new word: {english} = {russian}")
+                new_items.append(f"📖 {english} — {russian}")
+                print(f"[DEBUG] Added vocabulary: {english}")
+            
+            # Добавляем phrases
+            for item in data.get('phrases', []):
+                english = item['english'].strip().lower()
+                russian = item['russian'].strip()
+                
+                if english in existing_words:
+                    print(f"[WARNING] Skipping DUPLICATE phrase: {english}")
+                    continue
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT DO NOTHING"
+                )
+                
+                existing_words.append(english)
+                added_count += 1
+                new_items.append(f"💭 {english} — {russian}")
+                print(f"[DEBUG] Added phrase: {english}")
+            
+            # Добавляем expressions
+            for item in data.get('expressions', []):
+                english = item['english'].strip().lower()
+                russian = item['russian'].strip()
+                
+                if english in existing_words:
+                    print(f"[WARNING] Skipping DUPLICATE expression: {english}")
+                    continue
+                
+                english_escaped = english.replace("'", "''")
+                russian_escaped = russian.replace("'", "''")
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.words (english_text, russian_translation) "
+                    f"VALUES ('{english_escaped}', '{russian_escaped}') "
+                    f"ON CONFLICT (english_text) DO UPDATE SET russian_translation = EXCLUDED.russian_translation "
+                    f"RETURNING id"
+                )
+                word_id = cur.fetchone()[0]
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.student_words (student_id, word_id, teacher_id) "
+                    f"VALUES ({student_id}, {word_id}, {student_id}) "
+                    f"ON CONFLICT DO NOTHING"
+                )
+                
+                existing_words.append(english)
+                added_count += 1
+                new_items.append(f"✨ {english} — {russian}")
+                print(f"[DEBUG] Added expression: {english}")
             
             cur.close()
             conn.close()
             
             log_proxy_success(proxy_id)
             
-            print(f"[DEBUG auto_generate_new_words] Successfully added {added_count} new words")
-            return added_count
+            print(f"[DEBUG auto_generate_new_words] Successfully added {added_count} new items")
+            return {
+                'added_count': added_count,
+                'new_items': new_items,
+                'language_level': language_level
+            }
             
     except Exception as e:
         print(f"[ERROR auto_generate_new_words] Failed: {e}")
         import traceback
         traceback.print_exc()
-        return 0
+        return {'added_count': 0, 'new_items': []}
 
 def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     """Получает слова для практики в сессии"""
@@ -416,12 +518,39 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     active_words_count = len(new_words) + len(review_words)
     if active_words_count < 3:  # Если меньше 3 активных слов - генерируем новые
         print(f"[WARNING] Only {active_words_count} active words - generating more!")
+        
+        # Считаем сколько слов освоено
+        cur.execute(
+            f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
+            f"WHERE student_id = {student_id} AND status = 'mastered'"
+        )
+        mastered_count = cur.fetchone()[0]
+        
         cur.close()
         conn.close()
         
-        added = auto_generate_new_words(student_id, how_many=5)
+        result = auto_generate_new_words(student_id, how_many=10)
         
-        if added > 0:
+        if result['added_count'] > 0:
+            # Отправляем уведомление о новых материалах
+            notification = f"🎉 ПОЗДРАВЛЯЮ!\n\n"
+            notification += f"✅ Ты освоил {mastered_count} слов!\n\n"
+            notification += f"🆕 Я добавила {result['added_count']} новых материалов для уровня {result['language_level']}:\n\n"
+            
+            for item in result['new_items'][:10]:  # Показываем первые 10
+                notification += f"{item}\n"
+            
+            if len(result['new_items']) > 10:
+                notification += f"\n...и еще {len(result['new_items']) - 10}!\n"
+            
+            notification += f"\nПродолжаем практиковать! 🚀"
+            
+            try:
+                send_telegram_message(student_id, notification, parse_mode=None)
+                print(f"[DEBUG] Notification sent to student {student_id}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send notification: {e}")
+            
             # Повторно запрашиваем слова после генерации
             return get_session_words(student_id, limit)
     
