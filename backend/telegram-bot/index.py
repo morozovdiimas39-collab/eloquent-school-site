@@ -3411,23 +3411,56 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         send_telegram_message(chat_id, '✅ Упражнения закончились!', get_reply_keyboard())
                         update_conversation_mode(user['id'], 'dialog')
                 else:
-                    # Получаем русский перевод для показа
+                    # НЕПРАВИЛЬНЫЙ ОТВЕТ - показываем ошибку и ДУБЛИРУЕМ вопрос
                     conn = get_db_connection()
                     cur = conn.cursor()
+                    
+                    # Получаем русский перевод и исходный вопрос
                     cur.execute(
                         f"SELECT w.russian_translation FROM {SCHEMA}.words w "
                         f"WHERE w.english_text = '{correct_answer.replace(chr(39), chr(39)+chr(39))}'"
                     )
                     row = cur.fetchone()
                     russian_translation = row[0] if row else ''
+                    
+                    # Получаем данные текущего слова для повторной генерации вопроса
+                    cur.execute(
+                        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.words w "
+                        f"WHERE w.id = {current_word_id}"
+                    )
+                    word_row = cur.fetchone()
+                    
+                    # Получаем все слова для генерации вариантов
+                    cur.execute(
+                        f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
+                        f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
+                        f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                    )
+                    all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
+                    
                     cur.close()
                     conn.close()
                     
+                    # Редактируем сообщение, показывая ошибку
                     edit_telegram_message(
                         chat_id,
                         message_id,
-                        f'❌ Wrong!\n\n✅ Correct answer: {correct_answer} = {russian_translation}\n\nTry again!'
+                        f'❌ Wrong!\n\n✅ Correct answer: {correct_answer} = {russian_translation}'
                     )
+                    
+                    # ДУБЛИРУЕМ вопрос - отправляем тот же самый вопрос заново
+                    if word_row:
+                        word = {'id': word_row[0], 'english': word_row[1], 'russian': word_row[2]}
+                        exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
+                        
+                        # НЕ обновляем exercise_state - оставляем то же слово!
+                        
+                        inline_keyboard = {
+                            'inline_keyboard': [
+                                [{'text': opt, 'callback_data': f'context_answer:{opt}'}] for opt in options
+                            ]
+                        }
+                        send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
             
             return {
                 'statusCode': 200,
