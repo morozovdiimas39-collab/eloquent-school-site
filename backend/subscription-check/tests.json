@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "Check subscription for user",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "telegram_id": 994807644
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "has_subscription": "boolean"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
