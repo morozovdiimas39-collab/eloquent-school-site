@@ -2962,6 +2962,28 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         traceback.print_exc()
                         send_telegram_message(chat_id, '❌ Ошибка запуска теста. Попробуй /start')
             
+            elif data.startswith('subscribe_'):
+                # Обработка выбора тарифа подписки
+                tariff = data.replace('subscribe_', '')
+                
+                if tariff == 'basic':
+                    price = '600₽'
+                elif tariff == 'premium':
+                    price = '900₽'
+                elif tariff == 'all':
+                    price = '1275₽'
+                else:
+                    price = '???'
+                
+                payment_text = (
+                    f"<b>Оплата тарифа {price}</b>\n\n"
+                    "Для оплаты свяжитесь с администратором:\n"
+                    "@admin_anya_gpt\n\n"
+                    "После оплаты доступ откроется автоматически! 🚀"
+                )
+                
+                send_telegram_message(chat_id, payment_text)
+            
             elif data.startswith('learning_mode_'):
                 # Обработка выбора режима обучения (НОВЫЙ ШАГ)
                 mode = data.replace('learning_mode_', '')
@@ -3599,6 +3621,98 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         text = message.get('text', '')
         voice = message.get('voice')
         sticker = message.get('sticker')
+        
+        # ПРОВЕРКА ПОДПИСКИ - блокируем всё кроме /start
+        if text != '/start':
+            from datetime import datetime
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            cur.execute(
+                f"SELECT subscription_status, subscription_expires_at "
+                f"FROM {SCHEMA}.users WHERE telegram_id = {user['id']}"
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            
+            has_subscription = False
+            if row:
+                subscription_status = row[0]
+                subscription_expires_at = row[1]
+                
+                # Проверяем активна ли подписка
+                if subscription_status == 'active':
+                    if subscription_expires_at:
+                        if subscription_expires_at > datetime.now():
+                            has_subscription = True
+                    else:
+                        has_subscription = True
+            
+            # Если подписки нет - отправляем сообщение с картинкой
+            if not has_subscription:
+                text_sub = (
+                    "🔒 <b>Подписка истекла</b>\n\n"
+                    "Твой доступ к AnyaGPT закончился, но ты можешь продолжить "
+                    "обучение прямо сейчас!\n\n"
+                    "<b>Что ты получаешь с подпиской:</b>\n\n"
+                    "💬 <b>Диалог с Аней</b> — неограниченное общение с AI-учителем\n"
+                    "✍️ <b>5 режимов практики</b> — предложения, контекст, ассоциации, перевод\n"
+                    "📚 <b>Персональный словарь</b> — слова подбираются под твой уровень\n"
+                    "🎯 <b>Отслеживание прогресса</b> — видишь как растёшь каждый день\n"
+                    "🎤 <b>Голосовой режим</b> — Аня отвечает голосом (в тарифе \"Премиум\")\n\n"
+                    "<b>Выбери свой тариф:</b>"
+                )
+                
+                keyboard_sub = {
+                    'inline_keyboard': [
+                        [{'text': '💬 Базовый — 600₽/мес', 'callback_data': 'subscribe_basic'}],
+                        [{'text': '🎤 Премиум — 900₽/мес', 'callback_data': 'subscribe_premium'}],
+                        [{'text': '🔥 Всё сразу со скидкой 15% — 1275₽/мес', 'callback_data': 'subscribe_all'}]
+                    ]
+                }
+                
+                photo_url_sub = 'https://cdn.poehali.dev/files/Снимок экрана 2025-12-21 в 16.57.18.png'
+                
+                try:
+                    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+                    if bot_token:
+                        proxy_id, proxy_url = get_active_proxy_from_db()
+                        proxies = None
+                        if proxy_url:
+                            proxies = {
+                                'http': f'http://{proxy_url}',
+                                'https': f'http://{proxy_url}'
+                            }
+                        
+                        url_photo = f'https://api.telegram.org/bot{bot_token}/sendPhoto'
+                        payload_photo = {
+                            'chat_id': chat_id,
+                            'photo': photo_url_sub,
+                            'caption': text_sub,
+                            'parse_mode': 'HTML',
+                            'reply_markup': keyboard_sub
+                        }
+                        
+                        response = requests.post(url_photo, json=payload_photo, proxies=proxies, timeout=30)
+                        
+                        if response.status_code == 200:
+                            if proxy_id:
+                                log_proxy_success(proxy_id)
+                        else:
+                            if proxy_id:
+                                log_proxy_failure(proxy_id, f"HTTP {response.status_code}")
+                except Exception as e:
+                    if 'proxy_id' in locals() and proxy_id:
+                        log_proxy_failure(proxy_id, str(e))
+                    print(f"[ERROR] Failed to send subscription message: {e}")
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True, 'subscription_required': True}),
+                    'isBase64Encoded': False
+                }
         
         # Логируем file_id стикеров для добавления в коллекцию
         if sticker:
