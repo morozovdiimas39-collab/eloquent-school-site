@@ -896,13 +896,14 @@ def create_or_update_user(telegram_id: int, username: str = '', first_name: str 
     return True
 
 def get_all_students() -> List[Dict[str, Any]]:
-    """Получает список всех студентов"""
+    """Получает список всех студентов с информацией о подписках"""
     conn = get_db_connection()
     cur = conn.cursor()
     
     cur.execute(
         f"SELECT telegram_id, username, first_name, last_name, created_at, "
-        f"language_level, preferred_topics, timezone, photo_url "
+        f"language_level, preferred_topics, timezone, photo_url, "
+        f"subscription_active, subscription_expires_at "
         f"FROM {SCHEMA}.users "
         f"WHERE role = 'student' "
         f"ORDER BY created_at DESC"
@@ -919,7 +920,9 @@ def get_all_students() -> List[Dict[str, Any]]:
             'language_level': row[5] or 'A1',
             'preferred_topics': row[6] if row[6] else [],
             'timezone': row[7] or 'UTC',
-            'photo_url': row[8]
+            'photo_url': row[8],
+            'subscription_active': row[9] or False,
+            'subscription_expires_at': row[10].isoformat() if row[10] else None
         })
     
     cur.close()
@@ -1569,6 +1572,32 @@ def generate_speech(text: str, lang: str = 'en-US') -> Dict[str, Any]:
     except Exception as e:
         return {'error': str(e)}
 
+def toggle_subscription(telegram_id: int, active: bool, days: int = 30) -> Dict[str, Any]:
+    """Включает/выключает подписку студента"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if active:
+        # Активируем подписку на указанное количество дней
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET "
+            f"subscription_active = TRUE, "
+            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days' "
+            f"WHERE telegram_id = {telegram_id}"
+        )
+    else:
+        # Деактивируем подписку
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET "
+            f"subscription_active = FALSE, "
+            f"subscription_expires_at = NULL "
+            f"WHERE telegram_id = {telegram_id}"
+        )
+    
+    cur.close()
+    conn.close()
+    return {'success': True}
+
 def reset_proxy_stats(proxy_id: int) -> bool:
     """Сбрасывает статистику прокси"""
     conn = get_db_connection()
@@ -1981,6 +2010,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200 if success else 400,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': success}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'toggle_subscription':
+            telegram_id = body_data.get('telegram_id')
+            active = body_data.get('active')
+            days = body_data.get('days', 30)
+            result = toggle_subscription(telegram_id, active, days)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps(result),
                 'isBase64Encoded': False
             }
         
