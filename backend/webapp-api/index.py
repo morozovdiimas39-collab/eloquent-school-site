@@ -738,6 +738,102 @@ def generate_personalized_words(student_id: int, learning_goal: str, language_le
     except Exception as e:
         return {'error': str(e), 'words': []}
 
+def get_all_gemini_prompts() -> List[Dict[str, Any]]:
+    """Получает все промпты Gemini"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, code, name, description, prompt_text, category, is_active, created_at, updated_at "
+        f"FROM {SCHEMA}.gemini_prompts ORDER BY category, name"
+    )
+    
+    prompts = []
+    for row in cur.fetchall():
+        prompts.append({
+            'id': row[0],
+            'code': row[1],
+            'name': row[2],
+            'description': row[3],
+            'prompt_text': row[4],
+            'category': row[5],
+            'is_active': row[6],
+            'created_at': row[7].isoformat() if row[7] else None,
+            'updated_at': row[8].isoformat() if row[8] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return prompts
+
+def get_gemini_prompt_by_code(code: str) -> Dict[str, Any]:
+    """Получает промпт по коду"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    code_escaped = code.replace("'", "''")
+    
+    cur.execute(
+        f"SELECT id, code, name, description, prompt_text, category, is_active "
+        f"FROM {SCHEMA}.gemini_prompts WHERE code = '{code_escaped}' AND is_active = TRUE"
+    )
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if row:
+        return {
+            'id': row[0],
+            'code': row[1],
+            'name': row[2],
+            'description': row[3],
+            'prompt_text': row[4],
+            'category': row[5],
+            'is_active': row[6]
+        }
+    return None
+
+def update_gemini_prompt(prompt_id: int, prompt_text: str, description: str = None, is_active: bool = True) -> bool:
+    """Обновляет промпт"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    text_escaped = prompt_text.replace("'", "''")
+    
+    if description:
+        desc_escaped = description.replace("'", "''")
+        desc_value = f"'{desc_escaped}'"
+    else:
+        desc_value = 'NULL'
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.gemini_prompts SET "
+        f"prompt_text = '{text_escaped}', "
+        f"description = {desc_value}, "
+        f"is_active = {is_active}, "
+        f"updated_at = CURRENT_TIMESTAMP "
+        f"WHERE id = {prompt_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    return True
+
+def toggle_gemini_prompt(prompt_id: int, is_active: bool) -> bool:
+    """Включает/выключает промпт"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"UPDATE {SCHEMA}.gemini_prompts SET is_active = {is_active}, updated_at = CURRENT_TIMESTAMP "
+        f"WHERE id = {prompt_id}"
+    )
+    
+    cur.close()
+    conn.close()
+    return True
+
 def send_telegram_notification(telegram_id: int, message: str) -> bool:
     """Отправляет уведомление в Telegram"""
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -2158,6 +2254,39 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps(result),
                 'isBase64Encoded': False
+            }
+        
+        elif action == 'get_gemini_prompts':
+            prompts = get_all_gemini_prompts()
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'prompts': prompts}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_gemini_prompt':
+            prompt_id = body_data.get('prompt_id')
+            prompt_text = body_data.get('prompt_text')
+            description = body_data.get('description')
+            is_active = body_data.get('is_active', True)
+            success = update_gemini_prompt(prompt_id, prompt_text, description, is_active)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'toggle_gemini_prompt':
+            prompt_id = body_data.get('prompt_id')
+            is_active = body_data.get('is_active')
+            success = toggle_gemini_prompt(prompt_id, is_active)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
+                'isBase64Enabled': False
             }
         
         elif action == 'get_proxies':

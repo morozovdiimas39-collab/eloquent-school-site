@@ -9,6 +9,7 @@ import { funcUrls } from '@/config/funcUrls';
 import VocabularyManager from '@/components/admin/VocabularyManager';
 import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';
+import PromptsManager from '@/components/admin/PromptsManager';
 
 interface User {
   telegram_id: number;
@@ -51,7 +52,7 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog' | 'prompts'>('teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [schedulerRunning, setSchedulerRunning] = useState(false);
@@ -386,6 +387,14 @@ export default function Admin() {
               Блог
             </Button>
             <Button
+              onClick={() => setActiveTab('prompts')}
+              variant={activeTab === 'prompts' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-11 text-sm font-medium"
+            >
+              <Icon name="MessageSquare" size={16} className="mr-1.5" />
+              Промпты
+            </Button>
+            <Button
               onClick={() => window.location.href = '/admin/generate-words'}
               variant="outline"
               className="flex-1 sm:flex-none h-11 text-sm font-medium bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
@@ -592,6 +601,8 @@ export default function Admin() {
         {activeTab === 'proxies' && <ProxyManager />}
 
         {activeTab === 'blog' && <BlogManager />}
+
+        {activeTab === 'prompts' && <PromptsManager />}
 
         {activeTab === 'analytics' && (
           <div className="space-y-4">

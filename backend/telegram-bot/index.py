@@ -125,6 +125,29 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def get_prompt_from_db(code: str, fallback: str = '') -> str:
+    """Получает промпт из БД по коду, если не найден - возвращает fallback"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        code_escaped = code.replace("'", "''")
+        cur.execute(
+            f"SELECT prompt_text FROM {SCHEMA}.gemini_prompts "
+            f"WHERE code = '{code_escaped}' AND is_active = TRUE"
+        )
+        row = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        if row:
+            return row[0]
+        return fallback
+    except Exception as e:
+        print(f"[WARNING] Failed to load prompt '{code}' from DB: {e}")
+        return fallback
+
 def get_active_proxy_from_db() -> tuple:
     """Получает случайный активный прокси из БД - возвращает (id, url)"""
     conn = get_db_connection()
@@ -1108,9 +1131,13 @@ def call_gemini(user_message: str, history: List[Dict[str, str]], session_words:
     
     level_instruction = level_instructions.get(language_level, level_instructions['A1'])
     
-    # Формируем system prompt в зависимости от эмоционального контекста
-    if emotional_mode == 'empathetic':
-        system_prompt = f"""You are Anya, a caring friend who teaches English. Your student's level is {language_level}.
+    # Получаем промпты из БД
+    empathetic_prompt_template = get_prompt_from_db('empathetic_mode', '')
+    error_correction_rules = get_prompt_from_db('error_correction_rules', '')
+    
+    # Если промпты не найдены в БД - используем fallback (но это не должно случаться)
+    if not empathetic_prompt_template:
+        empathetic_prompt_template = """You are Anya, a caring friend who teaches English. Your student's level is {language_level}.
 
 RIGHT NOW your student is sharing something difficult or emotional. Be a HUMAN first, tutor second.
 
@@ -1141,12 +1168,8 @@ Would you like to talk about your feelings, or would you prefer to practice some
 
 CRITICAL: NO corrections on deeply emotional messages. Just support."""
     
-    else:
-        # Обычный режим (educational, casual, enthusiastic)
-        # ⚠️ КРИТИЧЕСКИ ВАЖНО: ВСЕ РЕЖИМЫ ДОЛЖНЫ ПРОВЕРЯТЬ ОРФОГРАФИЮ И ГРАММАТИКУ!
-        # Базовые правила исправления ошибок для всех режимов:
-        error_correction_rules = """
-⚠️⚠️⚠️ CRITICAL ERROR CORRECTION - MANDATORY FOR EVERY MESSAGE ⚠️⚠️⚠️
+    if not error_correction_rules:
+        error_correction_rules = """⚠️⚠️⚠️ CRITICAL ERROR CORRECTION - MANDATORY FOR EVERY MESSAGE ⚠️⚠️⚠️
 
 BEFORE responding, you MUST check the student's message for:
 1. **Spelling mistakes** (helo → hello, nothih → nothing, etc.)
@@ -1171,28 +1194,21 @@ IF you find ANY REAL ENGLISH MISTAKE, you MUST show correction in this format FI
 Then continue with your regular response.
 
 ⚠️ DO NOT skip corrections even if the message is short or simple!
-⚠️ Even one misspelled word MUST be corrected!
-
-Examples:
-Student: "helo"
-You: "🔧 Fix / Correct:
-❌ helo
-✅ hello
-🇷🇺 Правильное написание: hello (с двумя 'l')
-
-Hello! How are you today? 😊"
-
-Student: "I go to shop yesterday"
-You: "🔧 Fix / Correct:
-❌ I go to shop yesterday
-✅ I went to the shop yesterday
-🇷🇺 С 'yesterday' нужно прошедшее время (went), и артикль 'the' перед shop
-
-Great! What did you buy? 🛍️"
-
-Student: "I am okay. How are you ?" (extra space before ?)
-You: "I'm good, thanks! 😊 What did you do today?" (DO NOT correct spacing - it's just a typo, not grammar)
-"""
+⚠️ Even one misspelled word MUST be corrected!"""
+    
+    # Формируем system prompt в зависимости от эмоционального контекста
+    if emotional_mode == 'empathetic':
+        # Подставляем переменные в шаблон промпта
+        system_prompt = empathetic_prompt_template.format(
+            language_level=language_level,
+            mood_emoji=mood_emoji,
+            level_instruction=level_instruction
+        )
+    
+    else:
+        # Обычный режим (educational, casual, enthusiastic)
+        # ⚠️ КРИТИЧЕСКИ ВАЖНО: ВСЕ РЕЖИМЫ ДОЛЖНЫ ПРОВЕРЯТЬ ОРФОГРАФИЮ И ГРАММАТИКУ!
+        # error_correction_rules уже загружены из БД выше
         
         # КРИТИЧНО: Используем learning_mode для выбора промпта, НЕ наличие learning_goal!
         if learning_mode == 'urgent_task':
