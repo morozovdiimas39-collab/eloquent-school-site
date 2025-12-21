@@ -12,6 +12,9 @@ from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
+# Глобальный кэш для оптимизации ensure_user_has_words (живет только в рамках одного запроса)
+_words_ensured_cache = {}
+
 def clean_gemini_json(text: str) -> str:
     """Очищает ответ Gemini от markdown и фиксит невалидный JSON"""
     # Удаляем markdown блоки
@@ -903,6 +906,12 @@ def get_default_words_for_level(language_level: str) -> List[Dict[str, str]]:
 
 def ensure_user_has_words(telegram_id: int, language_level: str):
     """Проверяет есть ли у пользователя слова, если нет - добавляет базовые"""
+    # ⚡ ОПТИМИЗАЦИЯ: Кэшируем проверку в рамках одного запроса
+    # Это убирает дублирование вызовов (например, get_random_word тоже вызывает эту функцию)
+    cache_key = f"{telegram_id}_{language_level}"
+    if cache_key in _words_ensured_cache:
+        return  # Уже проверяли в этом запросе
+    
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -934,6 +943,9 @@ def ensure_user_has_words(telegram_id: int, language_level: str):
     
     cur.close()
     conn.close()
+    
+    # Помечаем что проверили для этого пользователя
+    _words_ensured_cache[cache_key] = True
 
 def get_random_word(telegram_id: int, language_level: str = 'A1') -> Dict[str, Any]:
     """Получает случайное слово для упражнения"""
@@ -2493,6 +2505,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
     """
+    # ⚡ ОПТИМИЗАЦИЯ: Очищаем кэш в начале каждого запроса
+    global _words_ensured_cache
+    _words_ensured_cache = {}
+    
     # Устанавливаем команды бота при первом запуске (идемпотентно)
     try:
         set_bot_commands()
