@@ -903,7 +903,7 @@ def get_all_students() -> List[Dict[str, Any]]:
     cur.execute(
         f"SELECT telegram_id, username, first_name, last_name, created_at, "
         f"language_level, preferred_topics, timezone, photo_url, "
-        f"subscription_active, subscription_expires_at "
+        f"subscription_status, subscription_expires_at "
         f"FROM {SCHEMA}.users "
         f"WHERE role = 'student' "
         f"ORDER BY created_at DESC"
@@ -911,6 +911,12 @@ def get_all_students() -> List[Dict[str, Any]]:
     
     students = []
     for row in cur.fetchall():
+        subscription_status = row[9]
+        subscription_expires_at = row[10]
+        
+        # Определяем активна ли подписка
+        subscription_active = subscription_status == 'active'
+        
         students.append({
             'telegram_id': row[0],
             'username': row[1],
@@ -921,8 +927,8 @@ def get_all_students() -> List[Dict[str, Any]]:
             'preferred_topics': row[6] if row[6] else [],
             'timezone': row[7] or 'UTC',
             'photo_url': row[8],
-            'subscription_active': row[9] or False,
-            'subscription_expires_at': row[10].isoformat() if row[10] else None
+            'subscription_active': subscription_active,
+            'subscription_expires_at': subscription_expires_at.isoformat() if subscription_expires_at else None
         })
     
     cur.close()
@@ -1581,7 +1587,7 @@ def toggle_subscription(telegram_id: int, active: bool, days: int = 30) -> Dict[
         # Активируем подписку на указанное количество дней
         cur.execute(
             f"UPDATE {SCHEMA}.users SET "
-            f"subscription_active = TRUE, "
+            f"subscription_status = 'active', "
             f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days' "
             f"WHERE telegram_id = {telegram_id}"
         )
@@ -1589,7 +1595,7 @@ def toggle_subscription(telegram_id: int, active: bool, days: int = 30) -> Dict[
         # Деактивируем подписку
         cur.execute(
             f"UPDATE {SCHEMA}.users SET "
-            f"subscription_active = FALSE, "
+            f"subscription_status = 'inactive', "
             f"subscription_expires_at = NULL "
             f"WHERE telegram_id = {telegram_id}"
         )
