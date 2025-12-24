@@ -557,10 +557,30 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     
     print(f"[DEBUG get_session_words] Skipping mastered words - they are already 100% learned")
     
-    # ⚠️ CRITICAL: Автоматически генерируем новые слова если недостаточно активных
+    # ⚠️ CRITICAL: Автоматически генерируем новые слова ТОЛЬКО если ВСЕ освоены
     active_words_count = len(new_words) + len(review_words)
-    if active_words_count < 5:  # Если меньше 5 активных слов - генерируем новые
-        print(f"[WARNING] Only {active_words_count} active words - generating more!")
+    
+    # Считаем общее количество слов и сколько освоено
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.word_progress WHERE student_id = {student_id}"
+    )
+    total_words = cur.fetchone()[0]
+    
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
+        f"WHERE student_id = {student_id} AND status = 'mastered'"
+    )
+    mastered_count = cur.fetchone()[0]
+    
+    print(f"[DEBUG] Total words: {total_words}, Mastered: {mastered_count}, Active: {active_words_count}")
+    
+    # Генерируем новые слова ТОЛЬКО если:
+    # 1. Вообще нет слов (total_words == 0) ИЛИ
+    # 2. ВСЕ слова освоены (total_words > 0 AND mastered_count == total_words)
+    should_generate = (total_words == 0) or (total_words > 0 and mastered_count == total_words)
+    
+    if should_generate:
+        print(f"[INFO] All words mastered or no words at all - generating new content!")
         
         # Проверяем режим пользователя - НЕ генерируем если идет генерация плана
         cur.execute(f"SELECT conversation_mode FROM {SCHEMA}.users WHERE telegram_id = {student_id}")
@@ -572,13 +592,6 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             cur.close()
             conn.close()
             return []  # Возвращаем пустой список, план сгенерируется асинхронно
-        
-        # Считаем сколько слов освоено
-        cur.execute(
-            f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
-            f"WHERE student_id = {student_id} AND status = 'mastered'"
-        )
-        mastered_count = cur.fetchone()[0]
         
         cur.close()
         conn.close()
