@@ -617,15 +617,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             except Exception as e:
                 print(f"[ERROR] Failed to send notification: {e}")
             
-            # ⚠️ CRITICAL FIX: Нужно ЗАКОММИТИТЬ добавленные слова, потому что они были в другом подключении
-            # Закрываем старое подключение и открываем НОВОЕ для получения свежих данных
-            cur.close()
-            conn.close()
-            
-            # Открываем НОВОЕ подключение для получения только что добавленных слов
-            conn = get_db_connection()
-            cur = conn.cursor()
-            
+            # ⚠️ FIX: Инициализируем прогресс для новых слов (используем СУЩЕСТВУЮЩЕЕ подключение)
             # Инициализируем прогресс для только что добавленных слов
             cur.execute(
                 f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
