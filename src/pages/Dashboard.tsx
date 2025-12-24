@@ -231,15 +231,24 @@ export default function Dashboard() {
           languageLevel={languageLevel}
         />
 
-        <div className="mt-8 pt-6 pb-2 border-t border-gray-200 text-center">
-          <a 
-            href="https://anyagpt-dev.ru/oferta" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-sm text-gray-500 hover:text-gray-700 underline"
-          >
-            Публичная оферта
-          </a>
+        <div className="mt-8 pt-6 pb-4 border-t border-gray-200">
+          <div className="text-center mb-4">
+            <a 
+              href="https://anyagpt-dev.ru/oferta" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Публичная оферта
+            </a>
+          </div>
+          
+          <div className="text-xs text-gray-500 space-y-1 text-center">
+            <p><strong>ИП Хрусталев Георгий Николаевич</strong></p>
+            <p>ИНН: 773502993200</p>
+            <p>ОГРНИП: 325774600594701</p>
+            <p>E-mail: <a href="mailto:khgn@duck.com" className="hover:text-gray-700">khgn@duck.com</a></p>
+          </div>
         </div>
       </div>
 
