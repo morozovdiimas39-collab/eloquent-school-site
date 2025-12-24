@@ -230,6 +230,17 @@ export default function Dashboard() {
           studentId={user.id}
           languageLevel={languageLevel}
         />
+
+        <div className="mt-8 pt-6 pb-2 border-t border-gray-200 text-center">
+          <a 
+            href="https://anyagpt-dev.ru/oferta" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-sm text-gray-500 hover:text-gray-700 underline"
+          >
+            Публичная оферта
+          </a>
+        </div>
       </div>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
