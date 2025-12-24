@@ -605,8 +605,40 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             except Exception as e:
                 print(f"[ERROR] Failed to send notification: {e}")
             
-            # Повторно запрашиваем слова после генерации
-            return get_session_words(student_id, limit)
+            # ⚠️ FIX: Открываем НОВОЕ подключение и инициализируем прогресс для новых слов
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            # Инициализируем прогресс для только что добавленных слов
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+                f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+                f"WHERE sw.student_id = {student_id} "
+                f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+            )
+            
+            print(f"[DEBUG] Re-initialized word_progress after auto-generation")
+            
+            # Повторно запрашиваем новые слова (теперь они должны быть в word_progress)
+            cur.execute(
+                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+                f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+                f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
+            )
+            new_words = cur.fetchall()
+            print(f"[DEBUG] After generation: new_words count = {len(new_words)}")
+            
+            # Повторно запрашиваем review слова
+            cur.execute(
+                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+                f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
+                f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+                f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
+            )
+            review_words = cur.fetchall()
+            print(f"[DEBUG] After generation: review_words count = {len(review_words)}")
     
     # ⚠️ CRITICAL: Возвращаем ТОЛЬКО новые и review слова (БЕЗ mastered!)
     all_words = list(new_words) + list(review_words)
