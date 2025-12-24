@@ -3704,8 +3704,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     ]
                 }
                 
-                photo_url_sub = 'https://cdn.poehali.dev/files/Снимок экрана 2025-12-21 в 16.57.18.png'
-                
                 try:
                     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
                     if bot_token:
@@ -3717,11 +3715,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 'https': f'http://{proxy_url}'
                             }
                         
-                        url_photo = f'https://api.telegram.org/bot{bot_token}/sendPhoto'
+                        url_photo = f'https://api.telegram.org/bot{bot_token}/sendMessage'
                         payload_photo = {
                             'chat_id': chat_id,
-                            'photo': photo_url_sub,
-                            'caption': text_sub,
+                            'text': text_sub,
                             'parse_mode': 'HTML',
                             'reply_markup': keyboard_sub
                         }
