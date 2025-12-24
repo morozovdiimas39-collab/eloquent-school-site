@@ -16,6 +16,7 @@ import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 import GoalTest from "./pages/GoalTest";
+import Oferta from "./pages/Oferta";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/system-test" element={<SystemTest />} />
           <Route path="/timezone-setup" element={<TimezoneSetup />} />
           <Route path="/test" element={<GoalTest />} />
+          <Route path="/oferta" element={<Oferta />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
