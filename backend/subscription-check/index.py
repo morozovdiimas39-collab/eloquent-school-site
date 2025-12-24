@@ -104,9 +104,6 @@ def send_subscription_required_message(chat_id: int):
         ]
     }
     
-    # Отправляем фото с текстом
-    photo_url = 'https://cdn.poehali.dev/files/Снимок экрана 2025-12-21 в 16.57.18.png'
-    
     try:
         proxy_id, proxy_url = get_active_proxy_from_db()
         proxies = None
@@ -116,11 +113,10 @@ def send_subscription_required_message(chat_id: int):
                 'https': f'http://{proxy_url}'
             }
         
-        url = f'https://api.telegram.org/bot{bot_token}/sendPhoto'
+        url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
         payload = {
             'chat_id': chat_id,
-            'photo': photo_url,
-            'caption': text,
+            'text': text,
             'parse_mode': 'HTML',
             'reply_markup': keyboard
         }
