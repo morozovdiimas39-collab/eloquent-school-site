@@ -593,8 +593,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             conn.close()
             return []  # Возвращаем пустой список, план сгенерируется асинхронно
         
-        cur.close()
-        conn.close()
+        # ⚠️ НЕ закрываем подключение здесь - оно нам понадобится после генерации!
         
         result = auto_generate_new_words(student_id, how_many=10)
         
@@ -618,7 +617,7 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
             except Exception as e:
                 print(f"[ERROR] Failed to send notification: {e}")
             
-            # ⚠️ FIX: Инициализируем прогресс для новых слов (используем текущее подключение)
+            # ⚠️ FIX: Инициализируем прогресс для новых слов (используем СУЩЕСТВУЮЩЕЕ подключение)
             # Инициализируем прогресс для только что добавленных слов
             cur.execute(
                 f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
