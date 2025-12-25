@@ -14,35 +14,23 @@ SCHEMA = 't_p86463701_eloquent_school_site'
 
 # Тарифные планы подписки
 SUBSCRIPTION_PLANS = {
-    'trial': {
-        'name': '🎁 Пробный период',
-        'description': '7 дней бесплатно',
-        'price_rub': 0,
-        'days': 7
-    },
-    'month': {
-        'name': '📅 Месяц',
-        'description': '30 дней доступа ко всем функциям',
+    'basic': {
+        'name': '💬 Базовый',
+        'description': '• Диалог с Аней\n• Предложения, Контекст, Ассоциации, Перевод\n• Персональный словарь\n• Отслеживание прогресса',
         'price_rub': 600,
         'days': 30
     },
-    '3month': {
-        'name': '📦 3 месяца',
-        'description': '90 дней — экономия 30%',
-        'price_rub': 1260,
-        'days': 90
+    'premium': {
+        'name': '🎤 Премиум',
+        'description': '• Голосовой режим с Аней\n• Аня отвечает голосом',
+        'price_rub': 800,
+        'days': 30
     },
-    '6month': {
-        'name': '🎯 Полгода',
-        'description': '180 дней — экономия 45%',
-        'price_rub': 1980,
-        'days': 180
-    },
-    'year': {
-        'name': '🏆 Год',
-        'description': '365 дней — максимальная выгода!',
-        'price_rub': 3600,
-        'days': 365
+    'bundle': {
+        'name': '🔥 Всё сразу',
+        'description': '• Все режимы Базового\n• Голосовой режим\n• Скидка 15%',
+        'price_rub': 1190,
+        'days': 30
     }
 }
 
@@ -3938,24 +3926,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 # КРИТИЧНО: Понятное сообщение почему бот не отвечает
                 text_sub = (
-                    "❌ <b>Нет активной подписки</b>\n\n"
-                    "Привет! Я Аня, твой English-бот 👋\n\n"
-                    "Чтобы начать практиковать английский, выбери тариф:\n\n"
+                    "🔒 <b>Подписка истекла</b>\n\n"
+                    "Твой доступ к AnyaGPT закончился, но ты можешь продолжить обучение прямо сейчас!\n\n"
+                    "Выбери свой тариф:\n\n"
                 )
                 
-                # Добавляем пробный период только если не использован
-                inline_buttons = []
-                if not trial_used:
-                    trial_plan = SUBSCRIPTION_PLANS['trial']
-                    text_sub += f"{trial_plan['name']}\n{trial_plan['description']}\n\n"
-                    inline_buttons.append([{'text': trial_plan['name'], 'callback_data': 'subscribe_trial'}])
-                
                 # Добавляем платные тарифы
-                for key in ['month', '3month', '6month', 'year']:
+                inline_buttons = []
+                for key in ['basic', 'premium', 'bundle']:
                     plan = SUBSCRIPTION_PLANS[key]
-                    text_sub += f"{plan['name']} — {plan['price_rub']}₽\n"
+                    text_sub += f"{plan['name']} — {plan['price_rub']}₽/мес\n"
                     text_sub += f"{plan['description']}\n\n"
-                    inline_buttons.append([{'text': f"{plan['name']} — {plan['price_rub']}₽", 'callback_data': f'subscribe_{key}'}])
+                    inline_buttons.append([{'text': f"{plan['name']} — {plan['price_rub']}₽/мес", 'callback_data': f'subscribe_{key}'}])
                 
                 keyboard_sub = {
                     'inline_keyboard': inline_buttons
