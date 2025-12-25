@@ -2252,13 +2252,25 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         elif action == 'get_financial_analytics':
-            analytics = get_financial_analytics()
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'success': True, 'analytics': analytics}),
-                'isBase64Encoded': False
-            }
+            try:
+                analytics = get_financial_analytics()
+                print(f"[DEBUG] Analytics data: {analytics}")
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True, 'analytics': analytics}),
+                    'isBase64Encoded': False
+                }
+            except Exception as e:
+                print(f"[ERROR] Failed to get financial analytics: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': False, 'error': str(e)}),
+                    'isBase64Encoded': False
+                }
         
         elif action == 'get_categories':
             categories = get_all_categories()
