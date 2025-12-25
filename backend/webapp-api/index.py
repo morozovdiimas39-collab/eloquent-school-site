@@ -2253,8 +2253,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         elif action == 'get_financial_analytics':
             try:
+                print("[INFO] Loading financial analytics...")
                 analytics = get_financial_analytics()
-                print(f"[DEBUG] Analytics data: {analytics}")
+                print(f"[SUCCESS] Analytics loaded: {analytics}")
                 return {
                     'statusCode': 200,
                     'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
