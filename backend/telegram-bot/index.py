@@ -3847,21 +3847,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 conn = get_db_connection()
                 cur = conn.cursor()
                 
-                # Получаем текущую дату окончания подписки
-                cur.execute(
-                    f"SELECT subscription_expires_at FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}"
-                )
-                row = cur.fetchone()
-                current_expires = row[0] if row and row[0] else None
-                
-                # Вычисляем новую дату окончания
+                # ⚠️ CRITICAL: Новая подписка ВСЕГДА начинается с текущего момента
+                # НЕ продлеваем старую подписку, а ЗАМЕНЯЕМ её на новую
                 now = datetime.now()
-                if current_expires and current_expires > now:
-                    # Продлеваем от текущей даты окончания
-                    new_expires = current_expires + timedelta(days=duration_days)
-                else:
-                    # Начинаем с текущего момента
-                    new_expires = now + timedelta(days=duration_days)
+                new_expires = now + timedelta(days=duration_days)
                 
                 # Обновляем подписку пользователя
                 cur.execute(
