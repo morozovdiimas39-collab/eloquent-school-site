@@ -27,29 +27,29 @@ export default function Pricing() {
         { text: 'Все типы упражнений', icon: 'Layers', included: true },
         { text: 'Предложения, контекст, ассоциации', icon: 'Brain', included: true },
         { text: 'Перевод и проверка', icon: 'Languages', included: true },
-        { text: 'Голосовые сообщения', icon: 'Mic', included: true },
-        { text: 'Отслеживание прогресса', icon: 'TrendingUp', included: true }
+        { text: 'Отслеживание прогресса', icon: 'TrendingUp', included: true },
+        { text: 'Голосовые сообщения', icon: 'Mic', included: false }
       ],
       badge: 'Популярный',
       buttonText: 'Выбрать тариф'
     },
     {
       id: 'dialog',
-      name: 'Только Диалог',
-      price: 900,
+      name: 'Голосовой режим',
+      price: 800,
       period: 'в месяц',
-      description: 'Практика общения с AI',
-      icon: 'MessageSquare',
+      description: 'Практика разговорного английского',
+      icon: 'Mic',
       color: 'from-purple-600 to-pink-600',
       borderColor: 'border-purple-500',
       ringColor: 'ring-purple-500/20',
       features: [
-        { text: 'Безлимитный диалог с Аней', icon: 'Infinity', included: true },
-        { text: 'Голосовые сообщения', icon: 'Mic', included: true },
-        { text: 'Исправление ошибок', icon: 'CheckCircle2', included: true },
+        { text: 'Голосовые сообщения с Аней', icon: 'Mic', included: true },
+        { text: 'Распознавание речи', icon: 'AudioLines', included: true },
+        { text: 'Исправление произношения', icon: 'CheckCircle2', included: true },
         { text: 'Персонализация под цели', icon: 'Target', included: true },
         { text: 'Упражнения', icon: 'BookOpen', included: false },
-        { text: 'Тесты на закрепление', icon: 'ClipboardCheck', included: false }
+        { text: 'Текстовый диалог', icon: 'MessageSquare', included: false }
       ],
       badge: null,
       buttonText: 'Выбрать тариф'
