@@ -4322,6 +4322,61 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 '🇷🇺→🇬🇧 Перевод': 'translation'
             }
             mode = mode_map[text]
+            
+            # ⚠️ CRITICAL: Проверяем подписку для голосового режима
+            if mode == 'voice':
+                # Проверяем активную подписку premium или bundle
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    f"SELECT period FROM {SCHEMA}.subscription_payments "
+                    f"WHERE telegram_id = {user['id']} "
+                    f"AND status = 'paid' "
+                    f"AND expires_at > CURRENT_TIMESTAMP "
+                    f"ORDER BY expires_at DESC LIMIT 1"
+                )
+                subscription_row = cur.fetchone()
+                cur.close()
+                conn.close()
+                
+                subscription_type = subscription_row[0] if subscription_row else None
+                
+                # Если подписка НЕ premium и НЕ bundle - запрещаем голосовой режим
+                if subscription_type not in ['premium', 'bundle']:
+                    plans = get_subscription_plans()
+                    
+                    message = "🔒 Голосовой режим доступен только в тарифах:\n\n"
+                    
+                    if 'premium' in plans:
+                        premium = plans['premium']
+                        message += f"🎤 {premium['name']} — {premium['price_rub']}₽/мес\n{premium['description']}\n\n"
+                    
+                    if 'bundle' in plans:
+                        bundle = plans['bundle']
+                        message += f"🔥 {bundle['name']} — {bundle['price_rub']}₽/мес\n{bundle['description']}\n\n"
+                    
+                    message += "Выбери тариф чтобы активировать голосовой режим! 🎙️"
+                    
+                    keyboard = {
+                        'inline_keyboard': []
+                    }
+                    
+                    if 'premium' in plans:
+                        keyboard['inline_keyboard'].append([
+                            {'text': f"🎤 {plans['premium']['name']} — {plans['premium']['price_rub']}₽/мес", 'callback_data': 'subscribe_premium'}
+                        ])
+                    
+                    if 'bundle' in plans:
+                        keyboard['inline_keyboard'].append([
+                            {'text': f"🔥 {plans['bundle']['name']} — {plans['bundle']['price_rub']}₽/мес", 'callback_data': 'subscribe_bundle'}
+                        ])
+                    
+                    send_telegram_message(chat_id, message, reply_markup=keyboard, parse_mode=None)
+                    return {
+                        'statusCode': 200,
+                        'body': json.dumps({'status': 'voice_mode_requires_subscription'})
+                    }
+            
             update_conversation_mode(user['id'], mode)
             
             mode_messages = {
