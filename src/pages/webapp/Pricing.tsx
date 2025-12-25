@@ -13,43 +13,43 @@ export default function Pricing() {
 
   const plans = [
     {
-      id: 'exercises',
-      name: 'Упражнения + Диалог',
+      id: 'basic',
+      name: 'Базовый',
       price: 600,
       period: 'в месяц',
-      description: 'Полная программа обучения',
-      icon: 'BookOpen',
+      description: 'Диалог с Аней + упражнения',
+      icon: 'MessageCircle',
       color: 'from-blue-600 to-cyan-600',
       borderColor: 'border-blue-500',
       ringColor: 'ring-blue-500/20',
       features: [
-        { text: 'Диалог с Аней без ограничений', icon: 'MessageCircle', included: true },
-        { text: 'Все типы упражнений', icon: 'Layers', included: true },
-        { text: 'Предложения, контекст, ассоциации', icon: 'Brain', included: true },
-        { text: 'Перевод и проверка', icon: 'Languages', included: true },
+        { text: 'Диалог с Аней', icon: 'MessageCircle', included: true },
+        { text: 'Предложения, Контекст, Ассоциации, Перевод', icon: 'Brain', included: true },
+        { text: 'Персональный словарь', icon: 'BookOpen', included: true },
         { text: 'Отслеживание прогресса', icon: 'TrendingUp', included: true },
-        { text: 'Голосовые сообщения', icon: 'Mic', included: false }
+        { text: 'Голосовой режим', icon: 'Mic', included: false },
+        { text: 'Аня отвечает голосом', icon: 'AudioLines', included: false }
       ],
       badge: 'Популярный',
       buttonText: 'Выбрать тариф'
     },
     {
-      id: 'dialog',
-      name: 'Голосовой режим',
+      id: 'premium',
+      name: 'Премиум',
       price: 800,
       period: 'в месяц',
-      description: 'Практика разговорного английского',
+      description: 'Голосовой режим с Аней',
       icon: 'Mic',
       color: 'from-purple-600 to-pink-600',
       borderColor: 'border-purple-500',
       ringColor: 'ring-purple-500/20',
       features: [
-        { text: 'Голосовые сообщения с Аней', icon: 'Mic', included: true },
-        { text: 'Распознавание речи', icon: 'AudioLines', included: true },
+        { text: 'Голосовой режим с Аней', icon: 'Mic', included: true },
+        { text: 'Аня отвечает голосом', icon: 'AudioLines', included: true },
+        { text: 'Распознавание речи', icon: 'Volume2', included: true },
         { text: 'Исправление произношения', icon: 'CheckCircle2', included: true },
-        { text: 'Персонализация под цели', icon: 'Target', included: true },
-        { text: 'Упражнения', icon: 'BookOpen', included: false },
-        { text: 'Текстовый диалог', icon: 'MessageSquare', included: false }
+        { text: 'Диалог и упражнения', icon: 'MessageCircle', included: false },
+        { text: 'Персональный словарь', icon: 'BookOpen', included: false }
       ],
       badge: null,
       buttonText: 'Выбрать тариф'
