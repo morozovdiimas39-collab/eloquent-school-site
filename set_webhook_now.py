@@ -3,14 +3,14 @@ import os
 import json
 import urllib.request
 
-TOKEN = "8586405236:AAGV5dBBXYLcB7yGxRpyD-0oH4IvLzFnIqc"
+TOKEN = "8586405236:AAGSeZXHACvWk5u5DNgL95fMzvij-wbVASc"
 WEBHOOK_URL = "https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7"
 
 # Set webhook
 url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"
 payload = {
     "url": WEBHOOK_URL,
-    "allowed_updates": ["message", "callback_query", "pre_checkout_query"]
+    "allowed_updates": ["message", "callback_query", "pre_checkout_query", "successful_payment"]
 }
 
 req = urllib.request.Request(

@@ -1,4 +1,5 @@
 {
+  "set-webhook": "https://functions.poehali.dev/ddeca1b2-960d-4f0d-9c23-aaaf307f8143",
   "subscription-check": "https://functions.poehali.dev/33389d64-90f0-472c-be3d-92db4dee9b5f",
   "practice-scheduler": "https://functions.poehali.dev/8383a432-6a50-4dac-be77-452ec80e326c",
   "webapp-api": "https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4",
