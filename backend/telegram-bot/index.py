@@ -3104,10 +3104,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         else:
                             url = f'https://api.telegram.org/bot{token}/sendInvoice'
                             
+                            # Убираем \n из описания (они уже есть как реальные переносы)
+                            clean_description = plan['description'].replace('\\n', '\n')
+                            
                             invoice_payload = {
                                 'chat_id': chat_id,
                                 'title': plan['name'],
-                                'description': plan['description'],
+                                'description': clean_description,
                                 'payload': json.dumps({
                                     'telegram_id': user['id'],
                                     'plan': plan_key,
@@ -3120,6 +3123,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                     'amount': plan['price_kop']
                                 }]
                             }
+                            
+                            print(f"[DEBUG] Sending invoice: price_kop={plan['price_kop']}, price_rub={plan['price_rub']}")
+                            print(f"[DEBUG] Invoice payload: {json.dumps(invoice_payload, ensure_ascii=False)[:500]}")
                             
                             req = urllib.request.Request(
                                 url,
@@ -3135,6 +3141,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                         chat_id,
                                         '❌ Не удалось создать платёж. Попробуй позже или обратись @admin_anya_gpt'
                                     )
+                    except urllib.error.HTTPError as e:
+                        error_body = e.read().decode('utf-8') if e.fp else 'no body'
+                        print(f"[ERROR] Failed to send invoice - HTTP {e.code}: {error_body}")
+                        import traceback
+                        traceback.print_exc()
+                        send_telegram_message(
+                            chat_id,
+                            f'❌ Ошибка при создании платежа (HTTP {e.code}). Попробуй позже или обратись @admin_anya_gpt'
+                        )
                     except Exception as e:
                         print(f"[ERROR] Failed to send invoice: {e}")
                         import traceback
