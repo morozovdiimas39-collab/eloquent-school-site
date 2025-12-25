@@ -12,30 +12,58 @@ from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
-# Тарифные планы подписки
-SUBSCRIPTION_PLANS = {
-    'basic': {
-        'name': '💬 Базовый',
-        'description': '• Диалог с Аней\n• Предложения, Контекст, Ассоциации, Перевод\n• Персональный словарь\n• Отслеживание прогресса',
-        'price_rub': 600,
-        'price_kop': 60000,
-        'duration_days': 30
-    },
-    'premium': {
-        'name': '🎤 Премиум',
-        'description': '• Голосовой режим с Аней\n• Аня отвечает голосом',
-        'price_rub': 800,
-        'price_kop': 80000,
-        'duration_days': 30
-    },
-    'bundle': {
-        'name': '🔥 Всё сразу',
-        'description': '• Все режимы Базового\n• Голосовой режим\n• Скидка 15%',
-        'price_rub': 1190,
-        'price_kop': 119000,
-        'duration_days': 30
-    }
-}
+def get_subscription_plans() -> dict:
+    """Загружает актуальные тарифные планы из БД"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            f"SELECT plan_key, name, description, price_rub, price_kop, duration_days "
+            f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
+        )
+        
+        plans = {}
+        for row in cur.fetchall():
+            plans[row[0]] = {
+                'name': row[1],
+                'description': row[2],
+                'price_rub': row[3],
+                'price_kop': row[4],
+                'duration_days': row[5]
+            }
+        
+        cur.close()
+        conn.close()
+        
+        print(f"[DEBUG] Loaded {len(plans)} pricing plans from DB")
+        return plans
+    except Exception as e:
+        print(f"[ERROR] Failed to load pricing plans from DB: {e}")
+        # Fallback на дефолтные цены если БД недоступна
+        return {
+            'basic': {
+                'name': '💬 Базовый',
+                'description': '• Диалог с Аней\n• Предложения, Контекст, Ассоциации, Перевод\n• Персональный словарь\n• Отслеживание прогресса',
+                'price_rub': 600,
+                'price_kop': 60000,
+                'duration_days': 30
+            },
+            'premium': {
+                'name': '🎤 Премиум',
+                'description': '• Голосовой режим с Аней\n• Аня отвечает голосом',
+                'price_rub': 800,
+                'price_kop': 80000,
+                'duration_days': 30
+            },
+            'bundle': {
+                'name': '🔥 Всё сразу',
+                'description': '• Все режимы Базового\n• Голосовой режим\n• Скидка 15%',
+                'price_rub': 1190,
+                'price_kop': 119000,
+                'duration_days': 30
+            }
+        }
 
 # Глобальный кэш для оптимизации ensure_user_has_words (живет только в рамках одного запроса)
 _words_ensured_cache = {}
@@ -3055,6 +3083,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Обработка выбора тарифа подписки через ЮKassa
                 plan_key = data.replace('subscribe_', '')
                 
+                # Загружаем актуальные цены из БД
+                SUBSCRIPTION_PLANS = get_subscription_plans()
+                
                 if plan_key not in SUBSCRIPTION_PLANS:
                     send_telegram_message(chat_id, '❌ Неизвестный тариф')
                 else:
@@ -3935,6 +3966,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 
                 # Добавляем платные тарифы
+                SUBSCRIPTION_PLANS = get_subscription_plans()
                 inline_buttons = []
                 for key in ['basic', 'premium', 'bundle']:
                     plan = SUBSCRIPTION_PLANS[key]
