@@ -1106,104 +1106,62 @@ def delete_word(word_id: int) -> bool:
     return True
 
 def get_pricing_plans() -> List[Dict[str, Any]]:
-    """Получает тарифные планы из бэкенда telegram-bot"""
-    # Импортируем SUBSCRIPTION_PLANS из telegram-bot
-    # Так как мы не можем импортировать напрямую, читаем из файла
-    import sys
-    import os
+    """Получает тарифные планы из БД"""
+    conn = get_db_connection()
+    cur = conn.cursor()
     
-    # Добавляем путь к telegram-bot
-    bot_path = os.path.join(os.path.dirname(__file__), '..', 'telegram-bot')
-    if bot_path not in sys.path:
-        sys.path.insert(0, bot_path)
+    cur.execute(
+        f"SELECT plan_key, name, description, price_rub, duration_days "
+        f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
+    )
     
-    try:
-        from index import SUBSCRIPTION_PLANS
-        
-        plans = []
-        for key, plan in SUBSCRIPTION_PLANS.items():
-            plans.append({
-                'key': key,
-                'name': plan['name'],
-                'description': plan['description'],
-                'price_rub': plan['price_rub'],
-                'duration_days': plan['duration_days']
-            })
-        return plans
-    except Exception as e:
-        print(f"Error loading pricing plans: {e}")
-        return []
+    plans = []
+    for row in cur.fetchall():
+        plans.append({
+            'key': row[0],
+            'name': row[1],
+            'description': row[2],
+            'price_rub': row[3],
+            'duration_days': row[4]
+        })
+    
+    cur.close()
+    conn.close()
+    return plans
 
 def update_pricing_plan(plan: Dict[str, Any]) -> bool:
-    """Обновляет тарифный план в файле telegram-bot/index.py"""
-    import os
-    
-    bot_index_path = os.path.join(os.path.dirname(__file__), '..', 'telegram-bot', 'index.py')
+    """Обновляет тарифный план в БД"""
+    conn = get_db_connection()
+    cur = conn.cursor()
     
     try:
-        # Читаем файл
-        with open(bot_index_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        plan_key = plan['key'].replace("'", "''")
+        name = plan['name'].replace("'", "''")
+        description = plan['description'].replace("'", "''")
+        price_rub = int(plan['price_rub'])
+        price_kop = price_rub * 100
+        duration_days = int(plan['duration_days'])
         
-        # Ищем блок SUBSCRIPTION_PLANS
-        start_marker = "SUBSCRIPTION_PLANS = {"
-        end_marker = "}"
+        cur.execute(
+            f"UPDATE {SCHEMA}.pricing_plans SET "
+            f"name = '{name}', "
+            f"description = '{description}', "
+            f"price_rub = {price_rub}, "
+            f"price_kop = {price_kop}, "
+            f"duration_days = {duration_days}, "
+            f"updated_at = CURRENT_TIMESTAMP "
+            f"WHERE plan_key = '{plan_key}'"
+        )
         
-        start_idx = content.find(start_marker)
-        if start_idx == -1:
-            return False
-        
-        # Находим конец словаря
-        bracket_count = 0
-        idx = start_idx + len(start_marker) - 1
-        while idx < len(content):
-            if content[idx] == '{':
-                bracket_count += 1
-            elif content[idx] == '}':
-                bracket_count -= 1
-                if bracket_count == 0:
-                    end_idx = idx + 1
-                    break
-            idx += 1
-        
-        # Парсим текущий SUBSCRIPTION_PLANS
-        import re
-        
-        # Обновляем значения для конкретного плана
-        plan_key = plan['key']
-        
-        # Находим блок нужного плана
-        plan_pattern = rf"'{plan_key}':\s*{{[^}}]*}}"
-        plan_match = re.search(plan_pattern, content[start_idx:end_idx], re.DOTALL)
-        
-        if plan_match:
-            old_plan_text = plan_match.group()
-            
-            # Формируем новый текст плана
-            price_kop = plan['price_rub'] * 100
-            description_escaped = plan['description'].replace('\n', '\\n').replace("'", "\\'")
-            new_plan_text = f"""'{plan_key}': {{
-        'name': '{plan['name']}',
-        'description': '{description_escaped}',
-        'price_rub': {plan['price_rub']},
-        'price_kop': {price_kop},
-        'duration_days': {plan['duration_days']}
-    }}"""
-            
-            # Заменяем в content
-            content = content[:start_idx + plan_match.start()] + new_plan_text + content[start_idx + plan_match.end():]
-            
-            # Записываем обратно
-            with open(bot_index_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            return True
-        
-        return False
+        cur.close()
+        conn.close()
+        return True
     except Exception as e:
         print(f"Error updating pricing plan: {e}")
         import traceback
         traceback.print_exc()
+        cur.close()
+        conn.close()
         return False
 
 def get_all_words() -> List[Dict[str, Any]]:
