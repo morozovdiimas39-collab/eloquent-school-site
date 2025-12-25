@@ -2865,7 +2865,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'url': webhook_url,
                 'drop_pending_updates': True,
                 'max_connections': 40,
-                'allowed_updates': ['message', 'callback_query', 'my_chat_member']
+                'allowed_updates': ['message', 'callback_query', 'my_chat_member', 'pre_checkout_query', 'successful_payment']
             }).encode('utf-8')
             
             req = urllib.request.Request(
@@ -3027,26 +3027,66 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         send_telegram_message(chat_id, '❌ Ошибка запуска теста. Попробуй /start')
             
             elif data.startswith('subscribe_'):
-                # Обработка выбора тарифа подписки
-                tariff = data.replace('subscribe_', '')
+                # Обработка выбора тарифа подписки через ЮKassa
+                plan_key = data.replace('subscribe_', '')
                 
-                if tariff == 'basic':
-                    price = '600₽'
-                elif tariff == 'premium':
-                    price = '900₽'
-                elif tariff == 'all':
-                    price = '1275₽'
+                if plan_key not in SUBSCRIPTION_PLANS:
+                    send_telegram_message(chat_id, '❌ Неизвестный тариф')
                 else:
-                    price = '???'
-                
-                payment_text = (
-                    f"<b>Оплата тарифа {price}</b>\n\n"
-                    "Для оплаты свяжитесь с администратором:\n"
-                    "@admin_anya_gpt\n\n"
-                    "После оплаты доступ откроется автоматически! 🚀"
-                )
-                
-                send_telegram_message(chat_id, payment_text)
+                    plan = SUBSCRIPTION_PLANS[plan_key]
+                    
+                    # Отправляем инвойс через Telegram Payments API
+                    try:
+                        token = os.environ['TELEGRAM_BOT_TOKEN']
+                        payment_token = os.environ.get('YOOKASSA_PAYMENT_TOKEN')
+                        
+                        if not payment_token:
+                            send_telegram_message(
+                                chat_id,
+                                '❌ Оплата временно недоступна. Обратитесь к администратору @admin_anya_gpt'
+                            )
+                        else:
+                            url = f'https://api.telegram.org/bot{token}/sendInvoice'
+                            
+                            invoice_payload = {
+                                'chat_id': chat_id,
+                                'title': plan['name'],
+                                'description': plan['description'],
+                                'payload': json.dumps({
+                                    'telegram_id': user['id'],
+                                    'plan': plan_key,
+                                    'duration_days': plan['duration_days']
+                                }),
+                                'provider_token': payment_token,
+                                'currency': 'RUB',
+                                'prices': [{
+                                    'label': plan['name'],
+                                    'amount': plan['price_kop']
+                                }]
+                            }
+                            
+                            req = urllib.request.Request(
+                                url,
+                                data=json.dumps(invoice_payload).encode('utf-8'),
+                                headers={'Content-Type': 'application/json'}
+                            )
+                            
+                            with urllib.request.urlopen(req) as response:
+                                result = json.loads(response.read().decode('utf-8'))
+                                if not result.get('ok'):
+                                    print(f"[ERROR] sendInvoice failed: {result}")
+                                    send_telegram_message(
+                                        chat_id,
+                                        '❌ Не удалось создать платёж. Попробуй позже или обратись @admin_anya_gpt'
+                                    )
+                    except Exception as e:
+                        print(f"[ERROR] Failed to send invoice: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        send_telegram_message(
+                            chat_id,
+                            '❌ Ошибка при создании платежа. Попробуй позже или обратись @admin_anya_gpt'
+                        )
             
             elif data.startswith('learning_mode_'):
                 # Обработка выбора режима обучения (НОВЫЙ ШАГ)
@@ -3670,6 +3710,131 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
+        # Обработка pre_checkout_query
+        if 'pre_checkout_query' in body:
+            pre_checkout = body['pre_checkout_query']
+            query_id = pre_checkout['id']
+            
+            # Всегда подтверждаем (валидация уже была при создании инвойса)
+            try:
+                token = os.environ['TELEGRAM_BOT_TOKEN']
+                url = f'https://api.telegram.org/bot{token}/answerPreCheckoutQuery'
+                
+                answer_payload = {
+                    'pre_checkout_query_id': query_id,
+                    'ok': True
+                }
+                
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(answer_payload).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'}
+                )
+                
+                with urllib.request.urlopen(req) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+                    print(f"[DEBUG] answerPreCheckoutQuery: {result}")
+            except Exception as e:
+                print(f"[ERROR] Failed to answer pre_checkout_query: {e}")
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True}),
+                'isBase64Encoded': False
+            }
+        
+        # Обработка successful_payment
+        if 'message' in body and 'successful_payment' in body['message']:
+            message = body['message']
+            payment = message['successful_payment']
+            user = message.get('from', {})
+            chat_id = message['chat']['id']
+            
+            # Парсим payload
+            try:
+                payload_data = json.loads(payment['invoice_payload'])
+                telegram_id = payload_data['telegram_id']
+                plan_key = payload_data['plan']
+                duration_days = payload_data['duration_days']
+                
+                # Сохраняем платёж в БД
+                from datetime import datetime, timedelta
+                
+                conn = get_db_connection()
+                cur = conn.cursor()
+                
+                # Получаем текущую дату окончания подписки
+                cur.execute(
+                    f"SELECT subscription_expires_at FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}"
+                )
+                row = cur.fetchone()
+                current_expires = row[0] if row and row[0] else None
+                
+                # Вычисляем новую дату окончания
+                now = datetime.now()
+                if current_expires and current_expires > now:
+                    # Продлеваем от текущей даты окончания
+                    new_expires = current_expires + timedelta(days=duration_days)
+                else:
+                    # Начинаем с текущего момента
+                    new_expires = now + timedelta(days=duration_days)
+                
+                # Обновляем подписку пользователя
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET "
+                    f"subscription_status = 'active', "
+                    f"subscription_expires_at = '{new_expires.isoformat()}', "
+                    f"trial_used = TRUE "
+                    f"WHERE telegram_id = {telegram_id}"
+                )
+                
+                # Сохраняем запись о платеже
+                plan = SUBSCRIPTION_PLANS[plan_key]
+                amount = payment['total_amount'] / 100  # Копейки в рубли
+                
+                cur.execute(
+                    f"INSERT INTO {SCHEMA}.subscription_payments "
+                    f"(telegram_id, amount, currency, period, status, "
+                    f"provider_payment_id, telegram_payment_charge_id, paid_at, expires_at) "
+                    f"VALUES ({telegram_id}, {amount}, 'RUB', '{plan_key}', 'paid', "
+                    f"'{payment.get('provider_payment_charge_id', '')}', "
+                    f"'{payment.get('telegram_payment_charge_id', '')}', "
+                    f"CURRENT_TIMESTAMP, '{new_expires.isoformat()}')"
+                )
+                
+                cur.close()
+                conn.close()
+                
+                # Отправляем подтверждение
+                success_message = (
+                    f"✅ <b>Оплата прошла успешно!</b>\n\n"
+                    f"Подписка активирована до: {new_expires.strftime('%d.%m.%Y')}\n\n"
+                    f"Теперь у тебя полный доступ ко всем функциям бота! 🚀\n\n"
+                    f"Начни практиковаться прямо сейчас!"
+                )
+                
+                send_telegram_message(chat_id, success_message, get_reply_keyboard())
+                
+                print(f"[SUCCESS] Subscription activated for user {telegram_id} until {new_expires}")
+                
+            except Exception as e:
+                print(f"[ERROR] Failed to process successful_payment: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                send_telegram_message(
+                    chat_id,
+                    '✅ Платёж получен, но возникла ошибка активации. Обратитесь к @admin_anya_gpt'
+                )
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True}),
+                'isBase64Encoded': False
+            }
+        
         # Обработка обычных сообщений
         if 'message' not in body:
             return {
@@ -3713,33 +3878,42 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     else:
                         has_subscription = True
             
-            # Если подписки нет - отправляем сообщение с картинкой
+            # Если подписки нет - отправляем сообщение с тарифами
             if not has_subscription:
+                # Проверяем использовал ли пользователь trial
+                trial_used = False
+                if row:
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(f"SELECT trial_used FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    trial_row = cur.fetchone()
+                    trial_used = trial_row[0] if trial_row and trial_row[0] else False
+                    cur.close()
+                    conn.close()
+                
                 text_sub = (
                     "🔒 <b>Подписка истекла</b>\n\n"
                     "Твой доступ к AnyaGPT закончился, но ты можешь продолжить "
                     "обучение прямо сейчас!\n\n"
                     "<b>Выбери свой тариф:</b>\n\n"
-                    "💬 <b>Базовый — 600₽/мес</b>\n"
-                    "• Диалог с Аней\n"
-                    "• Предложения, Контекст, Ассоциации, Перевод\n"
-                    "• Персональный словарь\n"
-                    "• Отслеживание прогресса\n\n"
-                    "🎤 <b>Премиум — 900₽/мес</b>\n"
-                    "• Голосовой режим с Аней\n"
-                    "• Аня отвечает голосом\n\n"
-                    "🔥 <b>Всё сразу — 1275₽/мес</b>\n"
-                    "• Все режимы Базового\n"
-                    "• Голосовой режим\n"
-                    "• Скидка 15%"
                 )
                 
+                # Добавляем пробный период только если не использован
+                inline_buttons = []
+                if not trial_used:
+                    trial_plan = SUBSCRIPTION_PLANS['trial']
+                    text_sub += f"{trial_plan['name']}\n{trial_plan['description']}\n\n"
+                    inline_buttons.append([{'text': trial_plan['name'], 'callback_data': 'subscribe_trial'}])
+                
+                # Добавляем платные тарифы
+                for key in ['month', '3month', '6month', 'year']:
+                    plan = SUBSCRIPTION_PLANS[key]
+                    text_sub += f"{plan['name']} — {plan['price_rub']}₽\n"
+                    text_sub += f"{plan['description']}\n\n"
+                    inline_buttons.append([{'text': f"{plan['name']} — {plan['price_rub']}₽", 'callback_data': f'subscribe_{key}'}])
+                
                 keyboard_sub = {
-                    'inline_keyboard': [
-                        [{'text': '💬 Базовый — 600₽/мес', 'callback_data': 'subscribe_basic'}],
-                        [{'text': '🎤 Премиум — 900₽/мес', 'callback_data': 'subscribe_premium'}],
-                        [{'text': '🔥 Всё сразу со скидкой 15% — 1275₽/мес', 'callback_data': 'subscribe_all'}]
-                    ]
+                    'inline_keyboard': inline_buttons
                 }
                 
                 try:
