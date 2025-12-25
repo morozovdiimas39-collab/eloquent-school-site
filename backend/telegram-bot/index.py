@@ -3766,6 +3766,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             pre_checkout = body['pre_checkout_query']
             query_id = pre_checkout['id']
             
+            print(f"[DEBUG PAYMENT] Received pre_checkout_query: {pre_checkout}")
+            
             # Всегда подтверждаем (валидация уже была при создании инвойса)
             try:
                 token = os.environ['TELEGRAM_BOT_TOKEN']
@@ -3784,9 +3786,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 with urllib.request.urlopen(req) as response:
                     result = json.loads(response.read().decode('utf-8'))
-                    print(f"[DEBUG] answerPreCheckoutQuery: {result}")
+                    print(f"[DEBUG PAYMENT] answerPreCheckoutQuery response: {result}")
             except Exception as e:
-                print(f"[ERROR] Failed to answer pre_checkout_query: {e}")
+                print(f"[ERROR PAYMENT] Failed to answer pre_checkout_query: {e}")
+                import traceback
+                traceback.print_exc()
             
             return {
                 'statusCode': 200,
@@ -3801,6 +3805,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             payment = message['successful_payment']
             user = message.get('from', {})
             chat_id = message['chat']['id']
+            
+            print(f"[DEBUG PAYMENT] Received successful_payment: {payment}")
             
             # Парсим payload
             try:
