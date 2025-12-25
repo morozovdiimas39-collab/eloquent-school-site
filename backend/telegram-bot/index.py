@@ -3924,68 +3924,60 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         voice = message.get('voice')
         sticker = message.get('sticker')
         
-        # ПРОВЕРКА ПОДПИСКИ - блокируем всё кроме /start
+        # ⚠️ НОВАЯ ЛОГИКА: Проверяем подписку для базовых функций
+        # basic → базовые функции (диалог, упражнения)
+        # premium → ТОЛЬКО голосовой режим
+        # bundle → всё (базовые + голосовой)
         if text != '/start':
             from datetime import datetime
             conn = get_db_connection()
             cur = conn.cursor()
             
+            # Проверяем активную подписку (basic или bundle)
             cur.execute(
-                f"SELECT subscription_status, subscription_expires_at "
-                f"FROM {SCHEMA}.users WHERE telegram_id = {user['id']}"
+                f"SELECT period FROM {SCHEMA}.subscription_payments "
+                f"WHERE telegram_id = {user['id']} "
+                f"AND status = 'paid' "
+                f"AND expires_at > CURRENT_TIMESTAMP "
+                f"ORDER BY expires_at DESC LIMIT 1"
             )
-            row = cur.fetchone()
+            subscription_row = cur.fetchone()
             cur.close()
             conn.close()
             
-            print(f"[DEBUG SUBSCRIPTION CHECK] User {user['id']}, row: {row}")
+            subscription_type = subscription_row[0] if subscription_row else None
             
-            has_subscription = False
-            if row:
-                subscription_status = row[0]
-                subscription_expires_at = row[1]
-                
-                print(f"[DEBUG SUBSCRIPTION CHECK] status={subscription_status}, expires={subscription_expires_at}")
-                
-                # Проверяем активна ли подписка
-                if subscription_status == 'active':
-                    if subscription_expires_at:
-                        if subscription_expires_at > datetime.now():
-                            has_subscription = True
-                            print(f"[DEBUG SUBSCRIPTION CHECK] Subscription ACTIVE (expires in future)")
-                    else:
-                        has_subscription = True
-                        print(f"[DEBUG SUBSCRIPTION CHECK] Subscription ACTIVE (no expiration)")
-                else:
-                    print(f"[DEBUG SUBSCRIPTION CHECK] Subscription INACTIVE - status={subscription_status}")
+            print(f"[DEBUG SUBSCRIPTION CHECK] User {user['id']}, subscription_type: {subscription_type}")
             
-            print(f"[DEBUG SUBSCRIPTION CHECK] Final result: has_subscription={has_subscription}")
+            # ⚠️ CRITICAL: Проверяем есть ли доступ к БАЗОВЫМ функциям
+            # basic или bundle дают доступ к базовым функциям
+            # premium даёт доступ ТОЛЬКО к голосовому (не к базовым!)
+            has_basic_access = subscription_type in ['basic', 'bundle']
             
-            # Если подписки нет - ЯВНО сообщаем об этом и показываем тарифы
-            if not has_subscription:
+            print(f"[DEBUG SUBSCRIPTION CHECK] has_basic_access: {has_basic_access}")
+            
+            # Если нет доступа к базовым функциям - блокируем
+            if not has_basic_access:
                 print(f"[DEBUG SUBSCRIPTION CHECK] Sending subscription required message...")
-                # Проверяем использовал ли пользователь trial
-                trial_used = False
-                if row:
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(f"SELECT trial_used FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
-                    trial_row = cur.fetchone()
-                    trial_used = trial_row[0] if trial_row and trial_row[0] else False
-                    cur.close()
-                    conn.close()
                 
                 # КРИТИЧНО: Понятное сообщение почему бот не отвечает
-                text_sub = (
-                    "🔒 <b>Подписка истекла</b>\n\n"
-                    "Твой доступ к AnyaGPT закончился, но ты можешь продолжить обучение прямо сейчас!\n\n"
-                    "Выбери свой тариф:\n\n"
-                )
+                # Если у юзера premium (только голосовой) — предлагаем basic или bundle
+                if subscription_type == 'premium':
+                    text_sub = (
+                        "🔒 <b>Нужна подписка для базовых функций</b>\n\n"
+                        "У тебя активен только голосовой режим. Для доступа к диалогу и упражнениям нужен тариф Basic или Всё сразу:\n\n"
+                    )
+                else:
+                    text_sub = (
+                        "🔒 <b>Подписка истекла</b>\n\n"
+                        "Твой доступ к AnyaGPT закончился, но ты можешь продолжить обучение прямо сейчас!\n\n"
+                        "Выбери свой тариф:\n\n"
+                    )
                 
-                # Добавляем платные тарифы
+                # Добавляем платные тарифы (только basic и bundle для базовых функций)
                 SUBSCRIPTION_PLANS = get_subscription_plans()
                 inline_buttons = []
-                for key in ['basic', 'premium', 'bundle']:
+                for key in ['basic', 'bundle']:
                     plan = SUBSCRIPTION_PLANS[key]
                     text_sub += f"{plan['name']} — {plan['price_rub']}₽/мес\n"
                     text_sub += f"{plan['description']}\n\n"
