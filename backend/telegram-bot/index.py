@@ -3056,8 +3056,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Обработка выбора тарифа подписки через ЮKassa
                 plan_key = data.replace('subscribe_', '')
                 
+                print(f"[DEBUG PAYMENT] User {chat_id} clicked subscribe_{plan_key}")
+                
                 # Загружаем актуальные цены из БД
                 SUBSCRIPTION_PLANS = get_subscription_plans()
+                print(f"[DEBUG PAYMENT] Loaded plans: {SUBSCRIPTION_PLANS}")
                 
                 if plan_key not in SUBSCRIPTION_PLANS:
                     send_telegram_message(chat_id, '❌ Неизвестный тариф')
@@ -3097,8 +3100,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 }]
                             }
                             
-                            print(f"[DEBUG] Sending invoice: price_kop={plan['price_kop']}, price_rub={plan['price_rub']}")
-                            print(f"[DEBUG] Invoice payload: {json.dumps(invoice_payload, ensure_ascii=False)[:500]}")
+                            print(f"[DEBUG PAYMENT] Sending invoice: price_kop={plan['price_kop']}, price_rub={plan['price_rub']}")
+                            print(f"[DEBUG PAYMENT] provider_token length: {len(payment_token)}")
+                            print(f"[DEBUG PAYMENT] Invoice payload: {json.dumps(invoice_payload, ensure_ascii=False)[:500]}")
                             
                             req = urllib.request.Request(
                                 url,
@@ -3108,28 +3112,31 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             
                             with urllib.request.urlopen(req) as response:
                                 result = json.loads(response.read().decode('utf-8'))
+                                print(f"[DEBUG PAYMENT] sendInvoice response: {result}")
                                 if not result.get('ok'):
-                                    print(f"[ERROR] sendInvoice failed: {result}")
+                                    print(f"[ERROR PAYMENT] sendInvoice failed: {result}")
                                     send_telegram_message(
                                         chat_id,
                                         '❌ Не удалось создать платёж. Попробуй позже или обратись @admin_anya_gpt'
                                     )
+                                else:
+                                    print(f"[SUCCESS PAYMENT] Invoice sent successfully!")
                     except urllib.error.HTTPError as e:
                         error_body = e.read().decode('utf-8') if e.fp else 'no body'
-                        print(f"[ERROR] Failed to send invoice - HTTP {e.code}: {error_body}")
+                        print(f"[ERROR PAYMENT] Failed to send invoice - HTTP {e.code}: {error_body}")
                         import traceback
                         traceback.print_exc()
                         send_telegram_message(
                             chat_id,
-                            f'❌ Ошибка при создании платежа (HTTP {e.code}). Попробуй позже или обратись @admin_anya_gpt'
+                            f'❌ Ошибка при создании платежа (HTTP {e.code}): {error_body[:200]}. Попробуй позже или обратись @admin_anya_gpt'
                         )
                     except Exception as e:
-                        print(f"[ERROR] Failed to send invoice: {e}")
+                        print(f"[ERROR PAYMENT] Failed to send invoice: {e}")
                         import traceback
                         traceback.print_exc()
                         send_telegram_message(
                             chat_id,
-                            '❌ Ошибка при создании платежа. Попробуй позже или обратись @admin_anya_gpt'
+                            f'❌ Ошибка при создании платежа: {str(e)[:200]}. Попробуй позже или обратись @admin_anya_gpt'
                         )
             
             elif data.startswith('learning_mode_'):
