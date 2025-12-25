@@ -3929,6 +3929,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 
                 try:
                     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+                    print(f"[DEBUG SUB MSG] bot_token exists: {bool(bot_token)}")
+                    
                     if bot_token:
                         proxy_id, proxy_url = get_active_proxy_from_db()
                         proxies = None
@@ -3938,6 +3940,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 'https': f'http://{proxy_url}'
                             }
                         
+                        print(f"[DEBUG SUB MSG] Using proxy: {bool(proxy_url)}")
+                        
                         url_photo = f'https://api.telegram.org/bot{bot_token}/sendMessage'
                         payload_photo = {
                             'chat_id': chat_id,
@@ -3946,18 +3950,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             'reply_markup': keyboard_sub
                         }
                         
+                        print(f"[DEBUG SUB MSG] Sending to chat_id={chat_id}, text_length={len(text_sub)}, buttons={len(inline_buttons)}")
+                        
                         response = requests.post(url_photo, json=payload_photo, proxies=proxies, timeout=30)
                         
+                        print(f"[DEBUG SUB MSG] Response status: {response.status_code}")
+                        print(f"[DEBUG SUB MSG] Response body: {response.text[:500]}")
+                        
                         if response.status_code == 200:
+                            print(f"[DEBUG SUB MSG] Message sent successfully!")
                             if proxy_id:
                                 log_proxy_success(proxy_id)
                         else:
+                            print(f"[ERROR SUB MSG] Failed with status {response.status_code}")
                             if proxy_id:
                                 log_proxy_failure(proxy_id, f"HTTP {response.status_code}")
                 except Exception as e:
+                    print(f"[ERROR] Failed to send subscription message: {e}")
+                    import traceback
+                    traceback.print_exc()
                     if 'proxy_id' in locals() and proxy_id:
                         log_proxy_failure(proxy_id, str(e))
-                    print(f"[ERROR] Failed to send subscription message: {e}")
                 
                 return {
                     'statusCode': 200,
