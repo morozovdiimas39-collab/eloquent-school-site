@@ -834,6 +834,118 @@ def toggle_gemini_prompt(prompt_id: int, is_active: bool) -> bool:
     conn.close()
     return True
 
+def get_financial_analytics() -> Dict[str, Any]:
+    """Получает финансовую статистику проекта"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Общее количество пользователей
+    cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.users WHERE role = 'student'")
+    total_students = cur.fetchone()[0]
+    
+    # Активные подписки (basic)
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments "
+        f"WHERE period = 'basic' AND status = 'paid' AND expires_at > CURRENT_TIMESTAMP"
+    )
+    active_basic_subs = cur.fetchone()[0]
+    
+    # Активные подписки (premium)
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments "
+        f"WHERE period = 'premium' AND status = 'paid' AND expires_at > CURRENT_TIMESTAMP"
+    )
+    active_premium_subs = cur.fetchone()[0]
+    
+    # Активные подписки (bundle)
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments "
+        f"WHERE period = 'bundle' AND status = 'paid' AND expires_at > CURRENT_TIMESTAMP"
+    )
+    active_bundle_subs = cur.fetchone()[0]
+    
+    # Всего активных подписок
+    total_active_subs = active_basic_subs + active_premium_subs + active_bundle_subs
+    
+    # Доход за всё время (сумма всех оплаченных подписок)
+    cur.execute(
+        f"SELECT COALESCE(SUM(amount_kop), 0) FROM {SCHEMA}.subscription_payments "
+        f"WHERE status = 'paid'"
+    )
+    total_revenue_kop = cur.fetchone()[0] or 0
+    total_revenue_rub = total_revenue_kop / 100
+    
+    # Доход за текущий месяц
+    cur.execute(
+        f"SELECT COALESCE(SUM(amount_kop), 0) FROM {SCHEMA}.subscription_payments "
+        f"WHERE status = 'paid' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_TIMESTAMP)"
+    )
+    month_revenue_kop = cur.fetchone()[0] or 0
+    month_revenue_rub = month_revenue_kop / 100
+    
+    # Доход за последние 7 дней
+    cur.execute(
+        f"SELECT COALESCE(SUM(amount_kop), 0) FROM {SCHEMA}.subscription_payments "
+        f"WHERE status = 'paid' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '7 days'"
+    )
+    week_revenue_kop = cur.fetchone()[0] or 0
+    week_revenue_rub = week_revenue_kop / 100
+    
+    # Количество оплат за всё время
+    cur.execute(
+        f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments WHERE status = 'paid'"
+    )
+    total_payments = cur.fetchone()[0]
+    
+    # Средний чек
+    avg_check_rub = total_revenue_rub / total_payments if total_payments > 0 else 0
+    
+    # Статистика по тарифам (все оплаченные)
+    cur.execute(
+        f"SELECT period, COUNT(*), COALESCE(SUM(amount_kop), 0) FROM {SCHEMA}.subscription_payments "
+        f"WHERE status = 'paid' GROUP BY period"
+    )
+    plan_stats = {}
+    for row in cur.fetchall():
+        plan_key = row[0]
+        plan_stats[plan_key] = {
+            'total_purchases': row[1],
+            'total_revenue': row[2] / 100
+        }
+    
+    # История платежей за последние 30 дней (по дням)
+    cur.execute(
+        f"SELECT DATE(created_at) as payment_date, COUNT(*), COALESCE(SUM(amount_kop), 0) "
+        f"FROM {SCHEMA}.subscription_payments "
+        f"WHERE status = 'paid' AND created_at >= CURRENT_TIMESTAMP - INTERVAL '30 days' "
+        f"GROUP BY DATE(created_at) ORDER BY DATE(created_at)"
+    )
+    daily_revenue = []
+    for row in cur.fetchall():
+        daily_revenue.append({
+            'date': row[0].isoformat() if row[0] else None,
+            'count': row[1],
+            'revenue': row[2] / 100
+        })
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        'total_students': total_students,
+        'total_active_subscriptions': total_active_subs,
+        'active_basic': active_basic_subs,
+        'active_premium': active_premium_subs,
+        'active_bundle': active_bundle_subs,
+        'total_revenue': round(total_revenue_rub, 2),
+        'month_revenue': round(month_revenue_rub, 2),
+        'week_revenue': round(week_revenue_rub, 2),
+        'total_payments': total_payments,
+        'avg_check': round(avg_check_rub, 2),
+        'plan_stats': plan_stats,
+        'daily_revenue': daily_revenue
+    }
+
 def send_telegram_notification(telegram_id: int, message: str) -> bool:
     """Отправляет уведомление в Telegram"""
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -2136,6 +2248,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True, 'students': students}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_financial_analytics':
+            analytics = get_financial_analytics()
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'analytics': analytics}),
                 'isBase64Encoded': False
             }
         

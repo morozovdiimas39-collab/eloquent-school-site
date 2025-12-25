@@ -158,7 +158,7 @@ export default function Admin() {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_analytics' })
+        body: JSON.stringify({ action: 'get_financial_analytics' })
       });
       const data = await res.json();
       if (data.analytics) {
@@ -696,18 +696,107 @@ export default function Admin() {
               </CardHeader>
               <CardContent>
                 {analytics ? (
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Всего преподавателей</p>
-                      <p className="text-2xl font-bold text-green-700">{analytics.total_teachers || 0}</p>
+                  <div className="space-y-6">
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">💰 Всего заработано</p>
+                        <p className="text-3xl font-bold text-green-700">{analytics.total_revenue?.toLocaleString('ru-RU')}₽</p>
+                        <p className="text-xs text-gray-500 mt-1">{analytics.total_payments || 0} платежей</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">📅 За месяц</p>
+                        <p className="text-3xl font-bold text-blue-700">{analytics.month_revenue?.toLocaleString('ru-RU')}₽</p>
+                        <p className="text-xs text-gray-500 mt-1">Текущий месяц</p>
+                      </div>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">🔥 За неделю</p>
+                        <p className="text-3xl font-bold text-purple-700">{analytics.week_revenue?.toLocaleString('ru-RU')}₽</p>
+                        <p className="text-xs text-gray-500 mt-1">Последние 7 дней</p>
+                      </div>
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-600 mb-1 font-medium">💳 Средний чек</p>
+                        <p className="text-3xl font-bold text-orange-700">{analytics.avg_check?.toLocaleString('ru-RU')}₽</p>
+                        <p className="text-xs text-gray-500 mt-1">На платёж</p>
+                      </div>
                     </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Всего учеников</p>
-                      <p className="text-2xl font-bold text-blue-700">{analytics.total_students || 0}</p>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="bg-gradient-to-br from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-700 mb-3 font-semibold">📊 Активные подписки</p>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">💬 Базовая:</span>
+                            <span className="text-lg font-bold text-green-700">{analytics.active_basic || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">🎤 Премиум:</span>
+                            <span className="text-lg font-bold text-purple-700">{analytics.active_premium || 0}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">🔥 Всё сразу:</span>
+                            <span className="text-lg font-bold text-orange-700">{analytics.active_bundle || 0}</span>
+                          </div>
+                          <div className="border-t border-gray-300 pt-2 mt-2 flex justify-between items-center">
+                            <span className="text-sm font-semibold text-gray-700">Всего активных:</span>
+                            <span className="text-xl font-bold text-blue-700">{analytics.total_active_subscriptions || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-700 mb-3 font-semibold">💎 Статистика по тарифам</p>
+                        <div className="space-y-2">
+                          {analytics.plan_stats && Object.entries(analytics.plan_stats).map(([key, stats]: [string, any]) => (
+                            <div key={key} className="bg-white/70 rounded p-2">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-medium text-gray-700">
+                                  {key === 'basic' && '💬 Базовая'}
+                                  {key === 'premium' && '🎤 Премиум'}
+                                  {key === 'bundle' && '🔥 Всё сразу'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs text-gray-600">
+                                <span>{stats.total_purchases} покупок</span>
+                                <span className="font-semibold text-green-600">{stats.total_revenue?.toLocaleString('ru-RU')}₽</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <p className="text-sm text-gray-600 mb-1">Активных промокодов</p>
-                      <p className="text-2xl font-bold text-purple-700">{analytics.active_promocodes || 0}</p>
+
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <p className="text-sm text-gray-700 mb-3 font-semibold">📈 Динамика платежей (последние 30 дней)</p>
+                      {analytics.daily_revenue && analytics.daily_revenue.length > 0 ? (
+                        <div className="space-y-1">
+                          {analytics.daily_revenue.slice(-10).map((day: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-center text-xs">
+                              <span className="text-gray-600">{new Date(day.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-500">{day.count} платежей</span>
+                                <span className="font-semibold text-green-600">{day.revenue?.toLocaleString('ru-RU')}₽</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500">Нет данных за последние 30 дней</p>
+                      )}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">👥 Всего студентов</p>
+                        <p className="text-2xl font-bold text-indigo-700">{analytics.total_students || 0}</p>
+                      </div>
+                      <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                        <p className="text-sm text-gray-600 mb-1">📊 Конверсия в подписку</p>
+                        <p className="text-2xl font-bold text-teal-700">
+                          {analytics.total_students > 0 
+                            ? ((analytics.total_active_subscriptions / analytics.total_students) * 100).toFixed(1)
+                            : 0}%
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ) : (
