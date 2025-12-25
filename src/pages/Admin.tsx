@@ -27,6 +27,8 @@ interface User {
   timezone?: string;
   subscription_active?: boolean;
   subscription_expires_at?: string;
+  voice_subscription_active?: boolean;
+  voice_subscription_expires_at?: string;
 }
 
 interface Teacher extends User {
@@ -186,7 +188,7 @@ export default function Admin() {
     }
   };
 
-  const toggleSubscription = async (telegramId: number, active: boolean, days: number = 30) => {
+  const toggleSubscription = async (telegramId: number, active: boolean, days: number = 30, subscriptionType: 'basic' | 'premium' = 'basic') => {
     setProcessingSubscription(telegramId);
     try {
       const res = await fetch(API_URL, {
@@ -196,7 +198,8 @@ export default function Admin() {
           action: 'toggle_subscription',
           telegram_id: telegramId,
           active,
-          days
+          days,
+          subscription_type: subscriptionType
         })
       });
       await res.json();
@@ -528,7 +531,7 @@ export default function Admin() {
                     
                     <div className="pt-2 border-t border-gray-200 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-600">Подписка:</span>
+                        <span className="text-xs text-gray-600 font-medium">💬 Базовая:</span>
                         {student.subscription_active ? (
                           <Badge className="text-xs bg-green-100 text-green-700 border-green-300">
                             <Icon name="CheckCircle" size={12} className="mr-1" />
@@ -557,7 +560,7 @@ export default function Admin() {
                       <div className="flex gap-2">
                         {student.subscription_active ? (
                           <Button
-                            onClick={() => toggleSubscription(student.telegram_id, false)}
+                            onClick={() => toggleSubscription(student.telegram_id, false, 0, 'basic')}
                             disabled={processingSubscription === student.telegram_id}
                             variant="outline"
                             size="sm"
@@ -574,7 +577,7 @@ export default function Admin() {
                           </Button>
                         ) : (
                           <Button
-                            onClick={() => toggleSubscription(student.telegram_id, true, 30)}
+                            onClick={() => toggleSubscription(student.telegram_id, true, 30, 'basic')}
                             disabled={processingSubscription === student.telegram_id}
                             variant="outline"
                             size="sm"
@@ -582,6 +585,73 @@ export default function Admin() {
                           >
                             {processingSubscription === student.telegram_id ? (
                               <div className="w-3 h-3 border-2 border-green-700 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Icon name="Plus" size={12} className="mr-1" />
+                                +30 дней
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="pt-2 border-t border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600 font-medium">🎤 Голосовая:</span>
+                        {student.voice_subscription_active ? (
+                          <Badge className="text-xs bg-purple-100 text-purple-700 border-purple-300">
+                            <Icon name="CheckCircle" size={12} className="mr-1" />
+                            Активна
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-300">
+                            <Icon name="XCircle" size={12} className="mr-1" />
+                            Неактивна
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {student.voice_subscription_active && student.voice_subscription_expires_at && (
+                        <div className="text-xs text-gray-500">
+                          До: {new Date(student.voice_subscription_expires_at).toLocaleDateString('ru-RU', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2">
+                        {student.voice_subscription_active ? (
+                          <Button
+                            onClick={() => toggleSubscription(student.telegram_id, false, 0, 'premium')}
+                            disabled={processingSubscription === student.telegram_id}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs border-red-300 text-red-700 hover:bg-red-50"
+                          >
+                            {processingSubscription === student.telegram_id ? (
+                              <div className="w-3 h-3 border-2 border-red-700 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Icon name="XCircle" size={12} className="mr-1" />
+                                Отменить
+                              </>
+                            )}
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => toggleSubscription(student.telegram_id, true, 30, 'premium')}
+                            disabled={processingSubscription === student.telegram_id}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-8 text-xs border-purple-300 text-purple-700 hover:bg-purple-50"
+                          >
+                            {processingSubscription === student.telegram_id ? (
+                              <div className="w-3 h-3 border-2 border-purple-700 border-t-transparent rounded-full animate-spin" />
                             ) : (
                               <>
                                 <Icon name="Plus" size={12} className="mr-1" />

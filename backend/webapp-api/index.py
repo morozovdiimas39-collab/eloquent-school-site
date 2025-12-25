@@ -1007,14 +1007,26 @@ def get_all_students() -> List[Dict[str, Any]]:
     
     students = []
     for row in cur.fetchall():
+        telegram_id = row[0]
         subscription_status = row[9]
         subscription_expires_at = row[10]
         
-        # Определяем активна ли подписка
+        # Определяем активна ли базовая подписка
         subscription_active = subscription_status == 'active'
         
+        # Проверяем голосовую подписку в subscription_payments
+        cur.execute(
+            f"SELECT expires_at FROM {SCHEMA}.subscription_payments "
+            f"WHERE telegram_id = {telegram_id} AND period = 'premium' "
+            f"AND status = 'paid' AND expires_at > CURRENT_TIMESTAMP "
+            f"ORDER BY expires_at DESC LIMIT 1"
+        )
+        voice_sub_row = cur.fetchone()
+        voice_subscription_active = voice_sub_row is not None
+        voice_subscription_expires_at = voice_sub_row[0] if voice_sub_row else None
+        
         students.append({
-            'telegram_id': row[0],
+            'telegram_id': telegram_id,
             'username': row[1],
             'first_name': row[2],
             'last_name': row[3],
@@ -1024,7 +1036,9 @@ def get_all_students() -> List[Dict[str, Any]]:
             'timezone': row[7] or 'UTC',
             'photo_url': row[8],
             'subscription_active': subscription_active,
-            'subscription_expires_at': subscription_expires_at.isoformat() if subscription_expires_at else None
+            'subscription_expires_at': subscription_expires_at.isoformat() if subscription_expires_at else None,
+            'voice_subscription_active': voice_subscription_active,
+            'voice_subscription_expires_at': voice_subscription_expires_at.isoformat() if voice_subscription_expires_at else None
         })
     
     cur.close()
@@ -1733,27 +1747,62 @@ def generate_speech(text: str, lang: str = 'en-US') -> Dict[str, Any]:
     except Exception as e:
         return {'error': str(e)}
 
-def toggle_subscription(telegram_id: int, active: bool, days: int = 30) -> Dict[str, Any]:
-    """Включает/выключает подписку студента"""
+def toggle_subscription(telegram_id: int, active: bool, days: int = 30, subscription_type: str = 'basic') -> Dict[str, Any]:
+    """Включает/выключает подписку студента (basic или premium)"""
     conn = get_db_connection()
     cur = conn.cursor()
     
-    if active:
-        # Активируем подписку на указанное количество дней
-        cur.execute(
-            f"UPDATE {SCHEMA}.users SET "
-            f"subscription_status = 'active', "
-            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days' "
-            f"WHERE telegram_id = {telegram_id}"
-        )
+    if subscription_type == 'premium':
+        # Управление голосовой подпиской
+        if active:
+            # Активируем голосовую подписку в subscription_payments
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.subscription_payments "
+                f"(telegram_id, period, status, expires_at, payment_method) "
+                f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin') "
+                f"ON CONFLICT (telegram_id, period) DO UPDATE SET "
+                f"status = 'paid', "
+                f"expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days', "
+                f"updated_at = CURRENT_TIMESTAMP"
+            )
+        else:
+            # Деактивируем голосовую подписку
+            cur.execute(
+                f"DELETE FROM {SCHEMA}.subscription_payments "
+                f"WHERE telegram_id = {telegram_id} AND period = 'premium'"
+            )
     else:
-        # Деактивируем подписку
-        cur.execute(
-            f"UPDATE {SCHEMA}.users SET "
-            f"subscription_status = 'inactive', "
-            f"subscription_expires_at = NULL "
-            f"WHERE telegram_id = {telegram_id}"
-        )
+        # Управление базовой подпиской (старая логика + subscription_payments)
+        if active:
+            # Активируем базовую подписку в users (старая схема)
+            cur.execute(
+                f"UPDATE {SCHEMA}.users SET "
+                f"subscription_status = 'active', "
+                f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days' "
+                f"WHERE telegram_id = {telegram_id}"
+            )
+            # И в subscription_payments (новая схема)
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.subscription_payments "
+                f"(telegram_id, period, status, expires_at, payment_method) "
+                f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin') "
+                f"ON CONFLICT (telegram_id, period) DO UPDATE SET "
+                f"status = 'paid', "
+                f"expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days', "
+                f"updated_at = CURRENT_TIMESTAMP"
+            )
+        else:
+            # Деактивируем базовую подписку
+            cur.execute(
+                f"UPDATE {SCHEMA}.users SET "
+                f"subscription_status = 'inactive', "
+                f"subscription_expires_at = NULL "
+                f"WHERE telegram_id = {telegram_id}"
+            )
+            cur.execute(
+                f"DELETE FROM {SCHEMA}.subscription_payments "
+                f"WHERE telegram_id = {telegram_id} AND period = 'basic'"
+            )
     
     cur.close()
     conn.close()
@@ -2178,7 +2227,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             telegram_id = body_data.get('telegram_id')
             active = body_data.get('active')
             days = body_data.get('days', 30)
-            result = toggle_subscription(telegram_id, active, days)
+            subscription_type = body_data.get('subscription_type', 'basic')
+            result = toggle_subscription(telegram_id, active, days, subscription_type)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
