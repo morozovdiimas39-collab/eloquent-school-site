@@ -1861,6 +1861,7 @@ def generate_speech(text: str, lang: str = 'en-US') -> Dict[str, Any]:
 
 def toggle_subscription(telegram_id: int, active: bool, days: int = 30, subscription_type: str = 'basic') -> Dict[str, Any]:
     """Включает/выключает подписку студента (basic или premium)"""
+    print(f"[INFO] toggle_subscription: telegram_id={telegram_id}, active={active}, days={days}, type={subscription_type}")
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -1868,25 +1869,30 @@ def toggle_subscription(telegram_id: int, active: bool, days: int = 30, subscrip
         # Управление голосовой подпиской
         if active:
             # Активируем голосовую подписку в subscription_payments
+            print(f"[INFO] Activating premium subscription for {telegram_id}")
             cur.execute(
                 f"INSERT INTO {SCHEMA}.subscription_payments "
-                f"(telegram_id, period, status, expires_at, payment_method) "
-                f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin') "
+                f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+                f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin', 0, 0) "
                 f"ON CONFLICT (telegram_id, period) DO UPDATE SET "
                 f"status = 'paid', "
                 f"expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days', "
                 f"updated_at = CURRENT_TIMESTAMP"
             )
+            print(f"[SUCCESS] Premium subscription activated for {telegram_id}")
         else:
             # Деактивируем голосовую подписку
+            print(f"[INFO] Deactivating premium subscription for {telegram_id}")
             cur.execute(
                 f"DELETE FROM {SCHEMA}.subscription_payments "
                 f"WHERE telegram_id = {telegram_id} AND period = 'premium'"
             )
+            print(f"[SUCCESS] Premium subscription deactivated for {telegram_id}")
     else:
         # Управление базовой подпиской (старая логика + subscription_payments)
         if active:
             # Активируем базовую подписку в users (старая схема)
+            print(f"[INFO] Activating basic subscription for {telegram_id}")
             cur.execute(
                 f"UPDATE {SCHEMA}.users SET "
                 f"subscription_status = 'active', "
@@ -1896,15 +1902,17 @@ def toggle_subscription(telegram_id: int, active: bool, days: int = 30, subscrip
             # И в subscription_payments (новая схема)
             cur.execute(
                 f"INSERT INTO {SCHEMA}.subscription_payments "
-                f"(telegram_id, period, status, expires_at, payment_method) "
-                f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin') "
+                f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+                f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '{days} days', 'admin', 0, 0) "
                 f"ON CONFLICT (telegram_id, period) DO UPDATE SET "
                 f"status = 'paid', "
                 f"expires_at = CURRENT_TIMESTAMP + INTERVAL '{days} days', "
                 f"updated_at = CURRENT_TIMESTAMP"
             )
+            print(f"[SUCCESS] Basic subscription activated for {telegram_id}")
         else:
             # Деактивируем базовую подписку
+            print(f"[INFO] Deactivating basic subscription for {telegram_id}")
             cur.execute(
                 f"UPDATE {SCHEMA}.users SET "
                 f"subscription_status = 'inactive', "
@@ -1915,6 +1923,7 @@ def toggle_subscription(telegram_id: int, active: bool, days: int = 30, subscrip
                 f"DELETE FROM {SCHEMA}.subscription_payments "
                 f"WHERE telegram_id = {telegram_id} AND period = 'basic'"
             )
+            print(f"[SUCCESS] Basic subscription deactivated for {telegram_id}")
     
     cur.close()
     conn.close()
