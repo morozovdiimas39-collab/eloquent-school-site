@@ -3084,10 +3084,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             clean_description = plan['description'].replace('\\n', '\n')
                             
                             # Данные для фискализации через ЮKassa
+                            # ⚠️ CRITICAL: YooKassa НЕ принимает эмодзи в description чека!
+                            # Удаляем эмодзи из названия тарифа для фискализации
+                            import re
+                            clean_plan_name = re.sub(r'[^\w\s\-]', '', plan["name"]).strip()
+                            
                             provider_data = {
                                 'receipt': {
                                     'items': [{
-                                        'description': f'{plan["name"]} ({plan["duration_days"]} дней)',
+                                        'description': f'{clean_plan_name} ({plan["duration_days"]} дней)',
                                         'quantity': 1,
                                         'amount': {
                                             'value': f'{plan["price_rub"]}.{plan["price_kop"]:02d}',
