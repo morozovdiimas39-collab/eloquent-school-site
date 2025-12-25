@@ -3865,21 +3865,32 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             cur.close()
             conn.close()
             
+            print(f"[DEBUG SUBSCRIPTION CHECK] User {user['id']}, row: {row}")
+            
             has_subscription = False
             if row:
                 subscription_status = row[0]
                 subscription_expires_at = row[1]
+                
+                print(f"[DEBUG SUBSCRIPTION CHECK] status={subscription_status}, expires={subscription_expires_at}")
                 
                 # Проверяем активна ли подписка
                 if subscription_status == 'active':
                     if subscription_expires_at:
                         if subscription_expires_at > datetime.now():
                             has_subscription = True
+                            print(f"[DEBUG SUBSCRIPTION CHECK] Subscription ACTIVE (expires in future)")
                     else:
                         has_subscription = True
+                        print(f"[DEBUG SUBSCRIPTION CHECK] Subscription ACTIVE (no expiration)")
+                else:
+                    print(f"[DEBUG SUBSCRIPTION CHECK] Subscription INACTIVE - status={subscription_status}")
+            
+            print(f"[DEBUG SUBSCRIPTION CHECK] Final result: has_subscription={has_subscription}")
             
             # Если подписки нет - ЯВНО сообщаем об этом и показываем тарифы
             if not has_subscription:
+                print(f"[DEBUG SUBSCRIPTION CHECK] Sending subscription required message...")
                 # Проверяем использовал ли пользователь trial
                 trial_used = False
                 if row:
