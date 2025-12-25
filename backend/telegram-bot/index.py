@@ -3083,6 +3083,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             # Убираем \n из описания (они уже есть как реальные переносы)
                             clean_description = plan['description'].replace('\\n', '\n')
                             
+                            # Данные для фискализации через ЮKassa
+                            provider_data = {
+                                'receipt': {
+                                    'items': [{
+                                        'description': f'{plan["name"]} ({plan["duration_days"]} дней)',
+                                        'quantity': 1,
+                                        'amount': {
+                                            'value': f'{plan["price_rub"]}.{plan["price_kop"]:02d}',
+                                            'currency': 'RUB'
+                                        },
+                                        'vat_code': 1,
+                                        'payment_mode': 'full_payment',
+                                        'payment_subject': 'service'
+                                    }],
+                                    'tax_system_code': 1
+                                }
+                            }
+                            
                             invoice_payload = {
                                 'chat_id': chat_id,
                                 'title': plan['name'],
@@ -3097,7 +3115,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 'prices': [{
                                     'label': plan['name'],
                                     'amount': plan['price_kop']
-                                }]
+                                }],
+                                'need_email': True,
+                                'send_email_to_provider': True,
+                                'provider_data': json.dumps(provider_data)
                             }
                             
                             print(f"[DEBUG PAYMENT] Sending invoice: price_kop={plan['price_kop']}, price_rub={plan['price_rub']}")
