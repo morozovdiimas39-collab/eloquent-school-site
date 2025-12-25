@@ -1105,6 +1105,107 @@ def delete_word(word_id: int) -> bool:
     conn.close()
     return True
 
+def get_pricing_plans() -> List[Dict[str, Any]]:
+    """Получает тарифные планы из бэкенда telegram-bot"""
+    # Импортируем SUBSCRIPTION_PLANS из telegram-bot
+    # Так как мы не можем импортировать напрямую, читаем из файла
+    import sys
+    import os
+    
+    # Добавляем путь к telegram-bot
+    bot_path = os.path.join(os.path.dirname(__file__), '..', 'telegram-bot')
+    if bot_path not in sys.path:
+        sys.path.insert(0, bot_path)
+    
+    try:
+        from index import SUBSCRIPTION_PLANS
+        
+        plans = []
+        for key, plan in SUBSCRIPTION_PLANS.items():
+            plans.append({
+                'key': key,
+                'name': plan['name'],
+                'description': plan['description'],
+                'price_rub': plan['price_rub'],
+                'duration_days': plan['duration_days']
+            })
+        return plans
+    except Exception as e:
+        print(f"Error loading pricing plans: {e}")
+        return []
+
+def update_pricing_plan(plan: Dict[str, Any]) -> bool:
+    """Обновляет тарифный план в файле telegram-bot/index.py"""
+    import os
+    
+    bot_index_path = os.path.join(os.path.dirname(__file__), '..', 'telegram-bot', 'index.py')
+    
+    try:
+        # Читаем файл
+        with open(bot_index_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Ищем блок SUBSCRIPTION_PLANS
+        start_marker = "SUBSCRIPTION_PLANS = {"
+        end_marker = "}"
+        
+        start_idx = content.find(start_marker)
+        if start_idx == -1:
+            return False
+        
+        # Находим конец словаря
+        bracket_count = 0
+        idx = start_idx + len(start_marker) - 1
+        while idx < len(content):
+            if content[idx] == '{':
+                bracket_count += 1
+            elif content[idx] == '}':
+                bracket_count -= 1
+                if bracket_count == 0:
+                    end_idx = idx + 1
+                    break
+            idx += 1
+        
+        # Парсим текущий SUBSCRIPTION_PLANS
+        import re
+        
+        # Обновляем значения для конкретного плана
+        plan_key = plan['key']
+        
+        # Находим блок нужного плана
+        plan_pattern = rf"'{plan_key}':\s*{{[^}}]*}}"
+        plan_match = re.search(plan_pattern, content[start_idx:end_idx], re.DOTALL)
+        
+        if plan_match:
+            old_plan_text = plan_match.group()
+            
+            # Формируем новый текст плана
+            price_kop = plan['price_rub'] * 100
+            description_escaped = plan['description'].replace('\n', '\\n').replace("'", "\\'")
+            new_plan_text = f"""'{plan_key}': {{
+        'name': '{plan['name']}',
+        'description': '{description_escaped}',
+        'price_rub': {plan['price_rub']},
+        'price_kop': {price_kop},
+        'duration_days': {plan['duration_days']}
+    }}"""
+            
+            # Заменяем в content
+            content = content[:start_idx + plan_match.start()] + new_plan_text + content[start_idx + plan_match.end():]
+            
+            # Записываем обратно
+            with open(bot_index_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            return True
+        
+        return False
+    except Exception as e:
+        print(f"Error updating pricing plan: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def get_all_words() -> List[Dict[str, Any]]:
     """Получает список всех слов"""
     conn = get_db_connection()
@@ -2495,6 +2596,25 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True, 'response': response_text}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_pricing_plans':
+            plans = get_pricing_plans()
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'plans': plans}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'update_pricing_plan':
+            plan = body_data.get('plan')
+            success = update_pricing_plan(plan)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
                 'isBase64Encoded': False
             }
         

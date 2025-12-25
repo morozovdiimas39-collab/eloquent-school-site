@@ -10,6 +10,7 @@ import VocabularyManager from '@/components/admin/VocabularyManager';
 import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';
 import PromptsManager from '@/components/admin/PromptsManager';
+import PricingManager from '@/components/admin/PricingManager';
 
 interface User {
   telegram_id: number;
@@ -52,7 +53,7 @@ export default function Admin() {
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog' | 'prompts'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog' | 'prompts' | 'pricing'>('teachers');
   const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [schedulerRunning, setSchedulerRunning] = useState(false);
@@ -395,6 +396,14 @@ export default function Admin() {
               Промпты
             </Button>
             <Button
+              onClick={() => setActiveTab('pricing')}
+              variant={activeTab === 'pricing' ? 'default' : 'outline'}
+              className="flex-1 sm:flex-none h-11 text-sm font-medium"
+            >
+              <Icon name="DollarSign" size={16} className="mr-1.5" />
+              Цены
+            </Button>
+            <Button
               onClick={() => window.location.href = '/admin/generate-words'}
               variant="outline"
               className="flex-1 sm:flex-none h-11 text-sm font-medium bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
@@ -603,6 +612,8 @@ export default function Admin() {
         {activeTab === 'blog' && <BlogManager />}
 
         {activeTab === 'prompts' && <PromptsManager />}
+
+        {activeTab === 'pricing' && <PricingManager />}
 
         {activeTab === 'analytics' && (
           <div className="space-y-4">
