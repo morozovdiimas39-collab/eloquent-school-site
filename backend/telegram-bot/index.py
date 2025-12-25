@@ -3095,7 +3095,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                         'description': f'{clean_plan_name} ({plan["duration_days"]} дней)',
                                         'quantity': 1,
                                         'amount': {
-                                            'value': f'{plan["price_rub"]}.{plan["price_kop"]:02d}',
+                                            'value': f'{plan["price_kop"] / 100:.2f}',
                                             'currency': 'RUB'
                                         },
                                         'vat_code': 1,
