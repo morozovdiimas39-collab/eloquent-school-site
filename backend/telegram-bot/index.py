@@ -3861,7 +3861,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 
                 # Сохраняем запись о платеже
-                plan = SUBSCRIPTION_PLANS[plan_key]
+                SUBSCRIPTION_PLANS = get_subscription_plans()
+                plan = SUBSCRIPTION_PLANS.get(plan_key, {'name': plan_key})
                 amount = payment['total_amount'] / 100  # Копейки в рубли
                 
                 cur.execute(
