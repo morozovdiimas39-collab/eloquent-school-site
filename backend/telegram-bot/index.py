@@ -3272,6 +3272,114 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     f'Теперь просто пишите мне вопросы, и я буду отвечать прямо здесь в чате!'
                 )
             
+            elif data.startswith('subscribe_'):
+                # Обработка нажатия на кнопку подписки
+                plan_key = data.replace('subscribe_', '')  # basic, premium, bundle
+                telegram_id = user['id']
+                
+                print(f"[DEBUG SUBSCRIPTION] User {telegram_id} clicked subscribe button: {plan_key}")
+                
+                # Получаем данные тарифа из БД
+                SUBSCRIPTION_PLANS = get_subscription_plans()
+                plan = SUBSCRIPTION_PLANS.get(plan_key)
+                
+                if not plan:
+                    send_telegram_message(chat_id, '❌ Тариф не найден. Попробуй еще раз через /start')
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True}),
+                        'isBase64Encoded': False
+                    }
+                
+                # Формируем описание и цену
+                title = plan['name']
+                description = plan['description']
+                price_rub = plan['price_rub']
+                price_kop = plan['price_kop']
+                duration_days = plan['duration_days']
+                
+                # Полная цена в копейках (рубли * 100 + копейки)
+                total_amount = price_rub * 100 + price_kop
+                
+                # Payload для отслеживания платежа
+                payload = json.dumps({
+                    'telegram_id': telegram_id,
+                    'plan': plan_key,
+                    'duration_days': duration_days
+                })
+                
+                # ⚠️ CRITICAL: provider_data для фискализации через YooKassa
+                provider_data = {
+                    'receipt': {
+                        'items': [{
+                            'description': f'{title} ({duration_days} дней)',
+                            'quantity': 1,
+                            'amount': {
+                                'value': f'{price_rub}.{price_kop:02d}',  # В рублях!
+                                'currency': 'RUB'
+                            },
+                            'vat_code': 1,  # НДС не облагается
+                            'payment_mode': 'full_payment',
+                            'payment_subject': 'service'  # Услуга (подписка)
+                        }],
+                        'tax_system_code': 1  # УСН доход
+                    }
+                }
+                
+                # Отправляем инвойс через Telegram API
+                try:
+                    token = os.environ['TELEGRAM_BOT_TOKEN']
+                    yookassa_token = os.environ.get('YOOKASSA_PAYMENT_TOKEN', '')
+                    
+                    if not yookassa_token:
+                        send_telegram_message(chat_id, '❌ Оплата временно недоступна. Обратитесь в поддержку.')
+                        print('[ERROR] YOOKASSA_PAYMENT_TOKEN not configured')
+                        return {
+                            'statusCode': 500,
+                            'headers': {'Content-Type': 'application/json'},
+                            'body': json.dumps({'error': 'Payment token missing'}),
+                            'isBase64Encoded': False
+                        }
+                    
+                    url = f'https://api.telegram.org/bot{token}/sendInvoice'
+                    invoice_payload = {
+                        'chat_id': chat_id,
+                        'title': title,
+                        'description': description,
+                        'payload': payload,
+                        'provider_token': yookassa_token,  # YooKassa токен из BotFather
+                        'currency': 'RUB',
+                        'prices': [{'label': title, 'amount': total_amount}],
+                        'need_email': True,  # ⚠️ Запрашиваем email для чека
+                        'send_email_to_provider': True,  # ⚠️ Отправляем email в YooKassa
+                        'provider_data': json.dumps(provider_data)  # ⚠️ Данные для чека
+                    }
+                    
+                    print(f'[DEBUG INVOICE] Sending invoice: {invoice_payload}')
+                    
+                    req = urllib.request.Request(
+                        url,
+                        data=json.dumps(invoice_payload).encode('utf-8'),
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    
+                    with urllib.request.urlopen(req) as response:
+                        result = json.loads(response.read().decode('utf-8'))
+                        print(f'[DEBUG INVOICE] Response: {result}')
+                        
+                        if result.get('ok'):
+                            print(f'[SUCCESS] Invoice sent to user {telegram_id} for plan {plan_key}')
+                        else:
+                            print(f'[ERROR] Failed to send invoice: {result}')
+                            send_telegram_message(chat_id, '❌ Не удалось создать счёт. Попробуй еще раз.')
+                
+                except Exception as e:
+                    print(f'[ERROR] Exception sending invoice: {e}')
+                    import traceback
+                    traceback.print_exc()
+                    send_telegram_message(chat_id, '❌ Ошибка при создании счёта. Попробуй позже.')
 
             elif data.startswith('mode_'):
                 mode = data.replace('mode_', '')
