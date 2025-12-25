@@ -49,6 +49,11 @@ export default function PricingManager() {
   };
 
   const savePlan = async (plan: PricingPlan) => {
+    if (plan.price_rub < 60) {
+      alert('⚠️ ОШИБКА: Минимальная цена — 60₽\n\nYooKassa не принимает платежи меньше 60₽.\nTelegram API вернёт ошибку CURRENCY_TOTAL_AMOUNT_INVALID.');
+      return;
+    }
+
     setSaving(true);
     try {
       const response = await fetch(API_URL, {
@@ -116,6 +121,19 @@ export default function PricingManager() {
             </div>
           </div>
 
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <Icon name="AlertTriangle" size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-red-900">
+                <p className="font-medium mb-1">⚠️ Минимальная цена: 60₽</p>
+                <p className="text-red-700">
+                  YooKassa (платёжная система Telegram) не принимает платежи меньше 60₽.
+                  При попытке создать платёж с меньшей суммой бот вернёт ошибку.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {plans.map((plan) => (
             <Card key={plan.key} className="border-2">
               <CardHeader className="pb-3">
@@ -175,11 +193,15 @@ export default function PricingManager() {
                     <Input
                       id={`price-${plan.key}`}
                       type="number"
+                      min="60"
                       value={plan.price_rub}
                       onChange={(e) => updatePlanField(plan.key, 'price_rub', Number(e.target.value))}
                       disabled={editingPlan !== plan.key}
-                      className="mt-1"
+                      className={`mt-1 ${plan.price_rub < 60 ? 'border-red-500' : ''}`}
                     />
+                    {plan.price_rub < 60 && editingPlan === plan.key && (
+                      <p className="text-xs text-red-600 mt-1">Минимум 60₽</p>
+                    )}
                   </div>
                 </div>
                 <div>
