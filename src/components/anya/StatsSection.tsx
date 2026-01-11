@@ -1,33 +1,33 @@
 import { Card, CardContent } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
+import { Button } from '@/components/ui/button';
 
-const stats = [
+const benefits = [
   {
-    icon: 'Users',
-    value: '1,000+',
-    label: 'Активных пользователей'
+    icon: 'Zap',
+    title: 'Быстрый старт',
+    description: 'Начни практиковать английский прямо сейчас — без регистрации и сложных настроек'
   },
   {
-    icon: 'MessageSquare',
-    value: '100K+',
-    label: 'Диалогов проведено'
+    icon: 'Clock',
+    title: 'Гибкий график',
+    description: 'Занимайся когда удобно — утром, днём или поздно вечером'
   },
   {
-    icon: 'BookOpen',
-    value: '50K+',
-    label: 'Слов выучено'
+    icon: 'Target',
+    title: 'Персональный подход',
+    description: 'Аня подстраивается под твой уровень и помогает именно там, где нужно'
   },
   {
     icon: 'TrendingUp',
-    value: '×3',
-    label: 'Быстрее результат'
+    title: 'Видимый прогресс',
+    description: 'Отслеживай свои достижения и видь, как растёт твой словарный запас'
   }
 ];
 
 export default function StatsSection() {
   return (
     <section className="relative py-20 bg-gradient-to-br from-indigo-600 via-blue-600 to-purple-600 overflow-hidden">
-      {/* Animated background pattern */}
       <div className="absolute inset-0 opacity-10">
         <div className="absolute top-0 left-0 w-full h-full">
           <div className="absolute top-10 left-20 w-40 h-40 bg-white rounded-full filter blur-3xl animate-blob"></div>
@@ -40,30 +40,47 @@ export default function StatsSection() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">
-              anyaGPT в цифрах
+              Почему выбирают anyaGPT
             </h2>
             <p className="text-blue-100 text-lg">
-              Присоединяйся к тысячам людей, которые уже улучшили свой английский
+              Учи английский в удобном темпе с помощью ИИ-репетитора
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {stats.map((stat, idx) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {benefits.map((benefit, idx) => (
               <Card 
                 key={idx} 
                 className="group border-0 bg-white/10 backdrop-blur-md hover:bg-white/20 transition-all duration-300 hover:scale-105 hover:shadow-2xl"
               >
-                <CardContent className="p-6 text-center">
-                  <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform duration-300">
-                    <Icon name={stat.icon as any} size={32} className="text-white" />
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
+                      <Icon name={benefit.icon as any} size={28} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        {benefit.title}
+                      </h3>
+                      <p className="text-blue-100 leading-relaxed">
+                        {benefit.description}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-4xl md:text-5xl font-bold text-white mb-2">
-                    {stat.value}
-                  </div>
-                  <p className="text-blue-100 text-sm font-medium">{stat.label}</p>
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          <div className="text-center">
+            <Button
+              onClick={() => window.open('https://t.me/eloquent_school_bot', '_blank')}
+              size="lg"
+              className="bg-white text-indigo-600 hover:bg-blue-50 font-bold text-lg px-8 py-6 shadow-2xl"
+            >
+              Начать бесплатно
+              <Icon name="ArrowRight" size={20} className="ml-2" />
+            </Button>
           </div>
         </div>
       </div>
