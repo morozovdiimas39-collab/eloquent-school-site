@@ -4100,10 +4100,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             print(f"[DEBUG SUBSCRIPTION CHECK] User {telegram_id}, subscription_type: {subscription_type}")
             
-            # ⚠️ CRITICAL: Проверяем есть ли доступ к БАЗОВЫМ функциям
-            # basic или bundle дают доступ к базовым функциям
-            # premium даёт доступ ТОЛЬКО к голосовому (не к базовым!)
-            has_basic_access = subscription_type in ['basic', 'bundle']
+            # ⚠️ CRITICAL: Проверяем есть ли доступ к функциям
+            # basic, premium, bundle - все дают доступ к диалогу
+            # premium работает как обычная подписка (не только голосовой!)
+            has_basic_access = subscription_type in ['basic', 'premium', 'bundle']
             
             print(f"[DEBUG SUBSCRIPTION CHECK] has_basic_access: {has_basic_access}")
             
