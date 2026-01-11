@@ -4631,6 +4631,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     import traceback
                     traceback.print_exc()
                     send_telegram_message(chat_id, '❌ Произошла ошибка при генерации упражнения. Попробуйте позже или используйте режим диалога.', parse_mode=None)
+                    # ⚠️ CRITICAL: Возвращаем ответ даже если ошибка генерации!
+                    return {
+                        'statusCode': 200,
+                        'headers': {'Content-Type': 'application/json'},
+                        'body': json.dumps({'ok': True, 'error': 'exercise_generation_failed'}),
+                        'isBase64Encoded': False
+                    }
             
             # ⚠️ CRITICAL: Возвращаем ответ после обработки режима!
             return {
