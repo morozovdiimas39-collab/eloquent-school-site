@@ -4332,7 +4332,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Команда /start или кнопка "🔄 Задать цель заново" - ВСЕГДА СБРАСЫВАЕМ СОСТОЯНИЕ
         if text == '/start' or text == '🔄 Задать цель заново':
-            existing_user = get_user(user['id'])
+            existing_user = get_user(telegram_id)
             
             # Сбрасываем состояние пользователя если он застрял
             if existing_user:
@@ -4343,7 +4343,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     f"conversation_mode = 'awaiting_goal', "
                     f"test_phrases = NULL, "
                     f"learning_plan = NULL "
-                    f"WHERE telegram_id = {user['id']}"
+                    f"WHERE telegram_id = {telegram_id}"
                 )
                 cur.close()
                 conn.close()
@@ -4351,7 +4351,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if not existing_user:
                 # Регистрируем нового пользователя как ученика по умолчанию
                 create_user(
-                    user['id'],
+                    telegram_id,
                     user.get('username', ''),
                     user.get('first_name', ''),
                     user.get('last_name', ''),
@@ -4428,7 +4428,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Сохраняем состояние - ждем выбор режима обучения
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {user['id']}")
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {telegram_id}")
                 cur.close()
                 conn.close()
             
