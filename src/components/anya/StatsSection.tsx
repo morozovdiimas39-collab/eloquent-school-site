@@ -4,23 +4,23 @@ import Icon from '@/components/ui/icon';
 const stats = [
   {
     icon: 'Users',
-    value: '50,000+',
-    label: 'Учеников уже учатся'
+    value: '1,000+',
+    label: 'Активных пользователей'
   },
   {
     icon: 'MessageSquare',
-    value: '2M+',
-    label: 'Сообщений обработано'
+    value: '100K+',
+    label: 'Диалогов проведено'
   },
   {
     icon: 'BookOpen',
-    value: '500K+',
+    value: '50K+',
     label: 'Слов выучено'
   },
   {
-    icon: 'Star',
-    value: '4.9/5',
-    label: 'Средняя оценка'
+    icon: 'TrendingUp',
+    value: '×3',
+    label: 'Быстрее результат'
   }
 ];
 
