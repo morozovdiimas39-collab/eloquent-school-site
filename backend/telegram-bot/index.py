@@ -1,7 +1,7 @@
 import json
 import os
 import psycopg2
-# Force redeploy v3
+# Force redeploy v4 - fix telegram_id extraction
 import urllib.request
 import urllib.parse
 import random
@@ -4066,6 +4066,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         message = body['message']
         chat_id = message['chat']['id']
         user = message['from']
+        telegram_id = user['id']  # ⚠️ CRITICAL FIX: Extract telegram_id from user (v4)
         text = message.get('text', '')
         voice = message.get('voice')
         sticker = message.get('sticker')
@@ -6167,6 +6168,9 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
         }
         
     except Exception as e:
+        print(f"[ERROR] Exception in handler: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'statusCode': 500,
             'headers': {'Content-Type': 'application/json'},
