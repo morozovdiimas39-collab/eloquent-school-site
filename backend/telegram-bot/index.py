@@ -1135,8 +1135,28 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
         options
     )
 
-def generate_association_exercise(word: Dict[str, Any], language_level: str) -> tuple:
-    """Генерирует упражнение с ассоциациями через Gemini"""
+def get_mastered_words(student_id: int) -> List[str]:
+    """Получает список освоенных слов студента (status=mastered)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT w.english_text FROM {SCHEMA}.word_progress wp "
+        f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+        f"WHERE wp.student_id = {student_id} AND wp.status = 'mastered' "
+        f"ORDER BY wp.updated_at DESC"
+    )
+    
+    mastered_words = [row[0] for row in cur.fetchall()]
+    
+    cur.close()
+    conn.close()
+    
+    print(f"[DEBUG get_mastered_words] Found {len(mastered_words)} mastered words for student {student_id}")
+    return mastered_words
+
+def generate_association_exercise(word: Dict[str, Any], language_level: str, student_id: int = None) -> tuple:
+    """Генерирует упражнение с ассоциациями через Gemini, используя освоенные слова"""
     try:
         print(f"[DEBUG generate_association_exercise] Starting for word: {word['english']}, level: {language_level}")
         
@@ -1155,6 +1175,16 @@ def generate_association_exercise(word: Dict[str, Any], language_level: str) -> 
                 word['english']
             )
         
+        # Получаем освоенные слова студента
+        mastered_words = []
+        if student_id:
+            mastered_words = get_mastered_words(student_id)
+        
+        mastered_words_hint = ''
+        if mastered_words:
+            mastered_sample = ', '.join(mastered_words[:15])  # Показываем первые 15
+            mastered_words_hint = f"\n\n⚠️ IMPORTANT: Try to use these MASTERED words in associations (student already knows them): {mastered_sample}\n- Use mastered words as hints when relevant\n- This helps reinforce learned vocabulary"
+        
         # Генерируем 3 ассоциации через Gemini
         prompt = f'''Generate 3 short English associations (1-2 words each) for the word "{word['english']}".
 
@@ -1162,7 +1192,7 @@ Rules:
 - Make hints clear but not too obvious
 - Use simple English words for level {language_level}
 - Don't use the word itself or direct translations
-- Focus on: what it does, how it looks, where you find it, related concepts
+- Focus on: what it does, how it looks, where you find it, related concepts{mastered_words_hint}
 
 Examples:
 - "cat" → meow, furry, pet
@@ -4584,7 +4614,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             }
                             send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode='HTML')
                         elif mode == 'association':
-                            exercise_text, answer, keyboard = generate_association_exercise(word, language_level)
+                            exercise_text, answer, keyboard = generate_association_exercise(word, language_level, student_id=telegram_id)
                             update_exercise_state(user['id'], word['id'], answer)
                             send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                         elif mode == 'translation':
