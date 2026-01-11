@@ -14,35 +14,24 @@ def get_db_connection():
     return conn
 
 def check_subscription(telegram_id: int) -> bool:
-    """Проверяет активна ли подписка пользователя"""
+    """Проверяет активна ли подписка пользователя - ТОЛЬКО через subscription_payments"""
     conn = get_db_connection()
     cur = conn.cursor()
     
+    # ⚠️ CRITICAL: Проверяем ТОЛЬКО через subscription_payments
+    # Если там НЕТ активной записи - подписки НЕТ (никаких вечных подписок!)
     cur.execute(
-        f"SELECT subscription_status, subscription_expires_at "
-        f"FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}"
+        f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments "
+        f"WHERE telegram_id = {telegram_id} "
+        f"AND status = 'paid' "
+        f"AND expires_at > CURRENT_TIMESTAMP"
     )
-    row = cur.fetchone()
+    active_payments = cur.fetchone()[0]
     
     cur.close()
     conn.close()
     
-    if not row:
-        return False
-    
-    subscription_status = row[0]
-    subscription_expires_at = row[1]
-    
-    # Проверяем статус и дату истечения
-    if subscription_status == 'active':
-        if subscription_expires_at:
-            # Проверяем не истекла ли подписка
-            if subscription_expires_at > datetime.now():
-                return True
-        else:
-            return True
-    
-    return False
+    return active_payments > 0
 
 def get_active_proxy_from_db() -> tuple:
     """Получает случайный активный прокси из БД"""
