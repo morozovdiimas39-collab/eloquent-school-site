@@ -1,7 +1,7 @@
 import json
 import os
 import psycopg2
-# Force redeploy v4 - fix telegram_id extraction
+# Force redeploy v5 - old version still running with has_basic_access bug!
 import urllib.request
 import urllib.parse
 import random
