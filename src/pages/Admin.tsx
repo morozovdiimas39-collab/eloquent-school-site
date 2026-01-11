@@ -730,62 +730,7 @@ export default function Admin() {
           </div>
         )}
 
-        {selectedTeacher && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-xl">
-              <CardHeader className="border-b border-gray-200 sticky top-0 bg-white z-10">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-xl">
-                      Ученики преподавателя {selectedTeacher.first_name}
-                    </CardTitle>
-                    <CardDescription className="mt-1">
-                      Всего: {selectedTeacher.students_count || 0}
-                    </CardDescription>
-                  </div>
-                  <Button
-                    onClick={() => setSelectedTeacher(null)}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Icon name="X" size={18} />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-3">
-                  {students
-                    .filter(s => s.teacher_id === selectedTeacher.telegram_id)
-                    .map(student => {
-                      const studentName = student.first_name || student.username || 'Ученик';
-                      return (
-                        <div key={student.telegram_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <Avatar className="w-10 h-10">
-                            <AvatarImage src={student.photo_url} />
-                            <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-semibold">
-                              {studentName.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900 text-sm leading-tight">{studentName}</p>
-                            {student.username && (
-                              <p className="text-xs text-gray-500 mt-0.5">@{student.username}</p>
-                            )}
-                          </div>
-                          {student.language_level && (
-                            <Badge variant="outline" className="text-xs px-2 py-0.5">
-                              {student.language_level}
-                            </Badge>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+
       </div>
     </div>
   );
