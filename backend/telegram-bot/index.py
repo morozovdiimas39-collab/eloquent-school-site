@@ -1027,9 +1027,64 @@ def get_random_word(telegram_id: int, language_level: str = 'A1') -> Dict[str, A
         return {'id': row[0], 'english': row[1], 'russian': row[2]}
     return None
 
-def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> str:
-    """Генерирует задание на составление предложения"""
-    return f"✍️ Составь предложение со словом: {word['english']} ({word['russian']})"
+def get_word_transcription(word: str) -> str:
+    """Получает транскрипцию слова через Gemini"""
+    try:
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}'
+        
+        prompt = f"Return ONLY the phonetic transcription (IPA) for the English word '{word}'. No explanations, just the transcription in format: /transcription/"
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {'temperature': 0.1, 'maxOutputTokens': 100}
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with opener.open(req, timeout=10) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            transcription = result['candidates'][0]['content']['parts'][0]['text'].strip()
+            log_proxy_success(proxy_id)
+            return transcription
+    except Exception as e:
+        print(f"[ERROR] Failed to get transcription: {e}")
+        if proxy_id:
+            log_proxy_failure(proxy_id, str(e))
+        return ''
+
+def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> tuple:
+    """Генерирует задание на составление предложения с транскрипцией"""
+    transcription = get_word_transcription(word['english'])
+    
+    message = f"✍️ Составь предложение со словом:\n\n"
+    message += f"<b>{word['english']}</b>"
+    if transcription:
+        message += f" {transcription}"
+    message += f"\n🇷🇺 {word['russian']}"
+    
+    # Inline клавиатура с кнопкой "Послушать"
+    keyboard = {
+        'inline_keyboard': [[
+            {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
+        ]]
+    }
+    
+    return message, keyboard
 
 def generate_context_exercise(word: Dict[str, Any], language_level: str, all_words: List[Dict[str, Any]] = None) -> tuple:
     """Генерирует упражнение Fill in the blanks с вариантами ответа"""
@@ -3651,6 +3706,24 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 cur.close()
                 conn.close()
             
+            elif data.startswith('pronounce:'):
+                # Обработка кнопки "Послушать произношение"
+                word = data.replace('pronounce:', '')
+                
+                try:
+                    # Генерируем аудио через OpenAI TTS (функция возвращает CDN URL)
+                    voice_url = text_to_speech(word)
+                    
+                    # Отправляем голосовое сообщение
+                    send_telegram_voice(chat_id, voice_url)
+                    print(f"[SUCCESS] Voice sent for word: {word}")
+                    
+                except Exception as e:
+                    print(f"[ERROR] TTS failed for word '{word}': {e}")
+                    import traceback
+                    traceback.print_exc()
+                    send_telegram_message(chat_id, f'❌ Ошибка при генерации произношения', parse_mode=None)
+            
             elif data.startswith('context_answer:'):
                 # Обработка ответа в режиме контекста (multiple choice)
                 selected_answer = data.replace('context_answer:', '')
@@ -4440,9 +4513,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     print(f"[DEBUG] Got word: {word}")
                     if word:
                         if mode == 'sentence':
-                            exercise_text = generate_sentence_exercise(word, language_level)
+                            exercise_text, keyboard = generate_sentence_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], word['english'])
-                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                            send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                         elif mode == 'context':
                             # Получаем все слова студента для генерации вариантов
                             conn = get_db_connection()
