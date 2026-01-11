@@ -1,7 +1,7 @@
 import json
 import os
 import psycopg2
-# Force redeploy v5 - old version still running with has_basic_access bug!
+# Force redeploy v6 - removed pronunciation buttons, fixed associations
 import urllib.request
 import urllib.parse
 import random
@@ -1121,13 +1121,9 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
     # Перемешиваем варианты
     random.shuffle(options)
     
-    # Добавляем транскрипцию
-    transcription = get_word_transcription(word['english'])
-    
+    # Убираем транскрипцию и кнопку произношения из режима Контекст
     message = f"📝 Fill in the blank:\n\n{sentence_template}\n\n"
     message += f"🔑 Слово: <b>{word['english']}</b>"
-    if transcription:
-        message += f" {transcription}"
     message += f"\n🇷🇺 {word['russian']}"
     
     return (
@@ -1184,14 +1180,13 @@ def generate_association_exercise(word: Dict[str, Any], language_level: str, stu
         mastered_words_hint = ''
         if mastered_words:
             mastered_sample = ', '.join(mastered_words[:15])  # Показываем первые 15
-            mastered_words_hint = f"\n\n⚠️ IMPORTANT: Try to use these MASTERED words in associations (student already knows them): {mastered_sample}\n- Use mastered words as hints when relevant\n- This helps reinforce learned vocabulary"
+            mastered_words_hint = f"\n\n⚠️ CRITICAL: You MUST use ONLY these MASTERED words as associations: {mastered_sample}\n- ONLY use words from this list - student already knows them\n- DO NOT use any other words that are not in this list\n- This helps reinforce learned vocabulary"
         
         # Генерируем 3 ассоциации через Gemini
         prompt = f'''Generate 3 short English associations (1-2 words each) for the word "{word['english']}".
 
 Rules:
 - Make hints clear but not too obvious
-- Use simple English words for level {language_level}
 - Don't use the word itself or direct translations
 - Focus on: what it does, how it looks, where you find it, related concepts{mastered_words_hint}
 
@@ -1240,22 +1235,12 @@ Return ONLY valid JSON:
             
             hints_text = ', '.join(hints)
             
-            # Добавляем транскрипцию и кнопку
-            transcription = get_word_transcription(word['english'])
-            
+            # Убираем транскрипцию и кнопку произношения
             message = f"🎯 Guess the word by associations:\n\n{hints_text}\n\n"
             message += f"🔑 Слово: <b>{word['english']}</b>"
-            if transcription:
-                message += f" {transcription}"
             message += f"\n🇷🇺 {word['russian']}"
             
-            keyboard = {
-                'inline_keyboard': [[
-                    {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
-                ]]
-            }
-            
-            return (message, word['english'], keyboard)
+            return (message, word['english'])
             
     except Exception as e:
         print(f"[ERROR] Failed to generate associations for '{word['english']}': {e}")
@@ -1266,37 +1251,19 @@ Return ONLY valid JSON:
         hints = ['word', 'thing', 'item']
         hints_text = ', '.join(hints)
         
-        transcription = get_word_transcription(word['english'])
         message = f"🎯 Guess the word by associations:\n\n{hints_text}\n\n"
         message += f"🔑 Слово: <b>{word['english']}</b>"
-        if transcription:
-            message += f" {transcription}"
         message += f"\n🇷🇺 {word['russian']}"
         
-        keyboard = {
-            'inline_keyboard': [[
-                {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
-            ]]
-        }
-        
-        return (message, word['english'], keyboard)
+        return (message, word['english'])
 
 def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
     """Генерирует упражнение на перевод"""
-    transcription = get_word_transcription(word['english'])
-    
+    # Убираем транскрипцию и кнопку произношения
     message = f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n🇷🇺 {word['russian']}\n\n"
     message += f"🔑 Правильный ответ: <b>{word['english']}</b>"
-    if transcription:
-        message += f" {transcription}"
     
-    keyboard = {
-        'inline_keyboard': [[
-            {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
-        ]]
-    }
-    
-    return (message, word['english'], keyboard)
+    return (message, word['english'])
 
 def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None, urgent_goals: List[str] = None, learning_goal: str = None, learning_mode: str = 'standard') -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня, тем и срочных целей"""
