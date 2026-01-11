@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
 import { funcUrls } from '@/config/funcUrls';
-import VocabularyManager from '@/components/admin/VocabularyManager';
 import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';
 import PromptsManager from '@/components/admin/PromptsManager';
@@ -31,12 +30,7 @@ interface User {
   voice_subscription_expires_at?: string;
 }
 
-interface Teacher extends User {
-  students_count?: number;
-  phone?: string;
-  card_number?: string;
-  bank_name?: string;
-}
+
 
 const API_URL = funcUrls['webapp-api'];
 const SCHEDULER_URL = funcUrls['practice-scheduler'];
@@ -51,12 +45,12 @@ export default function Admin() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
 
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
+
   const [students, setStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'teachers' | 'students' | 'vocabulary' | 'analytics' | 'proxies' | 'blog' | 'prompts' | 'pricing'>('teachers');
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [activeTab, setActiveTab] = useState<'students' | 'analytics' | 'proxies' | 'blog' | 'prompts' | 'pricing'>('students');
+
   const [analytics, setAnalytics] = useState<any>(null);
   const [schedulerRunning, setSchedulerRunning] = useState(false);
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
@@ -124,25 +118,14 @@ export default function Admin() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [teachersRes, studentsRes] = await Promise.all([
-        fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_all_teachers' })
-        }),
-        fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'get_all_students' })
-        })
-      ]);
+      const studentsRes = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_all_students' })
+      });
 
-      const teachersData = await teachersRes.json();
       const studentsData = await studentsRes.json();
 
-      if (teachersData.teachers) {
-        setTeachers(teachersData.teachers);
-      }
       if (studentsData.students) {
         setStudents(studentsData.students);
       }
@@ -211,14 +194,7 @@ export default function Admin() {
     }
   };
 
-  const filteredTeachers = teachers.filter(t => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      t.first_name?.toLowerCase().includes(searchLower) ||
-      t.username?.toLowerCase().includes(searchLower) ||
-      t.promocode?.toLowerCase().includes(searchLower)
-    );
-  });
+
 
   const filteredStudents = students.filter(s => {
     const searchLower = searchQuery.toLowerCase();
@@ -323,7 +299,7 @@ export default function Admin() {
               <Icon name="Shield" size={28} className="text-blue-600" />
               Панель администратора
             </h1>
-            <p className="text-gray-600 text-base">Управление преподавателями и учениками</p>
+            <p className="text-gray-600 text-base">Управление проектом AnyaGPT</p>
           </div>
           <Button onClick={handleLogout} variant="outline" className="h-10">
             <Icon name="LogOut" size={16} className="mr-2" />
@@ -335,7 +311,7 @@ export default function Admin() {
           <div className="flex-1">
             <Input
               type="text"
-              placeholder="Поиск по имени, username или промокоду..."
+              placeholder="Поиск по имени или username..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-11 text-sm"
@@ -343,28 +319,12 @@ export default function Admin() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button
-              onClick={() => setActiveTab('teachers')}
-              variant={activeTab === 'teachers' ? 'default' : 'outline'}
-              className="flex-1 sm:flex-none h-11 text-sm font-medium"
-            >
-              <Icon name="GraduationCap" size={16} className="mr-1.5" />
-              Преподаватели ({teachers.length})
-            </Button>
-            <Button
               onClick={() => setActiveTab('students')}
               variant={activeTab === 'students' ? 'default' : 'outline'}
               className="flex-1 sm:flex-none h-11 text-sm font-medium"
             >
               <Icon name="BookOpen" size={16} className="mr-1.5" />
               Ученики ({students.length})
-            </Button>
-            <Button
-              onClick={() => setActiveTab('vocabulary')}
-              variant={activeTab === 'vocabulary' ? 'default' : 'outline'}
-              className="flex-1 sm:flex-none h-11 text-sm font-medium"
-            >
-              <Icon name="Book" size={16} className="mr-1.5" />
-              Словарь
             </Button>
             <Button
               onClick={() => setActiveTab('analytics')}
@@ -406,86 +366,10 @@ export default function Admin() {
               <Icon name="DollarSign" size={16} className="mr-1.5" />
               Цены
             </Button>
-            <Button
-              onClick={() => window.location.href = '/admin/generate-words'}
-              variant="outline"
-              className="flex-1 sm:flex-none h-11 text-sm font-medium bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
-            >
-              <Icon name="Sparkles" size={16} className="mr-1.5" />
-              Генерация слов
-            </Button>
           </div>
         </div>
 
-        {activeTab === 'teachers' && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredTeachers.map((teacher) => {
-              const teacherName = teacher.first_name || teacher.username || 'Преподаватель';
-              const teacherUsername = teacher.username ? `@${teacher.username}` : null;
 
-              return (
-                <Card key={teacher.telegram_id} className="border border-indigo-200 shadow-sm hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start gap-3">
-                      <Avatar className="w-12 h-12 border-2 border-indigo-300">
-                        <AvatarImage src={teacher.photo_url} />
-                        <AvatarFallback className="bg-indigo-100 text-indigo-700 font-semibold">
-                          {teacherName.slice(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base font-semibold text-gray-900 leading-tight">
-                          {teacherName}
-                        </CardTitle>
-                        {teacherUsername && (
-                          <p className="text-xs text-gray-500 mt-0.5">{teacherUsername}</p>
-                        )}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Icon name="Users" size={14} className="text-blue-600 flex-shrink-0" />
-                      <span className="text-gray-700 font-medium">{teacher.students_count || 0} учеников</span>
-                    </div>
-                    {teacher.promocode && (
-                      <div className="flex items-center gap-2">
-                        <Icon name="Tag" size={14} className="text-purple-600 flex-shrink-0" />
-                        <Badge variant="secondary" className="text-xs font-mono px-2 py-0.5">
-                          {teacher.promocode}
-                        </Badge>
-                      </div>
-                    )}
-                    {teacher.phone && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Icon name="Phone" size={14} className="text-green-600 flex-shrink-0" />
-                        <span className="text-gray-700">{teacher.phone}</span>
-                      </div>
-                    )}
-                    {teacher.card_number && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <p className="text-xs text-gray-500 mb-1">Банковская карта:</p>
-                        <p className="text-sm font-mono text-gray-900">{teacher.card_number}</p>
-                        {teacher.bank_name && (
-                          <p className="text-xs text-gray-600 mt-0.5">{teacher.bank_name}</p>
-                        )}
-                      </div>
-                    )}
-                    <Button
-                      onClick={() => setSelectedTeacher(teacher)}
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-3 h-9 text-sm font-medium"
-                    >
-                      <Icon name="Users" size={14} className="mr-1.5" />
-                      Ученики
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
 
         {activeTab === 'students' && (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -675,7 +559,7 @@ export default function Admin() {
           </div>
         )}
 
-        {activeTab === 'vocabulary' && <VocabularyManager />}
+
 
         {activeTab === 'proxies' && <ProxyManager />}
 
