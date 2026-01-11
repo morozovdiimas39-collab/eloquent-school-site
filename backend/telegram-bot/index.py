@@ -1120,8 +1120,17 @@ def generate_context_exercise(word: Dict[str, Any], language_level: str, all_wor
     # Перемешиваем варианты
     random.shuffle(options)
     
+    # Добавляем транскрипцию
+    transcription = get_word_transcription(word['english'])
+    
+    message = f"📝 Fill in the blank:\n\n{sentence_template}\n\n"
+    message += f"🔑 Слово: <b>{word['english']}</b>"
+    if transcription:
+        message += f" {transcription}"
+    message += f"\n🇷🇺 {word['russian']}"
+    
     return (
-        f"📝 Fill in the blank:\n\n{sentence_template}\n\nChoose the correct word:",
+        message,
         word['english'],
         options
     )
@@ -1200,10 +1209,22 @@ Return ONLY valid JSON:
             
             hints_text = ', '.join(hints)
             
-            return (
-                f"🎯 Guess the word by associations:\n\n{hints_text}\n\nRussian translation: {word['russian']}",
-                word['english']
-            )
+            # Добавляем транскрипцию и кнопку
+            transcription = get_word_transcription(word['english'])
+            
+            message = f"🎯 Guess the word by associations:\n\n{hints_text}\n\n"
+            message += f"🔑 Слово: <b>{word['english']}</b>"
+            if transcription:
+                message += f" {transcription}"
+            message += f"\n🇷🇺 {word['russian']}"
+            
+            keyboard = {
+                'inline_keyboard': [[
+                    {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
+                ]]
+            }
+            
+            return (message, word['english'], keyboard)
             
     except Exception as e:
         print(f"[ERROR] Failed to generate associations for '{word['english']}': {e}")
@@ -1213,17 +1234,38 @@ Return ONLY valid JSON:
         # Fallback на простые ассоциации
         hints = ['word', 'thing', 'item']
         hints_text = ', '.join(hints)
-        return (
-            f"🎯 Guess the word by associations:\n\n{hints_text}\n\nRussian translation: {word['russian']}",
-            word['english']
-        )
+        
+        transcription = get_word_transcription(word['english'])
+        message = f"🎯 Guess the word by associations:\n\n{hints_text}\n\n"
+        message += f"🔑 Слово: <b>{word['english']}</b>"
+        if transcription:
+            message += f" {transcription}"
+        message += f"\n🇷🇺 {word['russian']}"
+        
+        keyboard = {
+            'inline_keyboard': [[
+                {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
+            ]]
+        }
+        
+        return (message, word['english'], keyboard)
 
 def generate_translation_exercise(word: Dict[str, Any]) -> tuple:
     """Генерирует упражнение на перевод"""
-    return (
-        f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n{word['russian']}",
-        word['english']
-    )
+    transcription = get_word_transcription(word['english'])
+    
+    message = f"🇷🇺→🇬🇧 Переведи слово на английский:\n\n🇷🇺 {word['russian']}\n\n"
+    message += f"🔑 Правильный ответ: <b>{word['english']}</b>"
+    if transcription:
+        message += f" {transcription}"
+    
+    keyboard = {
+        'inline_keyboard': [[
+            {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
+        ]]
+    }
+    
+    return (message, word['english'], keyboard)
 
 def call_gemini(user_message: str, history: List[Dict[str, str]], session_words: List[Dict[str, Any]] = None, language_level: str = 'A1', preferred_topics: List[Dict[str, str]] = None, urgent_goals: List[str] = None, learning_goal: str = None, learning_mode: str = 'standard') -> str:
     """Вызывает Gemini API через прокси с учетом слов, уровня, тем и срочных целей"""
@@ -4532,21 +4574,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
                             update_exercise_state(user['id'], word['id'], answer)
                             
-                            # Создаем inline keyboard с вариантами ответов
+                            # Создаем inline keyboard с вариантами ответов + кнопка произношения
                             inline_keyboard = {
                                 'inline_keyboard': [
                                     [{'text': opt, 'callback_data': f'context_answer:{opt}'}] for opt in options
-                                ]
+                                ] + [[
+                                    {'text': '🔊 Послушать произношение', 'callback_data': f'pronounce:{word["english"]}'}
+                                ]]
                             }
-                            send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
+                            send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode='HTML')
                         elif mode == 'association':
-                            exercise_text, answer = generate_association_exercise(word, language_level)
+                            exercise_text, answer, keyboard = generate_association_exercise(word, language_level)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                            send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                         elif mode == 'translation':
-                            exercise_text, answer = generate_translation_exercise(word)
+                            exercise_text, answer, keyboard = generate_translation_exercise(word)
                             update_exercise_state(user['id'], word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, parse_mode=None)
+                            send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                     else:
                         print(f"[ERROR] No words found for user {user['id']}")
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.', parse_mode=None)
