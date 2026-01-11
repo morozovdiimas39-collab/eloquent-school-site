@@ -4552,7 +4552,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
             
             # Если проверка прошла - активируем режим
-            update_conversation_mode(user['id'], mode)
+            update_conversation_mode(telegram_id, mode)
             
             mode_messages = {
                 'dialog': '💬 Режим "Диалог" активирован!\n\nТеперь просто пиши мне на английском, и я буду помогать тебе практиковать разговорную речь в естественных диалогах.',
@@ -4579,16 +4579,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 try:
                     # Получаем уровень пользователя
                     language_level = user.get('language_level', 'A1')
-                    print(f"[DEBUG] Checking words for user {user['id']}, level {language_level}")
+                    print(f"[DEBUG] Checking words for user {telegram_id}, level {language_level}")
                     # Проверяем и добавляем дефолтные слова если их нет
-                    ensure_user_has_words(user['id'], language_level)
-                    print(f"[DEBUG] Getting random word for user {user['id']}")
-                    word = get_random_word(user['id'], language_level)
+                    ensure_user_has_words(telegram_id, language_level)
+                    print(f"[DEBUG] Getting random word for user {telegram_id}")
+                    word = get_random_word(telegram_id, language_level)
                     print(f"[DEBUG] Got word: {word}")
                     if word:
                         if mode == 'sentence':
                             exercise_text, keyboard = generate_sentence_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], word['english'])
+                            update_exercise_state(telegram_id, word['id'], word['english'])
                             send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                         elif mode == 'context':
                             # Получаем все слова студента для генерации вариантов
@@ -4597,14 +4597,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             cur.execute(
                                 f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
                                 f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
-                                f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                                f"WHERE sw.student_id = {telegram_id} LIMIT 20"
                             )
                             all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
                             cur.close()
                             conn.close()
                             
                             exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             
                             # Создаем inline keyboard с вариантами ответов + кнопка произношения
                             inline_keyboard = {
@@ -4617,14 +4617,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode='HTML')
                         elif mode == 'association':
                             exercise_text, answer, keyboard = generate_association_exercise(word, language_level, student_id=telegram_id)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                         elif mode == 'translation':
                             exercise_text, answer, keyboard = generate_translation_exercise(word)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
                     else:
-                        print(f"[ERROR] No words found for user {user['id']}")
+                        print(f"[ERROR] No words found for user {telegram_id}")
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.', parse_mode=None)
                 except Exception as e:
                     print(f"[ERROR] Failed to generate exercise: {e}")
