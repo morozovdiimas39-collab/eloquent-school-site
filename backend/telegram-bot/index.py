@@ -3139,7 +3139,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'adaptive_level_test', "
                         f"test_phrases = '{test_state}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -3169,7 +3169,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                         cur.execute(
                             f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
-                            f"WHERE telegram_id = {user['id']}"
+                            f"WHERE telegram_id = {telegram_id}"
                         )
                         cur.close()
                         conn.close()
@@ -3239,7 +3239,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                                 'title': plan['name'],
                                 'description': clean_description,
                                 'payload': json.dumps({
-                                    'telegram_id': user['id'],
+                                    'telegram_id': telegram_id,
                                     'plan': plan_key,
                                     'duration_days': plan['duration_days']
                                 }),
@@ -3326,7 +3326,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"learning_mode = 'standard', "
                         f"conversation_mode = 'adaptive_level_test', "
                         f"test_phrases = '{test_state}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -3354,7 +3354,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         cur = conn.cursor()
                         test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                         cur.execute(
-                            f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb WHERE telegram_id = {user['id']}"
+                            f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb WHERE telegram_id = {telegram_id}"
                         )
                         cur.close()
                         conn.close()
@@ -3380,7 +3380,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'awaiting_goal', "
                         f"learning_mode = 'specific_topic' "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -3403,7 +3403,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'awaiting_urgent_task', "
                         f"learning_mode = 'urgent_task' "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -3411,7 +3411,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('role_'):
                 role = data.replace('role_', '')
                 create_user(
-                    user['id'],
+                    telegram_id,
                     user.get('username', ''),
                     user.get('first_name', ''),
                     user.get('last_name', ''),
@@ -3429,9 +3429,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
             elif data.startswith('mode_'):
                 mode = data.replace('mode_', '')
-                update_conversation_mode(user['id'], mode)
+                update_conversation_mode(telegram_id, mode)
                 
-                user_data = get_user(user['id'])
+                user_data = get_user(telegram_id)
                 language_level = user_data.get('language_level', 'A1') if user_data else 'A1'
                 
                 mode_names = {
@@ -3450,23 +3450,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 
                 if mode != 'dialog':
-                    word = get_random_word(user['id'], language_level)
+                    word = get_random_word(telegram_id, language_level)
                     if word:
                         if mode == 'sentence':
                             exercise_text = generate_sentence_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], word['english'])
+                            update_exercise_state(telegram_id, word['id'], word['english'])
                             send_telegram_message(chat_id, exercise_text)
                         elif mode == 'context':
                             exercise_text, answer = generate_context_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             send_telegram_message(chat_id, exercise_text)
                         elif mode == 'association':
                             exercise_text, answer = generate_association_exercise(word, language_level)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             send_telegram_message(chat_id, exercise_text)
                         elif mode == 'translation':
                             exercise_text, answer = generate_translation_exercise(word)
-                            update_exercise_state(user['id'], word['id'], answer)
+                            update_exercise_state(telegram_id, word['id'], answer)
                             send_telegram_message(chat_id, exercise_text)
                     else:
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.')
@@ -3506,7 +3506,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     # Переводим в режим awaiting_topics
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_topics' WHERE telegram_id = {user['id']}")
+                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_topics' WHERE telegram_id = {telegram_id}")
                     cur.close()
                     conn.close()
                 else:
@@ -3518,7 +3518,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur = conn.cursor()
                     
                     # Получаем текущие интересы
-                    cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                     row = cur.fetchone()
                     current_topics = row[0] if row and row[0] else []
                     
@@ -3541,7 +3541,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
                         f"preferred_topics = '{topics_json}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     
                     cur.close()
@@ -3643,7 +3643,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 cur = conn.cursor()
                 
                 # Получаем выбранные интересы
-                cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                cur.execute(f"SELECT preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                 row = cur.fetchone()
                 selected_topics = row[0] if row and row[0] else []
                 
@@ -3665,14 +3665,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     )
                     
                     # Получаем данные для генерации плана
-                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
                     preferred_topics = row[2] if row and row[2] else []
                     
                     # Обновляем режим на generating_plan
-                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'generating_plan' WHERE telegram_id = {user['id']}")
+                    cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'generating_plan' WHERE telegram_id = {telegram_id}")
                     
                     cur.close()
                     conn.close()
@@ -3682,7 +3682,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         function_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
                         async_payload = json.dumps({
                             'action': 'generate_plan_async',
-                            'user_id': user['id'],
+                            'user_id': telegram_id,
                             'chat_id': chat_id,
                             'learning_goal': learning_goal,
                             'language_level': language_level,
@@ -3729,11 +3729,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 )
                 
                 # Переключаем в режим диалога
-                update_conversation_mode(user['id'], 'dialog')
+                update_conversation_mode(telegram_id, 'dialog')
                 
                 # Получаем данные пользователя для call_gemini
-                existing_user = get_user(user['id'])
-                session_words = get_session_words(user['id'], limit=10)
+                existing_user = get_user(telegram_id)
+                session_words = get_session_words(telegram_id, limit=10)
                 
                 # Аня инициирует диалог ПЕРВОЙ
                 try:
@@ -3752,7 +3752,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     send_telegram_message(chat_id, anya_greeting, get_reply_keyboard(), parse_mode=None)
                     
                     # Сохраняем в историю
-                    save_message(user['id'], 'assistant', anya_greeting)
+                    save_message(telegram_id, 'assistant', anya_greeting)
                     
                 except Exception as e:
                     print(f"[ERROR] Failed to send Anya's greeting: {e}")
@@ -3775,7 +3775,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Переводим в режим корректировки плана
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'editing_plan' WHERE telegram_id = {user['id']}")
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'editing_plan' WHERE telegram_id = {telegram_id}")
                 cur.close()
                 conn.close()
             
@@ -3802,7 +3802,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 selected_answer = data.replace('context_answer:', '')
                 
                 # Получаем данные пользователя
-                existing_user = get_user(user['id'])
+                existing_user = get_user(telegram_id)
                 if not existing_user:
                     return {
                         'statusCode': 200,
@@ -3844,26 +3844,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     # Обновляем прогресс
                     if current_word_id:
-                        update_word_progress_api(user['id'], current_word_id, True)
+                        update_word_progress_api(telegram_id, current_word_id, True)
                     
-                    clear_exercise_state(user['id'])
+                    clear_exercise_state(telegram_id)
                     
                     # Генерируем следующее упражнение
-                    word = get_random_word(user['id'], language_level)
+                    word = get_random_word(telegram_id, language_level)
                     if word:
                         conn = get_db_connection()
                         cur = conn.cursor()
                         cur.execute(
                             f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
                             f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
-                            f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                            f"WHERE sw.student_id = {telegram_id} LIMIT 20"
                         )
                         all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
                         cur.close()
                         conn.close()
                         
                         exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
-                        update_exercise_state(user['id'], word['id'], answer)
+                        update_exercise_state(telegram_id, word['id'], answer)
                         
                         inline_keyboard = {
                             'inline_keyboard': [
@@ -3873,7 +3873,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
                     else:
                         send_telegram_message(chat_id, '✅ Упражнения закончились!', get_reply_keyboard())
-                        update_conversation_mode(user['id'], 'dialog')
+                        update_conversation_mode(telegram_id, 'dialog')
                 else:
                     # НЕПРАВИЛЬНЫЙ ОТВЕТ - показываем ошибку и ДУБЛИРУЕМ вопрос
                     conn = get_db_connection()
@@ -3898,7 +3898,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     cur.execute(
                         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
                         f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
-                        f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                        f"WHERE sw.student_id = {telegram_id} LIMIT 20"
                     )
                     all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
                     
@@ -4084,7 +4084,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             # Проверяем активную подписку (basic или bundle)
             cur.execute(
                 f"SELECT period FROM {SCHEMA}.subscription_payments "
-                f"WHERE telegram_id = {user['id']} "
+                f"WHERE telegram_id = {telegram_id} "
                 f"AND status = 'paid' "
                 f"AND expires_at > CURRENT_TIMESTAMP "
                 f"ORDER BY expires_at DESC LIMIT 1"
@@ -4095,7 +4095,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             subscription_type = subscription_row[0] if subscription_row else None
             
-            print(f"[DEBUG SUBSCRIPTION CHECK] User {user['id']}, subscription_type: {subscription_type}")
+            print(f"[DEBUG SUBSCRIPTION CHECK] User {telegram_id}, subscription_type: {subscription_type}")
             
             # ⚠️ CRITICAL: Проверяем есть ли доступ к БАЗОВЫМ функциям
             # basic или bundle дают доступ к базовым функциям
@@ -4203,10 +4203,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         # Обработка голосовых сообщений
         if voice:
             # Проверяем режим пользователя
-            existing_user = get_user(user['id'])
+            existing_user = get_user(telegram_id)
             if not existing_user:
-                create_user(user['id'], user.get('username', ''), user.get('first_name', ''), user.get('last_name', ''), 'student')
-                existing_user = {'telegram_id': user['id'], 'conversation_mode': 'voice', 'language_level': 'A1'}
+                create_user(telegram_id, user.get('username', ''), user.get('first_name', ''), user.get('last_name', ''), 'student')
+                existing_user = {'telegram_id': telegram_id, 'conversation_mode': 'voice', 'language_level': 'A1'}
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             
@@ -4244,13 +4244,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 preferred_topics = existing_user.get('preferred_topics', [])
                 
                 # Получаем историю диалога
-                history = get_conversation_history(user['id'])
+                history = get_conversation_history(telegram_id)
                 
                 # Получаем слова для практики
                 session_words = None
                 if existing_user.get('role') == 'student':
                     try:
-                        session_words = get_session_words(user['id'], limit=10)
+                        session_words = get_session_words(telegram_id, limit=10)
                     except Exception as e:
                         print(f"[WARNING] Failed to load session words: {e}")
                 
@@ -4308,8 +4308,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 send_telegram_voice(chat_id, voice_url)
                 
                 # Сохраняем в историю (полный ответ с исправлениями для контекста)
-                save_message(user['id'], 'user', recognized_text)
-                save_message(user['id'], 'assistant', response_text)
+                save_message(telegram_id, 'user', recognized_text)
+                save_message(telegram_id, 'assistant', response_text)
                 
                 return {
                     'statusCode': 200,
@@ -4392,7 +4392,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Сохраняем состояние - ждем выбор режима обучения
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {user['id']}")
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {telegram_id}")
                 cur.close()
                 conn.close()
             else:
@@ -4641,18 +4641,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         else:
             # Любое другое сообщение - обрабатываем в зависимости от режима
-            existing_user = get_user(user['id'])
+            existing_user = get_user(telegram_id)
             
             if not existing_user:
                 # Автоматически регистрируем если пользователь начал писать без /start
                 create_user(
-                    user['id'],
+                    telegram_id,
                     user.get('username', ''),
                     user.get('first_name', ''),
                     user.get('last_name', ''),
                     'student'
                 )
-                existing_user = {'telegram_id': user['id'], 'role': 'student', 'conversation_mode': 'dialog'}
+                existing_user = {'telegram_id': telegram_id, 'role': 'student', 'conversation_mode': 'dialog'}
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             language_level = existing_user.get('language_level', 'A1')
@@ -4663,7 +4663,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Получаем состояние теста
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                 row = cur.fetchone()
                 cur.close()
                 conn.close()
@@ -4872,7 +4872,7 @@ No markdown, no explanations, just JSON.'''
                                 f"language_level = '{actual_level}', "
                                 f"conversation_mode = 'generating_plan', "
                                 f"test_phrases = NULL "
-                                f"WHERE telegram_id = {user['id']}"
+                                f"WHERE telegram_id = {telegram_id}"
                             )
                             cur.close()
                             conn.close()
@@ -4881,7 +4881,7 @@ No markdown, no explanations, just JSON.'''
                             import threading
                             thread = threading.Thread(
                                 target=generate_plan_async,
-                                args=(chat_id, user['id'])
+                                args=(chat_id, telegram_id)
                             )
                             thread.daemon = True
                             thread.start()
@@ -4919,7 +4919,7 @@ No markdown, no explanations, just JSON.'''
                             f"language_level = '{actual_level}', "
                             f"conversation_mode = 'awaiting_topics', "
                             f"test_phrases = NULL "
-                            f"WHERE telegram_id = {user['id']}"
+                            f"WHERE telegram_id = {telegram_id}"
                         )
                         cur.close()
                         conn.close()
@@ -4966,7 +4966,7 @@ No markdown, no explanations, just JSON.'''
                     test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -4986,7 +4986,7 @@ No markdown, no explanations, just JSON.'''
                 # Получаем сохраненные фразы для проверки
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                cur.execute(f"SELECT test_phrases FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                 row = cur.fetchone()
                 cur.close()
                 conn.close()
@@ -5136,7 +5136,7 @@ No markdown, no explanations, just JSON.'''
                 # Проверяем режим обучения - для specific_topic НЕ НУЖНЫ интересы
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                cur.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                 row = cur.fetchone()
                 learning_mode = row[0] if row and row[0] else 'standard'
                 
@@ -5152,7 +5152,7 @@ No markdown, no explanations, just JSON.'''
                         f"language_level = '{actual_level}', "
                         f"conversation_mode = 'dialog', "
                         f"test_phrases = NULL "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -5186,7 +5186,7 @@ No markdown, no explanations, just JSON.'''
                         f"language_level = '{actual_level}', "
                         f"conversation_mode = 'awaiting_topic_selection', "
                         f"test_phrases = NULL "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -5231,13 +5231,13 @@ No markdown, no explanations, just JSON.'''
                                 f"UPDATE {SCHEMA}.users SET "
                                 f"learning_goal = '{goal_escaped}', "
                                 f"learning_goal_details = '{details_escaped}' "
-                                f"WHERE telegram_id = {user['id']}"
+                                f"WHERE telegram_id = {telegram_id}"
                             )
                         else:
                             cur.execute(
                                 f"UPDATE {SCHEMA}.users SET "
                                 f"learning_goal = '{goal_escaped}' "
-                                f"WHERE telegram_id = {user['id']}"
+                                f"WHERE telegram_id = {telegram_id}"
                             )
                         
                         cur.close()
@@ -5268,7 +5268,7 @@ No markdown, no explanations, just JSON.'''
                             f"UPDATE {SCHEMA}.users SET "
                             f"conversation_mode = 'adaptive_level_test', "
                             f"test_phrases = '{test_state}'::jsonb "
-                            f"WHERE telegram_id = {user['id']}"
+                            f"WHERE telegram_id = {telegram_id}"
                         )
                         cur.close()
                         conn.close()
@@ -5298,7 +5298,7 @@ No markdown, no explanations, just JSON.'''
                             test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                             cur.execute(
                                 f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
-                                f"WHERE telegram_id = {user['id']}"
+                                f"WHERE telegram_id = {telegram_id}"
                             )
                             cur.close()
                             conn.close()
@@ -5422,7 +5422,7 @@ No markdown, no explanations, just JSON.'''
                         f"UPDATE {SCHEMA}.users SET "
                         f"learning_goal = '{goal_escaped}', "
                         f"urgent_goals = '{goals_json}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     
                     cur.close()
@@ -5441,7 +5441,7 @@ No markdown, no explanations, just JSON.'''
                         f"UPDATE {SCHEMA}.users SET "
                         f"conversation_mode = 'adaptive_level_test', "
                         f"test_phrases = '{test_state}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
                     conn.close()
@@ -5469,7 +5469,7 @@ No markdown, no explanations, just JSON.'''
                         test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
                         cur.execute(
                             f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
-                            f"WHERE telegram_id = {user['id']}"
+                            f"WHERE telegram_id = {telegram_id}"
                         )
                         cur.close()
                         conn.close()
@@ -5559,11 +5559,11 @@ No markdown, no explanations, just JSON.'''
                     cur.execute(
                         f"UPDATE {SCHEMA}.users SET "
                         f"preferred_topics = '{topics_json}'::jsonb "
-                        f"WHERE telegram_id = {user['id']}"
+                        f"WHERE telegram_id = {telegram_id}"
                     )
                     
                     # Получаем цель и уровень для генерации плана
-                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
@@ -5573,7 +5573,7 @@ No markdown, no explanations, just JSON.'''
                     conn.close()
                     
                     # Генерируем ПОЛНЫЙ МЕСЯЧНЫЙ ПЛАН с материалами
-                    plan_result = generate_full_monthly_plan(user['id'], learning_goal, language_level, preferred_topics)
+                    plan_result = generate_full_monthly_plan(telegram_id, learning_goal, language_level, preferred_topics)
                     
                     if plan_result.get('success'):
                         # Отправляем план с кнопками подтверждения
@@ -5623,7 +5623,7 @@ No markdown, no explanations, just JSON.'''
                     # Получаем данные пользователя
                     conn = get_db_connection()
                     cur = conn.cursor()
-                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {user['id']}")
+                    cur.execute(f"SELECT learning_goal, language_level, preferred_topics FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
                     row = cur.fetchone()
                     learning_goal = row[0] if row and row[0] else 'Общее развитие английского'
                     language_level = row[1] if row and row[1] else 'A1'
@@ -5635,7 +5635,7 @@ No markdown, no explanations, just JSON.'''
                     modified_goal = f"{learning_goal}. Дополнительно: {text}"
                     
                     # Регенерируем план с учетом правок
-                    plan_result = generate_full_monthly_plan(user['id'], modified_goal, language_level, preferred_topics)
+                    plan_result = generate_full_monthly_plan(telegram_id, modified_goal, language_level, preferred_topics)
                     
                     if plan_result.get('success'):
                         send_telegram_message(
@@ -5753,18 +5753,18 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                     
                                     # Переходим к следующему слову
                                     if current_word_id:
-                                        update_word_progress_api(user['id'], current_word_id, True)
+                                        update_word_progress_api(telegram_id, current_word_id, True)
                                     
-                                    clear_exercise_state(user['id'])
+                                    clear_exercise_state(telegram_id)
                                     
-                                    word = get_random_word(user['id'], language_level)
+                                    word = get_random_word(telegram_id, language_level)
                                     if word:
                                         exercise_text = generate_sentence_exercise(word, language_level)
-                                        update_exercise_state(user['id'], word['id'], word['english'])
+                                        update_exercise_state(telegram_id, word['id'], word['english'])
                                         send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                                     else:
                                         send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
-                                        update_conversation_mode(user['id'], 'dialog')
+                                        update_conversation_mode(telegram_id, 'dialog')
                                 else:
                                     # ⚠️ КРИТИЧНО: При ошибке показываем исправление и просим ПОВТОРИТЬ ТО ЖЕ СЛОВО
                                     response_text = '🔧 Fix / Correct:\n'
@@ -5792,18 +5792,18 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                 
                                 # Переходим к следующему слову
                                 if current_word_id:
-                                    update_word_progress_api(user['id'], current_word_id, True)
+                                    update_word_progress_api(telegram_id, current_word_id, True)
                                 
-                                clear_exercise_state(user['id'])
+                                clear_exercise_state(telegram_id)
                                 
-                                word = get_random_word(user['id'], language_level)
+                                word = get_random_word(telegram_id, language_level)
                                 if word:
                                     exercise_text = generate_sentence_exercise(word, language_level)
-                                    update_exercise_state(user['id'], word['id'], word['english'])
+                                    update_exercise_state(telegram_id, word['id'], word['english'])
                                     send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                                 else:
                                     send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
-                                    update_conversation_mode(user['id'], 'dialog')
+                                    update_conversation_mode(telegram_id, 'dialog')
                             else:
                                 # При ошибке - просим повторить то же слово
                                 response_text = f'❌ Предложение не содержит слово "{correct_answer}".\n\nПопробуй еще раз!'
@@ -5825,11 +5825,11 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             
                             # Обновляем прогресс слова
                             if current_word_id:
-                                update_word_progress_api(user['id'], current_word_id, True)
+                                update_word_progress_api(telegram_id, current_word_id, True)
                             
-                            clear_exercise_state(user['id'])
+                            clear_exercise_state(telegram_id)
                             
-                            word = get_random_word(user['id'], language_level)
+                            word = get_random_word(telegram_id, language_level)
                             if word:
                                 if conversation_mode == 'context':
                                     # Получаем все слова для генерации вариантов
@@ -5838,14 +5838,14 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                     cur.execute(
                                         f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.student_words sw "
                                         f"JOIN {SCHEMA}.words w ON w.id = sw.word_id "
-                                        f"WHERE sw.student_id = {user['id']} LIMIT 20"
+                                        f"WHERE sw.student_id = {telegram_id} LIMIT 20"
                                     )
                                     all_words = [{'id': row[0], 'english': row[1], 'russian': row[2]} for row in cur.fetchall()]
                                     cur.close()
                                     conn.close()
                                     
                                     exercise_text, answer, options = generate_context_exercise(word, language_level, all_words)
-                                    update_exercise_state(user['id'], word['id'], answer)
+                                    update_exercise_state(telegram_id, word['id'], answer)
                                     
                                     inline_keyboard = {
                                         'inline_keyboard': [
@@ -5855,15 +5855,15 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                     send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode=None)
                                 elif conversation_mode == 'association':
                                     exercise_text, answer = generate_association_exercise(word, language_level)
-                                    update_exercise_state(user['id'], word['id'], answer)
+                                    update_exercise_state(telegram_id, word['id'], answer)
                                     send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                                 elif conversation_mode == 'translation':
                                     exercise_text, answer = generate_translation_exercise(word)
-                                    update_exercise_state(user['id'], word['id'], answer)
+                                    update_exercise_state(telegram_id, word['id'], answer)
                                     send_telegram_message(chat_id, exercise_text, get_reply_keyboard())
                             else:
                                 send_telegram_message(chat_id, '✅ Упражнения закончились! Используй /modes для выбора другого режима.', get_reply_keyboard())
-                                update_conversation_mode(user['id'], 'dialog')
+                                update_conversation_mode(telegram_id, 'dialog')
                         else:
                             # При ошибке - показываем правильный ответ и ДУБЛИРУЕМ вопрос
                             response_text = '🔧 Fix / Correct:\n'
@@ -5909,7 +5909,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                 
             else:
                 # Режим диалога или голосового - обрабатываем через Gemini
-                history = get_conversation_history(user['id'])
+                history = get_conversation_history(telegram_id)
                 
                 # Если ученик - загружаем слова для практики
                 session_words = None
@@ -5929,7 +5929,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                         }
                     
                     try:
-                        session_words = get_session_words(user['id'], limit=10)
+                        session_words = get_session_words(telegram_id, limit=10)
                     except Exception as e:
                         print(f"[WARNING] Failed to load session words: {e}")
                     
@@ -5939,14 +5939,14 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                         conn = get_db_connection()
                         cur = conn.cursor()
                         cur.execute(
-                            f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {user['id']}"
+                            f"SELECT COUNT(*) FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}"
                         )
                         total_words = cur.fetchone()[0]
                         
                         # Проверяем количество освоенных слов
                         cur.execute(
                             f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
-                            f"WHERE student_id = {user['id']} AND status = 'mastered'"
+                            f"WHERE student_id = {telegram_id} AND status = 'mastered'"
                         )
                         mastered_count = cur.fetchone()[0]
                         cur.close()
@@ -5965,7 +5965,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                             cur = conn.cursor()
                             cur.execute(
                                 f"SELECT learning_goal, language_level FROM {SCHEMA}.users "
-                                f"WHERE telegram_id = {user['id']}"
+                                f"WHERE telegram_id = {telegram_id}"
                             )
                             user_data = cur.fetchone()
                             cur.close()
@@ -5980,7 +5980,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                 if webapp_api_url:
                                     generate_payload = json.dumps({
                                         'action': 'generate_unique_words',
-                                        'student_id': user['id'],
+                                        'student_id': telegram_id,
                                         'learning_goal': learning_goal,
                                         'language_level': user_language_level,
                                         'count': 10
@@ -6003,7 +6003,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                                                 f'Продолжай практиковаться! 💪'
                                             )
                                             # Перезагружаем слова и продолжаем диалог
-                                            session_words = get_session_words(user['id'], limit=10)
+                                            session_words = get_session_words(telegram_id, limit=10)
                                         else:
                                             send_telegram_message(
                                                 chat_id,
@@ -6045,7 +6045,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                     print(f"[DEBUG] Detected words in message: {used_word_ids}")
                 
                 # Сохраняем вопрос пользователя
-                save_message(user['id'], 'user', text)
+                save_message(telegram_id, 'user', text)
                 
                 # Получаем ответ AI с учетом слов, уровня, тем и срочных целей
                 try:
@@ -6081,7 +6081,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                     if session_words:
                         mastered_word = next((w for w in session_words if w['english'].lower() == word_text.lower()), None)
                         if mastered_word:
-                            update_word_progress_api(user['id'], mastered_word['id'], is_correct=True)
+                            update_word_progress_api(telegram_id, mastered_word['id'], is_correct=True)
                             print(f"[SUCCESS] Word '{word_text}' marked as mastered!")
                     
                     # Убираем маркер из ответа пользователю
@@ -6089,7 +6089,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                 
                 # Обновляем прогресс использованных слов учеником
                 for word_id in used_word_ids:
-                    update_word_progress_api(user['id'], word_id, True)
+                    update_word_progress_api(telegram_id, word_id, True)
                 
                 # Отслеживаем какие слова Аня использовала в своём ответе
                 if session_words:
@@ -6097,11 +6097,11 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                     if ai_used_words:
                         # Обновляем прогресс для каждого слова которое Аня использовала
                         for word_id in ai_used_words:
-                            update_word_progress_api(user['id'], word_id, True)
+                            update_word_progress_api(telegram_id, word_id, True)
                         print(f"[DEBUG] Anya used words in response: {ai_used_words}")
                 
                 # Сохраняем ответ AI
-                save_message(user['id'], 'assistant', ai_response)
+                save_message(telegram_id, 'assistant', ai_response)
                 
                 # В режиме 'voice' отправляем ТОЛЬКО голосовое сообщение (БЕЗ текста)
                 if conversation_mode == 'voice':
@@ -6127,7 +6127,7 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                         
                         record_payload = json.dumps({
                             'action': 'record_practice',
-                            'student_id': user['id'],
+                            'student_id': telegram_id,
                             'messages': 1,
                             'words': words_count,
                             'errors': 0
