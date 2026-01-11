@@ -1,7 +1,7 @@
 import json
 import os
 import psycopg2
-# Force redeploy v6 - removed pronunciation buttons, fixed associations
+# Force redeploy v7 - fixed context exercise generation via Gemini
 import urllib.request
 import urllib.parse
 import random
@@ -1088,22 +1088,65 @@ def generate_sentence_exercise(word: Dict[str, Any], language_level: str) -> tup
     return message, keyboard
 
 def generate_context_exercise(word: Dict[str, Any], language_level: str, all_words: List[Dict[str, Any]] = None) -> tuple:
-    """Генерирует упражнение Fill in the blanks с вариантами ответа"""
-    templates = {
-        'A1': [
-            f"I ___ {word['english']} every day",
-            f"She likes ___",
-            f"They ___ to the store"
-        ],
-        'A2': [
-            f"Yesterday I ___ {word['english']}",
-            f"I have never ___ this before",
-            f"We should ___ together"
-        ]
-    }
+    """Генерирует упражнение Fill in the blanks с вариантами ответа через Gemini"""
+    try:
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        if not proxy_url:
+            print(f"[WARNING] No proxy available - using fallback sentence")
+            sentence_template = f"I use ___ every day"
+        else:
+            # Генерируем контекстное предложение через Gemini
+            prompt = f'''Create a simple English sentence with a blank (___) where the word "{word['english']}" should go.
+
+Rules:
+- Make it natural and grammatically correct for level {language_level}
+- The sentence should make sense with "{word['english']}" in the blank
+- Keep it simple and clear
+- Use ___ to mark the blank
+
+Examples:
+- For "book": "I read a ___ before bed"
+- For "cat": "My ___ loves to play"
+- For "travel": "I want to ___ around the world"
+- For "happy": "She feels very ___ today"
+
+Return ONLY the sentence with ___, nothing else.'''
+
+            gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+            
+            payload = {
+                'contents': [{'parts': [{'text': prompt}]}],
+                'generationConfig': {'temperature': 0.7, 'maxOutputTokens': 100}
+            }
+            
+            proxy_handler = urllib.request.ProxyHandler({
+                'http': f'http://{proxy_url}',
+                'https': f'http://{proxy_url}'
+            })
+            opener = urllib.request.build_opener(proxy_handler)
+            
+            req = urllib.request.Request(
+                gemini_url,
+                data=json.dumps(payload).encode('utf-8'),
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            with opener.open(req, timeout=10) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                sentence_template = result['candidates'][0]['content']['parts'][0]['text'].strip()
+                log_proxy_success(proxy_id)
+                print(f"[DEBUG] Generated sentence: {sentence_template}")
     
-    level_templates = templates.get(language_level, templates['A1'])
-    sentence_template = random.choice(level_templates)
+    except Exception as e:
+        print(f"[ERROR] Failed to generate context sentence: {e}")
+        if proxy_id:
+            log_proxy_failure(proxy_id, str(e))
+        # Fallback на простое предложение
+        sentence_template = f"I like ___"
     
     # Генерируем варианты ответов (правильный + 3 неправильных) - НА АНГЛИЙСКОМ
     options = [word['english']]  # Правильный ответ
