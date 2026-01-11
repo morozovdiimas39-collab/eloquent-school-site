@@ -4457,7 +4457,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             cur = conn.cursor()
             cur.execute(
                 f"SELECT period FROM {SCHEMA}.subscription_payments "
-                f"WHERE telegram_id = {user['id']} "
+                f"WHERE telegram_id = {telegram_id} "
                 f"AND status = 'paid' "
                 f"AND expires_at > CURRENT_TIMESTAMP "
                 f"ORDER BY expires_at DESC LIMIT 1"
@@ -4467,6 +4467,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             conn.close()
             
             subscription_type = subscription_row[0] if subscription_row else None
+            print(f"[DEBUG] Subscription check: telegram_id={telegram_id}, subscription_type={subscription_type}")
             plans = get_subscription_plans()
             
             # Проверяем доступ к голосовому режиму (premium или bundle)
