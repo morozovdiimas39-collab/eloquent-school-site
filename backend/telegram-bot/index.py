@@ -1,7 +1,7 @@
 import json
 import os
 import psycopg2
-# Force redeploy v7 - fixed context exercise generation via Gemini
+# Force redeploy v8 - fixed unpacking for translation and association exercises
 import urllib.request
 import urllib.parse
 import random
@@ -4629,13 +4629,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                             }
                             send_telegram_message(chat_id, exercise_text, reply_markup=inline_keyboard, parse_mode='HTML')
                         elif mode == 'association':
-                            exercise_text, answer, keyboard = generate_association_exercise(word, language_level, student_id=telegram_id)
+                            exercise_text, answer = generate_association_exercise(word, language_level, student_id=telegram_id)
                             update_exercise_state(telegram_id, word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
+                            send_telegram_message(chat_id, exercise_text, parse_mode='HTML')
                         elif mode == 'translation':
-                            exercise_text, answer, keyboard = generate_translation_exercise(word)
+                            exercise_text, answer = generate_translation_exercise(word)
                             update_exercise_state(telegram_id, word['id'], answer)
-                            send_telegram_message(chat_id, exercise_text, reply_markup=keyboard, parse_mode='HTML')
+                            send_telegram_message(chat_id, exercise_text, parse_mode='HTML')
                     else:
                         print(f"[ERROR] No words found for user {telegram_id}")
                         send_telegram_message(chat_id, '❌ У вас пока нет слов для практики. Попросите учителя добавить слова или используйте режим диалога.', parse_mode=None)
