@@ -41,7 +41,7 @@ export default function Header() {
             onClick={() => window.open('https://t.me/eloquent_school_bot', '_blank')}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold shadow-lg"
           >
-            Начать учиться в TG
+            Попробовать бесплатно
             <Icon name="ArrowRight" size={16} className="ml-2" />
           </Button>
         </div>
