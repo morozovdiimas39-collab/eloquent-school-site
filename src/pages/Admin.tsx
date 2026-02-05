@@ -194,6 +194,27 @@ export default function Admin() {
     }
   };
 
+  const deleteUser = async (telegramId: number) => {
+    if (!confirm(`Удалить пользователя ${telegramId}? Все данные будут удалены безвозвратно!`)) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_user',
+          telegram_id: telegramId
+        })
+      });
+      await res.json();
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  };
+
 
 
   const filteredStudents = students.filter(s => {
@@ -552,6 +573,18 @@ export default function Admin() {
                         Регистрация: {new Date(student.created_at).toLocaleDateString('ru-RU')}
                       </div>
                     )}
+                    
+                    <div className="pt-2 border-t border-gray-200">
+                      <Button
+                        onClick={() => deleteUser(student.telegram_id)}
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs border-red-500 text-red-600 hover:bg-red-50"
+                      >
+                        <Icon name="Trash2" size={12} className="mr-1" />
+                        Удалить пользователя
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               );

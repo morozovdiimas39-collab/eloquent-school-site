@@ -2126,6 +2126,22 @@ def delete_blog_post(post_id: int) -> bool:
     conn.close()
     return True
 
+def delete_user(telegram_id: int) -> bool:
+    """Полностью удаляет пользователя и все его данные"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # Удаляем в правильном порядке (сначала зависимые таблицы)
+    cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.practice_sessions WHERE student_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    
+    cur.close()
+    conn.close()
+    return True
+
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
     Вызывает Gemini API для демо-чата на лендинге
@@ -2661,6 +2677,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         elif action == 'delete_blog_post':
             post_id = body_data.get('post_id')
             delete_blog_post(post_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'delete_user':
+            telegram_id = body_data.get('telegram_id')
+            delete_user(telegram_id)
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
