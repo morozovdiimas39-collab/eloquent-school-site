@@ -1,7 +1,8 @@
 import json
 import os
 import psycopg2
-# Force redeploy v8 - fixed unpacking for translation and association exercises
+import psycopg2.pool
+# Force redeploy v9 - performance optimization for 100k users
 import urllib.request
 import urllib.parse
 import random
@@ -12,6 +13,19 @@ import tempfile
 from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
+
+# ⚡ CONNECTION POOL для высокой нагрузки
+_db_pool = None
+
+def get_db_pool():
+    """Возвращает пул подключений к БД (создается один раз)"""
+    global _db_pool
+    if _db_pool is None:
+        _db_pool = psycopg2.pool.SimpleConnectionPool(
+            1, 20,  # min=1, max=20 соединений
+            os.environ['DATABASE_URL']
+        )
+    return _db_pool
 
 def get_subscription_plans() -> dict:
     """Загружает актуальные тарифные планы из БД (ТОЛЬКО ИЗ АДМИНКИ!)"""
@@ -150,10 +164,25 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
             return result
 
 def get_db_connection():
-    """Создает подключение к БД"""
-    conn = psycopg2.connect(os.environ['DATABASE_URL'])
-    conn.autocommit = True
-    return conn
+    """Получает подключение из пула (⚡ быстрее чем создавать новое)"""
+    try:
+        pool = get_db_pool()
+        conn = pool.getconn()
+        conn.autocommit = True
+        return conn
+    except:
+        # Fallback на прямое подключение если пул не работает
+        conn = psycopg2.connect(os.environ['DATABASE_URL'])
+        conn.autocommit = True
+        return conn
+
+def return_db_connection(conn):
+    """Возвращает подключение в пул"""
+    try:
+        pool = get_db_pool()
+        pool.putconn(conn)
+    except:
+        conn.close()
 
 def get_prompt_from_db(code: str, fallback: str = '') -> str:
     """Получает промпт из БД по коду, если не найден - возвращает fallback"""
@@ -1753,24 +1782,7 @@ IMPORTANT:
         'parts': [{'text': user_message}]
     })
     
-    # Проверяем доступность API через прокси - сначала получим список моделей
-    if proxy_url:
-        print(f"[DEBUG] Testing proxy connection with ListModels...")
-        list_url = f'https://generativelanguage.googleapis.com/v1beta/models?key={api_key}'
-        
-        proxy_handler = urllib.request.ProxyHandler({
-            'http': f'http://{proxy_url}',
-            'https': f'http://{proxy_url}'
-        })
-        opener = urllib.request.build_opener(proxy_handler)
-        
-        try:
-            req = urllib.request.Request(list_url)
-            with opener.open(req, timeout=30) as response:
-                models_result = json.loads(response.read().decode('utf-8'))
-                print(f"[DEBUG] Available models: {[m['name'] for m in models_result.get('models', [])][:5]}")
-        except Exception as e:
-            print(f"[DEBUG] Failed to list models: {e}")
+    # ⚡ OPTIMIZATION: Убрана проверка ListModels - тормозила запросы
     
     # Подготавливаем запрос к Gemini REST API
     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
@@ -1804,7 +1816,7 @@ IMPORTANT:
     )
     
     try:
-        with opener.open(req, timeout=30) as response:
+        with opener.open(req, timeout=12) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Gemini success with proxy!")
             
