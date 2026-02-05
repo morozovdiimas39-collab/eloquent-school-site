@@ -2155,9 +2155,6 @@ def delete_user(telegram_id: int) -> bool:
         cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
         print(f"🗑️ Deleted learning_goals")
         
-        cur.execute(f"DELETE FROM {SCHEMA}.practice_sessions WHERE student_id = {telegram_id}")
-        print(f"🗑️ Deleted practice_sessions")
-        
         cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
         print(f"🗑️ Deleted subscription_payments")
         
