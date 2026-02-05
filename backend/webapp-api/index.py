@@ -2136,7 +2136,7 @@ def delete_user(telegram_id: int) -> bool:
         # Удаляем сообщения из conversations
         try:
             print(f"🗑️ Step 1: Getting conversations...")
-            cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+            cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE user_id = {telegram_id}")
             conversation_ids = [row[0] for row in cur.fetchall()]
             print(f"🗑️ Found {len(conversation_ids)} conversations")
             
@@ -2144,7 +2144,7 @@ def delete_user(telegram_id: int) -> bool:
                 ids_str = ','.join(str(cid) for cid in conversation_ids)
                 cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
                 print(f"🗑️ Deleted messages from {len(conversation_ids)} conversations")
-                cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+                cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE user_id = {telegram_id}")
                 print(f"🗑️ Deleted conversations")
         except Exception as e:
             print(f"❌ Error in conversations: {e}")
