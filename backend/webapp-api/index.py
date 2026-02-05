@@ -2131,11 +2131,22 @@ def delete_user(telegram_id: int) -> bool:
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Удаляем в правильном порядке (сначала зависимые таблицы)
+    # Удаляем сообщения из conversations
+    cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+    conversation_ids = [row[0] for row in cur.fetchall()]
+    
+    if conversation_ids:
+        ids_str = ','.join(str(cid) for cid in conversation_ids)
+        cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
+        cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+    
+    # Удаляем все связанные данные
     cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
     cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
     cur.execute(f"DELETE FROM {SCHEMA}.practice_sessions WHERE student_id = {telegram_id}")
     cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
+    cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
     cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
     
     cur.close()
