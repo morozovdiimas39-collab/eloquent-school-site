@@ -28,10 +28,46 @@ def check_subscription(telegram_id: int) -> bool:
     )
     active_payments = cur.fetchone()[0]
     
+    # Если есть активная подписка - сразу возвращаем True
+    if active_payments > 0:
+        cur.close()
+        conn.close()
+        return True
+    
+    # ⚠️ ТЕСТОВЫЙ ПЕРИОД: если у пользователя НЕТ ни одного платежа - даём 3 дня бесплатно
+    cur.execute(
+        f"SELECT created_at FROM {SCHEMA}.users "
+        f"WHERE telegram_id = {telegram_id}"
+    )
+    user_row = cur.fetchone()
+    
+    if user_row:
+        user_created_at = user_row[0]
+        
+        # Проверяем, был ли хотя бы один платёж (попытка оплаты)
+        cur.execute(
+            f"SELECT COUNT(*) FROM {SCHEMA}.subscription_payments "
+            f"WHERE telegram_id = {telegram_id}"
+        )
+        total_payments = cur.fetchone()[0]
+        
+        cur.close()
+        conn.close()
+        
+        # Если платежей не было - проверяем тестовый период (3 дня с регистрации)
+        if total_payments == 0:
+            now = datetime.now()
+            trial_days = 3
+            trial_expired = (now - user_created_at).days >= trial_days
+            
+            print(f"[DEBUG] User {telegram_id} in trial: created {user_created_at}, days passed: {(now - user_created_at).days}, expired: {trial_expired}")
+            
+            return not trial_expired  # Если тестовый период НЕ истёк - доступ есть
+    
     cur.close()
     conn.close()
     
-    return active_payments > 0
+    return False
 
 def get_active_proxy_from_db() -> tuple:
     """Получает случайный активный прокси из БД"""
@@ -67,8 +103,8 @@ def send_subscription_required_message(chat_id: int):
         return
     
     text = (
-        "🔒 <b>Подписка истекла</b>\n\n"
-        "Твой доступ к AnyaGPT закончился, но ты можешь продолжить "
+        "🔒 <b>Тестовый период истёк</b>\n\n"
+        "Твои 3 дня бесплатного доступа к AnyaGPT закончились, но ты можешь продолжить "
         "обучение прямо сейчас!\n\n"
         "<b>Что ты получаешь с подпиской:</b>\n\n"
         "💬 <b>Диалог с Аней</b> — неограниченное общение с AI-учителем\n"
