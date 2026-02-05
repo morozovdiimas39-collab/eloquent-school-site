@@ -2128,30 +2128,54 @@ def delete_blog_post(post_id: int) -> bool:
 
 def delete_user(telegram_id: int) -> bool:
     """Полностью удаляет пользователя и все его данные"""
+    print(f"🗑️ Starting deletion for user {telegram_id}")
     conn = get_db_connection()
     cur = conn.cursor()
     
-    # Удаляем сообщения из conversations
-    cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
-    conversation_ids = [row[0] for row in cur.fetchall()]
-    
-    if conversation_ids:
-        ids_str = ','.join(str(cid) for cid in conversation_ids)
-        cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
-        cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
-    
-    # Удаляем все связанные данные
-    cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.practice_sessions WHERE student_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
-    cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-    
-    cur.close()
-    conn.close()
-    return True
+    try:
+        # Удаляем сообщения из conversations
+        cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+        conversation_ids = [row[0] for row in cur.fetchall()]
+        print(f"🗑️ Found {len(conversation_ids)} conversations")
+        
+        if conversation_ids:
+            ids_str = ','.join(str(cid) for cid in conversation_ids)
+            cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
+            print(f"🗑️ Deleted messages from {len(conversation_ids)} conversations")
+            cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted conversations")
+        
+        # Удаляем все связанные данные
+        cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
+        print(f"🗑️ Deleted word_progress")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
+        print(f"🗑️ Deleted student_words")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
+        print(f"🗑️ Deleted learning_goals")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.practice_sessions WHERE student_id = {telegram_id}")
+        print(f"🗑️ Deleted practice_sessions")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
+        print(f"🗑️ Deleted subscription_payments")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
+        print(f"🗑️ Deleted user_achievements")
+        
+        cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+        print(f"✅ Deleted user {telegram_id} from users table")
+        
+        cur.close()
+        conn.close()
+        print(f"✅ User {telegram_id} deleted successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Error deleting user {telegram_id}: {e}")
+        cur.close()
+        conn.close()
+        raise
 
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
