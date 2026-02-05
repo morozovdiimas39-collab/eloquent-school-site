@@ -2134,35 +2134,70 @@ def delete_user(telegram_id: int) -> bool:
     
     try:
         # Удаляем сообщения из conversations
-        cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
-        conversation_ids = [row[0] for row in cur.fetchall()]
-        print(f"🗑️ Found {len(conversation_ids)} conversations")
-        
-        if conversation_ids:
-            ids_str = ','.join(str(cid) for cid in conversation_ids)
-            cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
-            print(f"🗑️ Deleted messages from {len(conversation_ids)} conversations")
-            cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
-            print(f"🗑️ Deleted conversations")
+        try:
+            print(f"🗑️ Step 1: Getting conversations...")
+            cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+            conversation_ids = [row[0] for row in cur.fetchall()]
+            print(f"🗑️ Found {len(conversation_ids)} conversations")
+            
+            if conversation_ids:
+                ids_str = ','.join(str(cid) for cid in conversation_ids)
+                cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
+                print(f"🗑️ Deleted messages from {len(conversation_ids)} conversations")
+                cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE student_id = {telegram_id}")
+                print(f"🗑️ Deleted conversations")
+        except Exception as e:
+            print(f"❌ Error in conversations: {e}")
+            raise
         
         # Удаляем все связанные данные
-        cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
-        print(f"🗑️ Deleted word_progress")
+        try:
+            print(f"🗑️ Step 2: Deleting word_progress...")
+            cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted word_progress")
+        except Exception as e:
+            print(f"❌ Error in word_progress: {e}")
+            raise
         
-        cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
-        print(f"🗑️ Deleted student_words")
+        try:
+            print(f"🗑️ Step 3: Deleting student_words...")
+            cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted student_words")
+        except Exception as e:
+            print(f"❌ Error in student_words: {e}")
+            raise
         
-        cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
-        print(f"🗑️ Deleted learning_goals")
+        try:
+            print(f"🗑️ Step 4: Deleting learning_goals...")
+            cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted learning_goals")
+        except Exception as e:
+            print(f"❌ Error in learning_goals: {e}")
+            raise
         
-        cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
-        print(f"🗑️ Deleted subscription_payments")
+        try:
+            print(f"🗑️ Step 5: Deleting subscription_payments...")
+            cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
+            print(f"🗑️ Deleted subscription_payments")
+        except Exception as e:
+            print(f"❌ Error in subscription_payments: {e}")
+            raise
         
-        cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
-        print(f"🗑️ Deleted user_achievements")
+        try:
+            print(f"🗑️ Step 6: Deleting user_achievements...")
+            cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
+            print(f"🗑️ Deleted user_achievements")
+        except Exception as e:
+            print(f"❌ Error in user_achievements: {e}")
+            raise
         
-        cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-        print(f"✅ Deleted user {telegram_id} from users table")
+        try:
+            print(f"🗑️ Step 7: Deleting from users...")
+            cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+            print(f"✅ Deleted user {telegram_id} from users table")
+        except Exception as e:
+            print(f"❌ Error in users: {e}")
+            raise
         
         cur.close()
         conn.close()
@@ -2170,6 +2205,8 @@ def delete_user(telegram_id: int) -> bool:
         return True
     except Exception as e:
         print(f"❌ Error deleting user {telegram_id}: {e}")
+        import traceback
+        traceback.print_exc()
         cur.close()
         conn.close()
         raise
