@@ -3139,28 +3139,31 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 except Exception as e:
                     print(f"[WARNING] Failed to delete message: {e}")
                 
-                # Запускаем онбординг (выбор цели)
-                goal_message = (
-                    '🎯 <b>Шаг 1/3: Твоя цель</b>\n\n'
-                    'Зачем тебе английский? Выбери вариант или опиши своими словами:'
+                # НОВЫЙ онбординг - сначала спрашиваем режим обучения (как в /start)
+                send_telegram_message(
+                    chat_id,
+                    'Привет! Я Аня 👋\n\n'
+                    'Я помогу тебе учить английский через живой диалог.\n\n'
+                    'Что я умею:\n'
+                    '✅ Учим слова и фразы через общение\n'
+                    '✅ Подбираю темы под твои цели\n'
+                    '✅ Напоминаю о практике\n'
+                    '✅ Показываю твой прогресс\n\n'
+                    '❓ <b>Выбери режим обучения:</b>',
+                    {
+                        'inline_keyboard': [
+                            [{'text': '📚 Стандартное обучение (общие темы)', 'callback_data': 'learning_mode_standard'}],
+                            [{'text': '🎯 Конкретная тема (фильм/книга)', 'callback_data': 'learning_mode_specific'}],
+                            [{'text': '🚨 Срочная задача (отпуск, собеседование)', 'callback_data': 'learning_mode_urgent'}]
+                        ]
+                    },
+                    parse_mode='HTML'
                 )
                 
-                goal_keyboard = {
-                    'inline_keyboard': [
-                        [{'text': '✈️ Путешествия', 'callback_data': 'goal_travel'}],
-                        [{'text': '💼 Карьера', 'callback_data': 'goal_career'}],
-                        [{'text': '🌍 Общение', 'callback_data': 'goal_communication'}],
-                        [{'text': '📚 Учёба', 'callback_data': 'goal_study'}],
-                        [{'text': '✍️ Свой вариант', 'callback_data': 'goal_custom'}]
-                    ]
-                }
-                
-                send_telegram_message(chat_id, goal_message, goal_keyboard)
-                
-                # Переводим пользователя в режим ожидания цели
+                # Переводим пользователя в режим ожидания выбора режима обучения
                 conn = get_db_connection()
                 cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_goal' WHERE telegram_id = {telegram_id}")
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {telegram_id}")
                 cur.close()
                 conn.close()
                 
