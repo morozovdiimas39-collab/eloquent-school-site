@@ -4106,7 +4106,33 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             conn = get_db_connection()
             cur = conn.cursor()
             
-            # Проверяем активную подписку (basic или bundle)
+            # ⚠️ CRITICAL: СНАЧАЛА проверяем существует ли пользователь в users
+            # Если пользователя НЕТ → отправляем в /start для онбординга
+            cur.execute(
+                f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}"
+            )
+            user_exists = cur.fetchone()
+            
+            if not user_exists:
+                print(f"[DEBUG] User {telegram_id} NOT FOUND in users table → redirecting to /start")
+                cur.close()
+                conn.close()
+                
+                # Перенаправляем пользователя в /start для онбординга
+                welcome_message = (
+                    "👋 Привет! Я Аня — твой личный ассистент для изучения английского!\n\n"
+                    "Давай начнём с команды /start, чтобы я могла настроить обучение под тебя 😊"
+                )
+                send_telegram_message(chat_id, welcome_message)
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
+            
+            # Пользователь существует — проверяем активную подписку (basic или bundle)
             cur.execute(
                 f"SELECT period FROM {SCHEMA}.subscription_payments "
                 f"WHERE telegram_id = {telegram_id} "
