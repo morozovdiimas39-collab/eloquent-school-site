@@ -2754,14 +2754,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         elif action == 'delete_user':
-            telegram_id = body_data.get('telegram_id')
-            delete_user(telegram_id)
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'success': True}),
-                'isBase64Encoded': False
-            }
+            try:
+                telegram_id = body_data.get('telegram_id')
+                print(f"🗑️ Handler: Starting delete_user for telegram_id={telegram_id}")
+                delete_user(telegram_id)
+                print(f"✅ Handler: User {telegram_id} deleted successfully")
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True}),
+                    'isBase64Encoded': False
+                }
+            except Exception as e:
+                print(f"❌ Handler: Error deleting user: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': False, 'error': str(e)}),
+                    'isBase64Encoded': False
+                }
         
         elif action == 'reset_proxy_stats':
             proxy_id = body_data.get('proxy_id')
