@@ -2185,7 +2185,7 @@ def delete_user(telegram_id: int) -> bool:
         
         try:
             print(f"🗑️ Step 6: Deleting user_achievements...")
-            cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE user_id = {telegram_id}")
+            cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE student_id = {telegram_id}")
             print(f"🗑️ Deleted user_achievements")
         except Exception as e:
             print(f"❌ Error in user_achievements: {e}")
