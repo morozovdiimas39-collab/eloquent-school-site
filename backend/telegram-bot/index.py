@@ -176,6 +176,28 @@ def get_db_connection():
         conn.autocommit = True
         return conn
 
+def log_user_activity(telegram_id: int, event_type: str, event_data: dict = None, user_state: dict = None, error_message: str = None):
+    """Логирует активность пользователя для отладки"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        event_data_json = json.dumps(event_data) if event_data else '{}'
+        user_state_json = json.dumps(user_state) if user_state else '{}'
+        error_escaped = error_message.replace("'", "''") if error_message else None
+        error_value = f"'{error_escaped}'" if error_message else 'NULL'
+        
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.user_activity_logs "
+            f"(telegram_id, event_type, event_data, user_state, error_message) "
+            f"VALUES ({telegram_id}, '{event_type}', '{event_data_json}'::jsonb, '{user_state_json}'::jsonb, {error_value})"
+        )
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] Failed to log user activity: {e}")
+
 def return_db_connection(conn):
     """Возвращает подключение в пул"""
     try:
@@ -3117,6 +3139,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if data == 'start_onboarding':
                 print(f"[DEBUG] User {telegram_id} clicked start_onboarding button")
                 
+                # Логируем начало онбординга
+                log_user_activity(telegram_id, 'onboarding_start', {'button': 'start_onboarding'})
+                
                 # Имитируем команду /start
                 username = user.get('username', '')
                 first_name = user.get('first_name', '')
@@ -3127,6 +3152,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 if not existing_user:
                     create_user(telegram_id, username, first_name, last_name, 'student')
                     print(f"[DEBUG] Created new user {telegram_id}")
+                    log_user_activity(telegram_id, 'user_created', {'username': username, 'first_name': first_name})
                 
                 # Удаляем старое сообщение с кнопкой
                 try:
@@ -3388,6 +3414,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('learning_mode_'):
                 # Обработка выбора режима обучения (НОВЫЙ ШАГ)
                 mode = data.replace('learning_mode_', '')
+                
+                # Логируем выбор режима обучения
+                log_user_activity(telegram_id, 'learning_mode_selected', {'mode': mode})
                 
                 if mode == 'standard':
                     # СТАНДАРТНОЕ ОБУЧЕНИЕ: сразу к тесту, без ввода цели

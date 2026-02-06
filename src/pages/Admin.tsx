@@ -10,6 +10,7 @@ import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';
 import PromptsManager from '@/components/admin/PromptsManager';
 import PricingManager from '@/components/admin/PricingManager';
+import UserLogsModal from '@/components/admin/UserLogsModal';
 
 interface User {
   telegram_id: number;
@@ -55,6 +56,8 @@ export default function Admin() {
   const [schedulerRunning, setSchedulerRunning] = useState(false);
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
   const [processingSubscription, setProcessingSubscription] = useState<number | null>(null);
+  const [logsModalOpen, setLogsModalOpen] = useState(false);
+  const [selectedUserForLogs, setSelectedUserForLogs] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('admin_auth');
@@ -574,7 +577,22 @@ export default function Admin() {
                       </div>
                     )}
                     
-                    <div className="pt-2 border-t border-gray-200">
+                    <div className="pt-2 border-t border-gray-200 space-y-2">
+                      <Button
+                        onClick={() => {
+                          setSelectedUserForLogs({
+                            id: student.telegram_id,
+                            name: student.first_name || student.username || 'Пользователь'
+                          });
+                          setLogsModalOpen(true);
+                        }}
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
+                      >
+                        <Icon name="ScrollText" size={12} className="mr-1" />
+                        Посмотреть логи
+                      </Button>
                       <Button
                         onClick={() => deleteUser(student.telegram_id)}
                         variant="outline"
@@ -763,7 +781,14 @@ export default function Admin() {
           </div>
         )}
 
-
+        {selectedUserForLogs && (
+          <UserLogsModal
+            open={logsModalOpen}
+            onOpenChange={setLogsModalOpen}
+            telegramId={selectedUserForLogs.id}
+            userName={selectedUserForLogs.name}
+          />
+        )}
       </div>
     </div>
   );

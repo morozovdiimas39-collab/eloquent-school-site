@@ -2211,6 +2211,56 @@ def delete_user(telegram_id: int) -> bool:
         conn.close()
         raise
 
+def log_user_activity(telegram_id: int, event_type: str, event_data: Dict = None, user_state: Dict = None, error_message: str = None):
+    """Логирует активность пользователя для отладки"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        event_data_json = json.dumps(event_data) if event_data else 'null'
+        user_state_json = json.dumps(user_state) if user_state else 'null'
+        error_escaped = error_message.replace("'", "''") if error_message else 'null'
+        error_value = f"'{error_escaped}'" if error_message else 'null'
+        
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.user_activity_logs "
+            f"(telegram_id, event_type, event_data, user_state, error_message) "
+            f"VALUES ({telegram_id}, '{event_type}', '{event_data_json}'::jsonb, '{user_state_json}'::jsonb, {error_value})"
+        )
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] Failed to log user activity: {e}")
+
+def get_user_activity_logs(telegram_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+    """Получает логи активности пользователя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, telegram_id, event_type, event_data, user_state, error_message, created_at "
+        f"FROM {SCHEMA}.user_activity_logs "
+        f"WHERE telegram_id = {telegram_id} "
+        f"ORDER BY created_at DESC LIMIT {limit}"
+    )
+    
+    logs = []
+    for row in cur.fetchall():
+        logs.append({
+            'id': row[0],
+            'telegram_id': row[1],
+            'event_type': row[2],
+            'event_data': row[3],
+            'user_state': row[4],
+            'error_message': row[5],
+            'created_at': row[6].isoformat() if row[6] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return logs
+
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
     Вызывает Gemini API для демо-чата на лендинге
@@ -2675,6 +2725,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'get_user_logs':
+            telegram_id = body_data.get('telegram_id')
+            limit = body_data.get('limit', 100)
+            logs = get_user_activity_logs(telegram_id, limit)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'logs': logs}),
                 'isBase64Encoded': False
             }
         
