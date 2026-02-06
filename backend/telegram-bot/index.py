@@ -3098,6 +3098,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             message_id = callback['message']['message_id']
             user = callback['from']
             callback_id = callback['id']
+            telegram_id = user['id']
             
             # Отвечаем на callback (если упадёт - продолжаем работу)
             try:
@@ -3111,6 +3112,64 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     print(f"[DEBUG] answerCallbackQuery success: {answer_result.get('ok')}")
             except Exception as e:
                 print(f"[ERROR] answerCallbackQuery failed: {e} - continuing anyway")
+            
+            # ⚠️ ОБРАБОТКА КНОПКИ "Начать обучение" для новых пользователей
+            if data == 'start_onboarding':
+                print(f"[DEBUG] User {telegram_id} clicked start_onboarding button")
+                
+                # Имитируем команду /start
+                username = user.get('username', '')
+                first_name = user.get('first_name', '')
+                last_name = user.get('last_name', '')
+                
+                # Создаём пользователя если не существует
+                existing_user = get_user(telegram_id)
+                if not existing_user:
+                    create_user(telegram_id, username, first_name, last_name, 'student')
+                    print(f"[DEBUG] Created new user {telegram_id}")
+                
+                # Удаляем старое сообщение с кнопкой
+                try:
+                    token_del = os.environ['TELEGRAM_BOT_TOKEN']
+                    del_url = f'https://api.telegram.org/bot{token_del}/deleteMessage'
+                    del_payload = json.dumps({'chat_id': chat_id, 'message_id': message_id}).encode('utf-8')
+                    del_req = urllib.request.Request(del_url, data=del_payload, headers={'Content-Type': 'application/json'}, method='POST')
+                    with urllib.request.urlopen(del_req, timeout=5) as del_resp:
+                        pass
+                except Exception as e:
+                    print(f"[WARNING] Failed to delete message: {e}")
+                
+                # Запускаем онбординг (выбор цели)
+                goal_message = (
+                    '🎯 <b>Шаг 1/3: Твоя цель</b>\n\n'
+                    'Зачем тебе английский? Выбери вариант или опиши своими словами:'
+                )
+                
+                goal_keyboard = {
+                    'inline_keyboard': [
+                        [{'text': '✈️ Путешествия', 'callback_data': 'goal_travel'}],
+                        [{'text': '💼 Карьера', 'callback_data': 'goal_career'}],
+                        [{'text': '🌍 Общение', 'callback_data': 'goal_communication'}],
+                        [{'text': '📚 Учёба', 'callback_data': 'goal_study'}],
+                        [{'text': '✍️ Свой вариант', 'callback_data': 'goal_custom'}]
+                    ]
+                }
+                
+                send_telegram_message(chat_id, goal_message, goal_keyboard)
+                
+                # Переводим пользователя в режим ожидания цели
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_goal' WHERE telegram_id = {telegram_id}")
+                cur.close()
+                conn.close()
+                
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json'},
+                    'body': json.dumps({'ok': True}),
+                    'isBase64Encoded': False
+                }
             
             if data.startswith('goal_'):
                 goal_type = data.replace('goal_', '')
@@ -4121,9 +4180,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 # Перенаправляем пользователя в /start для онбординга
                 welcome_message = (
                     "👋 Привет! Я Аня — твой личный ассистент для изучения английского!\n\n"
-                    "Давай начнём с команды /start, чтобы я могла настроить обучение под тебя 😊"
+                    "Нажми кнопку ниже, чтобы начать обучение 🚀"
                 )
-                send_telegram_message(chat_id, welcome_message)
+                
+                # Inline кнопка для /start
+                start_keyboard = {
+                    'inline_keyboard': [[
+                        {'text': '🚀 Начать обучение', 'callback_data': 'start_onboarding'}
+                    ]]
+                }
+                
+                send_telegram_message(chat_id, welcome_message, start_keyboard)
                 
                 return {
                     'statusCode': 200,
