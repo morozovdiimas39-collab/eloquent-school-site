@@ -3117,12 +3117,11 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if data == 'start_onboarding':
                 print(f"[DEBUG] User {telegram_id} clicked start_onboarding button")
                 
-                # Имитируем команду /start
+                # Имитируем команду /start - создаём пользователя
                 username = user.get('username', '')
                 first_name = user.get('first_name', '')
                 last_name = user.get('last_name', '')
                 
-                # Создаём пользователя если не существует
                 existing_user = get_user(telegram_id)
                 if not existing_user:
                     create_user(telegram_id, username, first_name, last_name, 'student')
@@ -3139,40 +3138,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 except Exception as e:
                     print(f"[WARNING] Failed to delete message: {e}")
                 
-                # НОВЫЙ онбординг - сначала спрашиваем режим обучения (как в /start)
-                send_telegram_message(
-                    chat_id,
-                    'Привет! Я Аня 👋\n\n'
-                    'Я помогу тебе учить английский через живой диалог.\n\n'
-                    'Что я умею:\n'
-                    '✅ Учим слова и фразы через общение\n'
-                    '✅ Подбираю темы под твои цели\n'
-                    '✅ Напоминаю о практике\n'
-                    '✅ Показываю твой прогресс\n\n'
-                    '❓ <b>Выбери режим обучения:</b>',
-                    {
-                        'inline_keyboard': [
-                            [{'text': '📚 Стандартное обучение (общие темы)', 'callback_data': 'learning_mode_standard'}],
-                            [{'text': '🎯 Конкретная тема (фильм/книга)', 'callback_data': 'learning_mode_specific'}],
-                            [{'text': '🚨 Срочная задача (отпуск, собеседование)', 'callback_data': 'learning_mode_urgent'}]
-                        ]
-                    },
-                    parse_mode='HTML'
-                )
-                
-                # Переводим пользователя в режим ожидания выбора режима обучения
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {telegram_id}")
-                cur.close()
-                conn.close()
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'ok': True}),
-                    'isBase64Encoded': False
+                # ⚠️ CRITICAL: Эмулируем /start через создание фейкового message event
+                # Это запустит стандартный онбординг БЕЗ дублирования кода
+                fake_message_event = {
+                    'message': {
+                        'chat': {'id': chat_id},
+                        'from': user,
+                        'text': '/start',
+                        'message_id': message_id
+                    }
                 }
+                
+                # Возвращаем управление обратно в основной обработчик
+                # который увидит /start и запустит стандартный онбординг
+                body['message'] = fake_message_event['message']
+                # НЕ ВОЗВРАЩАЕМ - продолжаем обработку как обычное сообщение
+                # Просто удаляем callback_query из body чтобы обработчик увидел message
+                del body['callback_query']
             
             if data.startswith('goal_'):
                 goal_type = data.replace('goal_', '')
