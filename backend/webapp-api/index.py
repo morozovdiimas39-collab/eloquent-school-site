@@ -2262,7 +2262,7 @@ def get_user_activity_logs(telegram_id: int, limit: int = 100) -> List[Dict[str,
     return logs
 
 def reset_user_onboarding(telegram_id: int) -> bool:
-    """Сбрасывает онбординг пользователя - очищает conversation_mode и активирует тестовый период"""
+    """Сбрасывает онбординг пользователя - очищает conversation_mode и активирует тестовый период (basic + premium)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -2275,15 +2275,39 @@ def reset_user_onboarding(telegram_id: int) -> bool:
             f"learning_goal = NULL, "
             f"urgent_goals = NULL, "
             f"subscription_status = 'active', "
-            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day' "
+            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day', "
+            f"trial_used = TRUE "
             f"WHERE telegram_id = {telegram_id}"
+        )
+        
+        # ⚠️ CRITICAL: Удаляем старые тестовые подписки если есть
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.subscription_payments "
+            f"WHERE telegram_id = {telegram_id} AND payment_method = 'trial'"
+        )
+        
+        # ⚠️ CRITICAL: Добавляем записи в subscription_payments для ОБЕИХ подписок
+        # Это нужно чтобы бот видел активную подписку (проверка в строке 4276 telegram-bot)
+        
+        # 1. Базовая подписка (диалог + упражнения)
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.subscription_payments "
+            f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+            f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
+        )
+        
+        # 2. Голосовая подписка
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.subscription_payments "
+            f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+            f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
         )
         
         # Логируем событие
         log_user_activity(
             telegram_id,
             'onboarding_reset',
-            {'reset_by': 'admin'},
+            {'reset_by': 'admin', 'trial_days': 1},
             None,
             None
         )
@@ -2291,10 +2315,12 @@ def reset_user_onboarding(telegram_id: int) -> bool:
         cur.close()
         conn.close()
         
-        print(f"[INFO] Reset onboarding for user {telegram_id} with 1-day trial")
+        print(f"[INFO] Reset onboarding for user {telegram_id} with 1-day trial (basic + premium)")
         return True
     except Exception as e:
         print(f"[ERROR] Failed to reset onboarding for {telegram_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def call_gemini_demo(user_message: str, history: list) -> str:

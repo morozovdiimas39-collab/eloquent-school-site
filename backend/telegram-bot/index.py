@@ -771,7 +771,7 @@ def mark_word_as_mastered(student_id: int, word_id: int):
     print(f"[DEBUG] Word {word_id} marked as mastered for student {student_id}")
 
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str, role: str):
-    """Создает пользователя с тестовым периодом 1 день"""
+    """Создает пользователя с тестовым периодом 1 день (базовая + голосовая подписки)"""
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -782,12 +782,29 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     # Создаем пользователя с активным тестовым периодом (1 день)
     cur.execute(
         f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role, "
-        f"subscription_status, subscription_expires_at) "
+        f"subscription_status, subscription_expires_at, trial_used) "
         f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}', "
-        f"'active', CURRENT_TIMESTAMP + INTERVAL '1 day')"
+        f"'active', CURRENT_TIMESTAMP + INTERVAL '1 day', TRUE)"
     )
     
-    print(f"[INFO] Created user {telegram_id} with 1-day trial subscription")
+    # ⚠️ CRITICAL: Добавляем записи в subscription_payments для ОБЕИХ подписок
+    # Это нужно чтобы бот видел активную подписку (проверка в строке 4276)
+    
+    # 1. Базовая подписка (диалог + упражнения)
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.subscription_payments "
+        f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+        f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
+    )
+    
+    # 2. Голосовая подписка
+    cur.execute(
+        f"INSERT INTO {SCHEMA}.subscription_payments "
+        f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+        f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
+    )
+    
+    print(f"[INFO] Created user {telegram_id} with 1-day trial (basic + premium access)")
     
     cur.close()
     conn.close()
@@ -4257,6 +4274,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             cur.close()
             conn.close()
+        
+        # ⚠️ CRITICAL: Проверяем состояние онбординга ПЕРЕД проверкой подписки
+        # Если пользователь в процессе онбординга - НЕ проверяем подписку!
+        existing_user_data = get_user(telegram_id)
+        if existing_user_data and existing_user_data.get('conversation_mode') == 'awaiting_learning_mode':
+            # Пользователь в процессе онбординга - напоминаем нажать кнопку
+            send_telegram_message(
+                chat_id,
+                '👆 Выбери режим обучения, нажав на одну из кнопок выше!\n\n'
+                '📚 Стандартное обучение - общие темы\n'
+                '🎯 Конкретная тема - фильм/книга на английском\n'
+                '🚨 Срочная задача - отпуск, собеседование\n\n'
+                'Или напиши /start чтобы начать заново.'
+            )
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json'},
+                'body': json.dumps({'ok': True, 'onboarding_reminder': True}),
+                'isBase64Encoded': False
+            }
         
         # ⚠️ НОВАЯ ЛОГИКА: Проверяем подписку для базовых функций
         # basic → базовые функции (диалог, упражнения)
