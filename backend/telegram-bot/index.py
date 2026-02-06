@@ -771,7 +771,7 @@ def mark_word_as_mastered(student_id: int, word_id: int):
     print(f"[DEBUG] Word {word_id} marked as mastered for student {student_id}")
 
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str, role: str):
-    """Создает пользователя"""
+    """Создает пользователя с тестовым периодом 1 день"""
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -779,10 +779,15 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     first_name = first_name.replace("'", "''") if first_name else ''
     last_name = last_name.replace("'", "''") if last_name else ''
     
+    # Создаем пользователя с активным тестовым периодом (1 день)
     cur.execute(
-        f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role) "
-        f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}')"
+        f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role, "
+        f"subscription_status, subscription_expires_at) "
+        f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}', "
+        f"'active', CURRENT_TIMESTAMP + INTERVAL '1 day')"
     )
+    
+    print(f"[INFO] Created user {telegram_id} with 1-day trial subscription")
     
     cur.close()
     conn.close()
