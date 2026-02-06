@@ -4192,6 +4192,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         voice = message.get('voice')
         sticker = message.get('sticker')
         
+        # Логируем входящее сообщение
+        try:
+            user_data = get_user(telegram_id)
+            log_user_activity(
+                telegram_id, 
+                'message_received',
+                {
+                    'text': text[:200] if text else None,
+                    'has_voice': bool(voice),
+                    'has_sticker': bool(sticker),
+                    'chat_id': chat_id
+                },
+                {
+                    'conversation_mode': user_data.get('conversation_mode') if user_data else None,
+                    'language_level': user_data.get('language_level') if user_data else None,
+                    'learning_mode': user_data.get('learning_mode') if user_data else None
+                }
+            )
+        except Exception as log_error:
+            print(f"[WARNING] Failed to log message: {log_error}")
+        
         # ⚠️⚠️⚠️ CRITICAL: ПЕРВЫМ ДЕЛОМ проверяем существует ли пользователь
         # Это должно быть ДО ЛЮБЫХ других проверок (подписки, команд и тд)
         # Если пользователя НЕТ → отправляем welcome с кнопкой "🚀 Начать обучение"
@@ -6235,10 +6256,42 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                     print(f"[DEBUG] learning_mode={learning_mode}, learning_goal={learning_goal}")
                     ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal, learning_mode)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
+                    
+                    # Логируем успешный ответ Gemini
+                    log_user_activity(
+                        telegram_id,
+                        'gemini_response',
+                        {
+                            'user_message': text[:200],
+                            'response_length': len(ai_response),
+                            'session_words_count': len(session_words) if session_words else 0
+                        },
+                        {
+                            'conversation_mode': conversation_mode,
+                            'language_level': language_level,
+                            'learning_mode': learning_mode
+                        }
+                    )
                 except Exception as e:
                     print(f"[ERROR] Gemini API failed: {e}")
                     import traceback
                     traceback.print_exc()
+                    
+                    # Логируем ошибку Gemini
+                    log_user_activity(
+                        telegram_id,
+                        'gemini_error',
+                        {
+                            'user_message': text[:200],
+                            'error_type': type(e).__name__
+                        },
+                        {
+                            'conversation_mode': conversation_mode,
+                            'language_level': language_level
+                        },
+                        error_message=str(e)[:500]
+                    )
+                    
                     ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
                 
                 # Проверяем маркер освоения слова
