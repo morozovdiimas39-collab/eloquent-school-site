@@ -33,6 +33,7 @@ const API_URL = funcUrls['webapp-api'];
 // Маппинг типов событий на читаемые названия
 const EVENT_TYPE_LABELS: Record<string, string> = {
   'onboarding_start': '🚀 Начало онбординга',
+  'onboarding_reset': '🔄 Сброс онбординга',
   'learning_mode_selected': '📚 Выбор режима обучения',
   'level_test': '📝 Тест уровня',
   'interests_selected': '🎯 Выбор интересов',
@@ -51,6 +52,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 // Цвета для разных типов событий
 const EVENT_TYPE_COLORS: Record<string, string> = {
   'onboarding_start': 'bg-blue-100 text-blue-700',
+  'onboarding_reset': 'bg-orange-100 text-orange-700',
   'learning_mode_selected': 'bg-green-100 text-green-700',
   'level_test': 'bg-purple-100 text-purple-700',
   'interests_selected': 'bg-pink-100 text-pink-700',

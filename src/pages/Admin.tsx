@@ -197,6 +197,33 @@ export default function Admin() {
     }
   };
 
+  const resetOnboarding = async (telegramId: number) => {
+    if (!confirm(`Сбросить онбординг для пользователя ${telegramId}? Это активирует тестовый период на 1 день и очистит состояние.`)) {
+      return;
+    }
+    
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reset_onboarding',
+          telegram_id: telegramId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ Онбординг сброшен! Пользователь может заново пройти онбординг.');
+        await loadData();
+      } else {
+        alert('❌ Ошибка сброса онбординга');
+      }
+    } catch (error) {
+      console.error('Error resetting onboarding:', error);
+      alert('❌ Ошибка сброса онбординга');
+    }
+  };
+
   const deleteUser = async (telegramId: number) => {
     if (!confirm(`Удалить пользователя ${telegramId}? Все данные будут удалены безвозвратно!`)) {
       return;
@@ -592,6 +619,15 @@ export default function Admin() {
                       >
                         <Icon name="ScrollText" size={12} className="mr-1" />
                         Посмотреть логи
+                      </Button>
+                      <Button
+                        onClick={() => resetOnboarding(student.telegram_id)}
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                      >
+                        <Icon name="RotateCcw" size={12} className="mr-1" />
+                        Сбросить онбординг
                       </Button>
                       <Button
                         onClick={() => deleteUser(student.telegram_id)}

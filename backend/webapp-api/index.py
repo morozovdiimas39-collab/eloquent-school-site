@@ -2261,6 +2261,42 @@ def get_user_activity_logs(telegram_id: int, limit: int = 100) -> List[Dict[str,
     conn.close()
     return logs
 
+def reset_user_onboarding(telegram_id: int) -> bool:
+    """Сбрасывает онбординг пользователя - очищает conversation_mode и активирует тестовый период"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Сбрасываем состояние пользователя + активируем тестовый период на 1 день
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET "
+            f"conversation_mode = NULL, "
+            f"learning_mode = 'standard', "
+            f"learning_goal = NULL, "
+            f"urgent_goals = NULL, "
+            f"subscription_status = 'active', "
+            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day' "
+            f"WHERE telegram_id = {telegram_id}"
+        )
+        
+        # Логируем событие
+        log_user_activity(
+            telegram_id,
+            'onboarding_reset',
+            {'reset_by': 'admin'},
+            None,
+            None
+        )
+        
+        cur.close()
+        conn.close()
+        
+        print(f"[INFO] Reset onboarding for user {telegram_id} with 1-day trial")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to reset onboarding for {telegram_id}: {e}")
+        return False
+
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
     Вызывает Gemini API для демо-чата на лендинге
@@ -2736,6 +2772,16 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps({'success': True, 'logs': logs}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'reset_onboarding':
+            telegram_id = body_data.get('telegram_id')
+            success = reset_user_onboarding(telegram_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
                 'isBase64Encoded': False
             }
         
