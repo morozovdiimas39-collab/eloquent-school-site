@@ -4791,8 +4791,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         # Обработка выбора режима через Reply Keyboard
-        elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод'] and conversation_mode != 'adaptive_level_test':
-            # ⚠️ CRITICAL: Игнорируем кнопки если идет тест (проверка в условии elif)
+        elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод']:
             mode_map = {
                 '💬 Диалог': 'dialog',
                 '🎤 Голосовой': 'voice',
