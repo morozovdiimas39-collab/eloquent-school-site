@@ -10,7 +10,6 @@ import ProxyManager from '@/components/admin/ProxyManager';
 import BlogManager from '@/components/admin/BlogManager';
 import PromptsManager from '@/components/admin/PromptsManager';
 import PricingManager from '@/components/admin/PricingManager';
-import UserLogsModal from '@/components/admin/UserLogsModal';
 
 interface User {
   telegram_id: number;
@@ -56,8 +55,6 @@ export default function Admin() {
   const [schedulerRunning, setSchedulerRunning] = useState(false);
   const [schedulerResult, setSchedulerResult] = useState<any>(null);
   const [processingSubscription, setProcessingSubscription] = useState<number | null>(null);
-  const [logsModalOpen, setLogsModalOpen] = useState(false);
-  const [selectedUserForLogs, setSelectedUserForLogs] = useState<{ id: number; name: string } | null>(null);
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('admin_auth');
@@ -194,54 +191,6 @@ export default function Admin() {
       console.error('Error toggling subscription:', error);
     } finally {
       setProcessingSubscription(null);
-    }
-  };
-
-  const resetOnboarding = async (telegramId: number) => {
-    if (!confirm(`Сбросить онбординг для пользователя ${telegramId}? Это активирует тестовый период на 1 день и очистит состояние.`)) {
-      return;
-    }
-    
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'reset_onboarding',
-          telegram_id: telegramId
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert('✅ Онбординг сброшен! Пользователь может заново пройти онбординг.');
-        await loadData();
-      } else {
-        alert('❌ Ошибка сброса онбординга');
-      }
-    } catch (error) {
-      console.error('Error resetting onboarding:', error);
-      alert('❌ Ошибка сброса онбординга');
-    }
-  };
-
-  const deleteUser = async (telegramId: number) => {
-    if (!confirm(`Удалить пользователя ${telegramId}? Все данные будут удалены безвозвратно!`)) {
-      return;
-    }
-    
-    try {
-      const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete_user',
-          telegram_id: telegramId
-        })
-      });
-      await res.json();
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting user:', error);
     }
   };
 
@@ -603,42 +552,6 @@ export default function Admin() {
                         Регистрация: {new Date(student.created_at).toLocaleDateString('ru-RU')}
                       </div>
                     )}
-                    
-                    <div className="pt-2 border-t border-gray-200 space-y-2">
-                      <Button
-                        onClick={() => {
-                          setSelectedUserForLogs({
-                            id: student.telegram_id,
-                            name: student.first_name || student.username || 'Пользователь'
-                          });
-                          setLogsModalOpen(true);
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                      >
-                        <Icon name="ScrollText" size={12} className="mr-1" />
-                        Посмотреть логи
-                      </Button>
-                      <Button
-                        onClick={() => resetOnboarding(student.telegram_id)}
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-8 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
-                      >
-                        <Icon name="RotateCcw" size={12} className="mr-1" />
-                        Сбросить онбординг
-                      </Button>
-                      <Button
-                        onClick={() => deleteUser(student.telegram_id)}
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-8 text-xs border-red-500 text-red-600 hover:bg-red-50"
-                      >
-                        <Icon name="Trash2" size={12} className="mr-1" />
-                        Удалить пользователя
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
               );
@@ -817,13 +730,61 @@ export default function Admin() {
           </div>
         )}
 
-        {selectedUserForLogs && (
-          <UserLogsModal
-            open={logsModalOpen}
-            onOpenChange={setLogsModalOpen}
-            telegramId={selectedUserForLogs.id}
-            userName={selectedUserForLogs.name}
-          />
+        {selectedTeacher && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-xl">
+              <CardHeader className="border-b border-gray-200 sticky top-0 bg-white z-10">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-xl">
+                      Ученики преподавателя {selectedTeacher.first_name}
+                    </CardTitle>
+                    <CardDescription className="mt-1">
+                      Всего: {selectedTeacher.students_count || 0}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    onClick={() => setSelectedTeacher(null)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Icon name="X" size={18} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {students
+                    .filter(s => s.teacher_id === selectedTeacher.telegram_id)
+                    .map(student => {
+                      const studentName = student.first_name || student.username || 'Ученик';
+                      return (
+                        <div key={student.telegram_id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          <Avatar className="w-10 h-10">
+                            <AvatarImage src={student.photo_url} />
+                            <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-semibold">
+                              {studentName.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-gray-900 text-sm leading-tight">{studentName}</p>
+                            {student.username && (
+                              <p className="text-xs text-gray-500 mt-0.5">@{student.username}</p>
+                            )}
+                          </div>
+                          {student.language_level && (
+                            <Badge variant="outline" className="text-xs px-2 py-0.5">
+                              {student.language_level}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </div>

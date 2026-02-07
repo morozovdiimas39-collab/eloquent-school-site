@@ -38,7 +38,7 @@ export default function Header() {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => window.open('https://t.me/gpt_anya_bot', '_blank')}
+            onClick={() => window.open('https://t.me/eloquent_school_bot', '_blank')}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold shadow-lg"
           >
             Попробовать бесплатно

@@ -1,8 +1,7 @@
 import json
 import os
 import psycopg2
-import psycopg2.pool
-# ROLLBACK v14 - removed broken async, simple sync generation
+# Force redeploy v8 - fixed unpacking for translation and association exercises
 import urllib.request
 import urllib.parse
 import random
@@ -14,64 +13,31 @@ from typing import Dict, Any, List
 
 SCHEMA = 't_p86463701_eloquent_school_site'
 
-# ⚡ CONNECTION POOL для высокой нагрузки
-_db_pool = None
-
-# ⚡ PERFORMANCE: In-memory кеш для ускорения работы
-import time
-_cache = {}
-_cache_ttl = {}  # Время жизни кеша
-_last_generation = {}  # Rate limiting для auto_generate_new_words
-
-def get_cached(key: str, fetch_fn, ttl: int = 300):
-    """Универсальный кеш с TTL (по умолчанию 5 минут)"""
-    now = time.time()
-    if key in _cache and now - _cache_ttl.get(key, 0) < ttl:
-        return _cache[key]
-    
-    value = fetch_fn()
-    _cache[key] = value
-    _cache_ttl[key] = now
-    return value
-
-def get_db_pool():
-    """Возвращает пул подключений к БД (создается один раз)"""
-    global _db_pool
-    if _db_pool is None:
-        _db_pool = psycopg2.pool.SimpleConnectionPool(
-            1, 20,  # min=1, max=20 соединений
-            os.environ['DATABASE_URL']
-        )
-    return _db_pool
-
 def get_subscription_plans() -> dict:
-    """Загружает актуальные тарифные планы из БД (ТОЛЬКО ИЗ АДМИНКИ!) + КЕШ 5 минут"""
-    def fetch():
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        cur.execute(
-            f"SELECT plan_key, name, description, price_rub, price_kop, duration_days "
-            f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
-        )
-        
-        plans = {}
-        for row in cur.fetchall():
-            plans[row[0]] = {
-                'name': row[1],
-                'description': row[2],
-                'price_rub': row[3],
-                'price_kop': row[4],
-                'duration_days': row[5]
-            }
-        
-        cur.close()
-        conn.close()
-        
-        print(f"[DEBUG] Loaded {len(plans)} pricing plans from DB: {plans}")
-        return plans
+    """Загружает актуальные тарифные планы из БД (ТОЛЬКО ИЗ АДМИНКИ!)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
     
-    return get_cached('subscription_plans', fetch, ttl=300)
+    cur.execute(
+        f"SELECT plan_key, name, description, price_rub, price_kop, duration_days "
+        f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
+    )
+    
+    plans = {}
+    for row in cur.fetchall():
+        plans[row[0]] = {
+            'name': row[1],
+            'description': row[2],
+            'price_rub': row[3],
+            'price_kop': row[4],
+            'duration_days': row[5]
+        }
+    
+    cur.close()
+    conn.close()
+    
+    print(f"[DEBUG] Loaded {len(plans)} pricing plans from DB: {plans}")
+    return plans
 
 # Глобальный кэш для оптимизации ensure_user_has_words (живет только в рамках одного запроса)
 _words_ensured_cache = {}
@@ -184,202 +150,60 @@ def safe_json_parse(text: str, fallback_fields: dict = None) -> dict:
             return result
 
 def get_db_connection():
-    """Получает подключение из пула (⚡ быстрее чем создавать новое)"""
-    try:
-        pool = get_db_pool()
-        conn = pool.getconn()
-        conn.autocommit = True
-        return conn
-    except:
-        # Fallback на прямое подключение если пул не работает
-        conn = psycopg2.connect(os.environ['DATABASE_URL'])
-        conn.autocommit = True
-        return conn
-
-def log_user_activity(telegram_id: int, event_type: str, event_data: dict = None, user_state: dict = None, error_message: str = None):
-    """Логирует активность пользователя для отладки"""
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        
-        event_data_json = json.dumps(event_data) if event_data else '{}'
-        user_state_json = json.dumps(user_state) if user_state else '{}'
-        error_escaped = error_message.replace("'", "''") if error_message else None
-        error_value = f"'{error_escaped}'" if error_message else 'NULL'
-        
-        cur.execute(
-            f"INSERT INTO {SCHEMA}.user_activity_logs "
-            f"(telegram_id, event_type, event_data, user_state, error_message) "
-            f"VALUES ({telegram_id}, '{event_type}', '{event_data_json}'::jsonb, '{user_state_json}'::jsonb, {error_value})"
-        )
-        
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"[ERROR] Failed to log user activity: {e}")
-
-def return_db_connection(conn):
-    """Возвращает подключение в пул"""
-    try:
-        pool = get_db_pool()
-        pool.putconn(conn)
-    except:
-        conn.close()
-
-def generate_adaptive_question(level: str, used_words: List[str]) -> Dict[str, Any]:
-    """Генерирует тестовый вопрос для адаптивного теста через Gemini"""
-    try:
-        api_key = os.environ['GEMINI_API_KEY']
-        proxy_id, proxy_url = get_active_proxy_from_db()
-        if not proxy_url:
-            proxy_url = os.environ.get('PROXY_URL', '')
-        
-        if not proxy_url:
-            raise Exception("No proxy available")
-        
-        # Формируем список использованных слов для исключения дубликатов
-        used_str = ', '.join(used_words) if used_words else 'none'
-        
-        prompt = f'''Generate ONE English learning test item for level {level}.
-
-Level guidelines:
-- A1: basic everyday words (cat, water, family, hello)
-- A2: common everyday vocabulary (travel, weather, hobby, meeting)
-- B1: common phrases and expressions (take care, by the way, it depends on)
-- B2: idioms and sophisticated vocabulary (break the ice, piece of cake, mindset)
-- C1: advanced academic vocabulary (paradigm, ambiguous, inevitable)
-- C2: native-level expressions (beat around the bush, hit the nail on the head)
-
-⚠️ CRITICAL: DO NOT use these already used words: {used_str}
-⚠️ EVERY word MUST be 100% NEW and NOT in the list above!
-
-Return ONLY valid JSON (no markdown):
-{{
-  "english": "word or phrase",
-  "russian": "перевод",
-  "type": "word",
-  "level": "{level}"
-}}
-
-Types: "word" (single word), "phrase" (2-3 words), "expression" (idiom/set phrase)'''
-        
-        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
-        
-        payload = {
-            'contents': [{'parts': [{'text': prompt}]}],
-            'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 500}
-        }
-        
-        proxy_handler = urllib.request.ProxyHandler({
-            'http': f'http://{proxy_url}',
-            'https': f'http://{proxy_url}'
-        })
-        opener = urllib.request.build_opener(proxy_handler)
-        
-        req = urllib.request.Request(
-            gemini_url,
-            data=json.dumps(payload).encode('utf-8'),
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        with opener.open(req, timeout=30) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            text = result['candidates'][0]['content']['parts'][0]['text']
-            
-            data = safe_json_parse(text, {
-                'english': 'hello',
-                'russian': 'привет',
-                'type': 'word',
-                'level': level
-            })
-            
-            log_proxy_success(proxy_id)
-            
-            print(f"[DEBUG generate_adaptive_question] Generated: {data}")
-            return data
-            
-    except Exception as e:
-        print(f"[ERROR generate_adaptive_question] Failed: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        if proxy_id:
-            log_proxy_failure(proxy_id, str(e))
-        
-        # Fallback на простое слово
-        fallback_words = {
-            'A1': {'english': 'hello', 'russian': 'привет'},
-            'A2': {'english': 'travel', 'russian': 'путешествие'},
-            'B1': {'english': 'experience', 'russian': 'опыт'},
-            'B2': {'english': 'opportunity', 'russian': 'возможность'},
-            'C1': {'english': 'paradigm', 'russian': 'парадигма'},
-            'C2': {'english': 'ambiguous', 'russian': 'неоднозначный'}
-        }
-        
-        word = fallback_words.get(level, fallback_words['A1'])
-        return {
-            'english': word['english'],
-            'russian': word['russian'],
-            'type': 'word',
-            'level': level
-        }
+    """Создает подключение к БД"""
+    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    conn.autocommit = True
+    return conn
 
 def get_prompt_from_db(code: str, fallback: str = '') -> str:
-    """Получает промпт из БД по коду + КЕШ 5 минут"""
-    def fetch():
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            
-            code_escaped = code.replace("'", "''")
-            cur.execute(
-                f"SELECT prompt_text FROM {SCHEMA}.gemini_prompts "
-                f"WHERE code = '{code_escaped}' AND is_active = TRUE"
-            )
-            row = cur.fetchone()
-            
-            cur.close()
-            conn.close()
-            
-            if row:
-                return row[0]
-            return fallback
-        except Exception as e:
-            print(f"[WARNING] Failed to load prompt '{code}' from DB: {e}")
-            return fallback
-    
-    return get_cached(f'prompt_{code}', fetch, ttl=300)
-
-def get_active_proxy_from_db() -> tuple:
-    """Получает случайный активный прокси из БД + КЕШ список на 1 минуту - возвращает (id, url)"""
-    def fetch():
+    """Получает промпт из БД по коду, если не найден - возвращает fallback"""
+    try:
         conn = get_db_connection()
         cur = conn.cursor()
         
+        code_escaped = code.replace("'", "''")
         cur.execute(
-            f"SELECT id, host, port, username, password "
-            f"FROM {SCHEMA}.proxies WHERE is_active = TRUE"
+            f"SELECT prompt_text FROM {SCHEMA}.gemini_prompts "
+            f"WHERE code = '{code_escaped}' AND is_active = TRUE"
         )
-        
-        proxies = []
-        for row in cur.fetchall():
-            proxy_id, host, port, username, password = row
-            if username and password:
-                proxy_url = f"{username}:{password}@{host}:{port}"
-            else:
-                proxy_url = f"{host}:{port}"
-            proxies.append((proxy_id, proxy_url))
+        row = cur.fetchone()
         
         cur.close()
         conn.close()
         
-        return proxies
+        if row:
+            return row[0]
+        return fallback
+    except Exception as e:
+        print(f"[WARNING] Failed to load prompt '{code}' from DB: {e}")
+        return fallback
+
+def get_active_proxy_from_db() -> tuple:
+    """Получает случайный активный прокси из БД - возвращает (id, url)"""
+    conn = get_db_connection()
+    cur = conn.cursor()
     
-    proxies = get_cached('active_proxies', fetch, ttl=60)
-    if not proxies:
+    cur.execute(
+        f"SELECT id, host, port, username, password "
+        f"FROM {SCHEMA}.proxies WHERE is_active = TRUE "
+        f"ORDER BY RANDOM() LIMIT 1"
+    )
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not row:
         return None, None
     
-    return random.choice(proxies)
+    proxy_id, host, port, username, password = row
+    
+    if username and password:
+        proxy_url = f"{username}:{password}@{host}:{port}"
+    else:
+        proxy_url = f"{host}:{port}"
+    
+    return proxy_id, proxy_url
 
 def log_proxy_success(proxy_id: int):
     """Логирует успешный запрос через прокси"""
@@ -468,23 +292,7 @@ def get_user(telegram_id: int):
 def auto_generate_new_words(student_id: int, how_many: int = 10) -> Dict[str, Any]:
     """Автоматически генерирует новые слова, фразы и выражения когда старые освоены"""
     try:
-        # ⚡ RATE LIMITING: НЕ генерируем если недавно (<60 сек) уже генерировали
-        global _last_generation
-        now = time.time()
-        last_gen_time = _last_generation.get(student_id, 0)
-        
-        if now - last_gen_time < 60:
-            cooldown = int(60 - (now - last_gen_time))
-            print(f"[DEBUG] Rate limit: last generation was {int(now - last_gen_time)}s ago, cooldown: {cooldown}s")
-            return {
-                'added_count': 0,
-                'new_items': [],
-                'cooldown': cooldown,
-                'message': f'⏸️ Подожди {cooldown} секунд перед новой генерацией!'
-            }
-        
         print(f"[DEBUG auto_generate_new_words] Generating {how_many} new items for student {student_id}")
-        _last_generation[student_id] = now
         
         # Получаем данные пользователя
         conn = get_db_connection()
@@ -776,39 +584,88 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
     
     print(f"[DEBUG get_session_words] Skipping mastered words - they are already 100% learned")
     
-    # ⚠️ SIMPLE: Просто инициализируем прогресс если слова есть, но не видны
-    # Никакой генерации, никакого async - ПРОСТО РАБОТАЕТ
+    # ⚠️ CRITICAL: Автоматически генерируем новые слова если недостаточно активных
     active_words_count = len(new_words) + len(review_words)
-    if active_words_count < 5:
-        print(f"[WARNING] Only {active_words_count} active words - initializing progress")
+    if active_words_count < 5:  # Если меньше 5 активных слов - генерируем новые
+        print(f"[WARNING] Only {active_words_count} active words - generating more!")
         
-        # Инициализируем прогресс для существующих слов
+        # Проверяем режим пользователя - НЕ генерируем если идет генерация плана
+        cur.execute(f"SELECT conversation_mode FROM {SCHEMA}.users WHERE telegram_id = {student_id}")
+        mode_row = cur.fetchone()
+        conversation_mode = mode_row[0] if mode_row else 'dialog'
+        
+        if conversation_mode == 'generating_plan':
+            print(f"[DEBUG] User is in generating_plan mode - skipping auto-generation")
+            cur.close()
+            conn.close()
+            return []  # Возвращаем пустой список, план сгенерируется асинхронно
+        
+        # Считаем сколько слов освоено
         cur.execute(
-            f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
-            f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
-            f"WHERE sw.student_id = {student_id} "
-            f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+            f"SELECT COUNT(*) FROM {SCHEMA}.word_progress "
+            f"WHERE student_id = {student_id} AND status = 'mastered'"
         )
+        mastered_count = cur.fetchone()[0]
         
-        # Перезагружаем
-        cur.execute(
-            f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
-            f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-            f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
-            f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
-        )
-        new_words = cur.fetchall()
+        cur.close()
+        conn.close()
         
-        cur.execute(
-            f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
-            f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-            f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
-            f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
-            f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
-        )
-        review_words = cur.fetchall()
+        result = auto_generate_new_words(student_id, how_many=10)
         
-        print(f"[DEBUG] After init: new={len(new_words)}, review={len(review_words)}")
+        if result['added_count'] > 0:
+            # Отправляем уведомление о новых материалах
+            notification = f"🎉 ПОЗДРАВЛЯЮ!\n\n"
+            notification += f"✅ Ты освоил {mastered_count} слов!\n\n"
+            notification += f"🆕 Я добавила {result['added_count']} новых материалов для уровня {result['language_level']}:\n\n"
+            
+            for item in result['new_items'][:10]:  # Показываем первые 10
+                notification += f"{item}\n"
+            
+            if len(result['new_items']) > 10:
+                notification += f"\n...и еще {len(result['new_items']) - 10}!\n"
+            
+            notification += f"\nПродолжаем практиковать! 🚀"
+            
+            try:
+                send_telegram_message(student_id, notification, parse_mode=None)
+                print(f"[DEBUG] Notification sent to student {student_id}")
+            except Exception as e:
+                print(f"[ERROR] Failed to send notification: {e}")
+            
+            # ⚠️ FIX: Открываем НОВОЕ подключение и инициализируем прогресс для новых слов
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            # Инициализируем прогресс для только что добавленных слов
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+                f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+                f"WHERE sw.student_id = {student_id} "
+                f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+            )
+            
+            print(f"[DEBUG] Re-initialized word_progress after auto-generation")
+            
+            # Повторно запрашиваем новые слова (теперь они должны быть в word_progress)
+            cur.execute(
+                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+                f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+                f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
+            )
+            new_words = cur.fetchall()
+            print(f"[DEBUG] After generation: new_words count = {len(new_words)}")
+            
+            # Повторно запрашиваем review слова
+            cur.execute(
+                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+                f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
+                f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+                f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
+            )
+            review_words = cur.fetchall()
+            print(f"[DEBUG] After generation: review_words count = {len(review_words)}")
     
     # ⚠️ CRITICAL: Возвращаем ТОЛЬКО новые и review слова (БЕЗ mastered!)
     all_words = list(new_words) + list(review_words)
@@ -863,7 +720,7 @@ def mark_word_as_mastered(student_id: int, word_id: int):
     print(f"[DEBUG] Word {word_id} marked as mastered for student {student_id}")
 
 def create_user(telegram_id: int, username: str, first_name: str, last_name: str, role: str):
-    """Создает пользователя с тестовым периодом 1 день (базовая + голосовая подписки)"""
+    """Создает пользователя"""
     conn = get_db_connection()
     cur = conn.cursor()
     
@@ -871,42 +728,10 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     first_name = first_name.replace("'", "''") if first_name else ''
     last_name = last_name.replace("'", "''") if last_name else ''
     
-    # ⚠️ CRITICAL FIX: Проверяем существует ли пользователь ПЕРЕД созданием
-    cur.execute(f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-    existing = cur.fetchone()
-    
-    if existing:
-        print(f"[WARNING] User {telegram_id} already exists, skipping creation")
-        cur.close()
-        conn.close()
-        return
-    
-    # Создаем пользователя с активным тестовым периодом (1 день)
     cur.execute(
-        f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role, "
-        f"subscription_status, subscription_expires_at, trial_used) "
-        f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}', "
-        f"'active', CURRENT_TIMESTAMP + INTERVAL '1 day', TRUE)"
+        f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role) "
+        f"VALUES ({telegram_id}, '{username}', '{first_name}', '{last_name}', '{role}')"
     )
-    
-    # ⚠️ CRITICAL: Добавляем записи в subscription_payments для ОБЕИХ подписок
-    # Это нужно чтобы бот видел активную подписку (проверка в строке 4276)
-    
-    # 1. Базовая подписка (диалог + упражнения)
-    cur.execute(
-        f"INSERT INTO {SCHEMA}.subscription_payments "
-        f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
-        f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
-    )
-    
-    # 2. Голосовая подписка
-    cur.execute(
-        f"INSERT INTO {SCHEMA}.subscription_payments "
-        f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
-        f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
-    )
-    
-    print(f"[INFO] Created user {telegram_id} with 1-day trial (basic + premium access)")
     
     cur.close()
     conn.close()
@@ -1928,7 +1753,24 @@ IMPORTANT:
         'parts': [{'text': user_message}]
     })
     
-    # ⚡ OPTIMIZATION: Убрана проверка ListModels - тормозила запросы
+    # Проверяем доступность API через прокси - сначала получим список моделей
+    if proxy_url:
+        print(f"[DEBUG] Testing proxy connection with ListModels...")
+        list_url = f'https://generativelanguage.googleapis.com/v1beta/models?key={api_key}'
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        try:
+            req = urllib.request.Request(list_url)
+            with opener.open(req, timeout=30) as response:
+                models_result = json.loads(response.read().decode('utf-8'))
+                print(f"[DEBUG] Available models: {[m['name'] for m in models_result.get('models', [])][:5]}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to list models: {e}")
     
     # Подготавливаем запрос к Gemini REST API
     gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
@@ -1962,7 +1804,7 @@ IMPORTANT:
     )
     
     try:
-        with opener.open(req, timeout=12) as response:
+        with opener.open(req, timeout=30) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Gemini success with proxy!")
             
@@ -2043,7 +1885,7 @@ def send_telegram_voice(chat_id: int, voice_url: str, caption: str = None):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req) as response:
             return json.loads(response.read().decode('utf-8'))
     except Exception as e:
         print(f"[ERROR] Failed to send voice: {e}")
@@ -2067,7 +1909,7 @@ def send_telegram_sticker(chat_id: int, sticker_id: str):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Sticker sent: {result}")
             return result
@@ -2102,7 +1944,7 @@ def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Telegram API response: {result}")
             return result
@@ -2128,7 +1970,7 @@ def edit_telegram_message(chat_id: int, message_id: int, text: str):
         headers={'Content-Type': 'application/json'}
     )
     
-    with urllib.request.urlopen(req, timeout=10) as response:
+    with urllib.request.urlopen(req) as response:
         return json.loads(response.read().decode('utf-8'))
 
 def set_bot_commands():
@@ -2155,7 +1997,7 @@ def set_bot_commands():
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Bot commands set: {result}")
             return result
@@ -2169,13 +2011,13 @@ def download_telegram_file(file_id: str) -> bytes:
     
     # Получаем путь к файлу
     url = f'https://api.telegram.org/bot{token}/getFile?file_id={file_id}'
-    with urllib.request.urlopen(url, timeout=10) as response:
+    with urllib.request.urlopen(url) as response:
         data = json.loads(response.read().decode('utf-8'))
         file_path = data['result']['file_path']
     
     # Скачиваем файл
     file_url = f'https://api.telegram.org/file/bot{token}/{file_path}'
-    with urllib.request.urlopen(file_url, timeout=15) as response:
+    with urllib.request.urlopen(file_url) as response:
         return response.read()
 
 def speech_to_text(audio_data: bytes) -> str:
@@ -2859,22 +2701,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
     """
-    # ⚡ PERFORMANCE: Request-scoped кеш для уменьшения запросов к БД на 70%
-    global _words_ensured_cache, get_user
+    # ⚡ ОПТИМИЗАЦИЯ: Очищаем кэш в начале каждого запроса
+    global _words_ensured_cache
     _words_ensured_cache = {}
-    _request_user_cache = {}  # Кеш для get_user в рамках одного запроса
-    
-    # Сохраняем оригинальную версию get_user
-    _original_get_user = get_user
-    
-    def get_user_cached(telegram_id: int):
-        """Кешированная версия get_user - уменьшает запросы к БД в 5-7 раз"""
-        if telegram_id not in _request_user_cache:
-            _request_user_cache[telegram_id] = _original_get_user(telegram_id)
-        return _request_user_cache[telegram_id]
-    
-    # Переопределяем get_user на время выполнения handler
-    get_user = get_user_cached
     
     # Устанавливаем команды бота при первом запуске (идемпотентно)
     try:
@@ -3257,7 +3086,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             message_id = callback['message']['message_id']
             user = callback['from']
             callback_id = callback['id']
-            telegram_id = user['id']
             
             # Отвечаем на callback (если упадёт - продолжаем работу)
             try:
@@ -3271,79 +3099,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     print(f"[DEBUG] answerCallbackQuery success: {answer_result.get('ok')}")
             except Exception as e:
                 print(f"[ERROR] answerCallbackQuery failed: {e} - continuing anyway")
-            
-            # ⚠️ ОБРАБОТКА КНОПКИ "Начать обучение" для новых пользователей
-            if data == 'start_onboarding':
-                print(f"[DEBUG] User {telegram_id} clicked start_onboarding button")
-                
-                # Логируем начало онбординга
-                log_user_activity(telegram_id, 'onboarding_start', {'button': 'start_onboarding'})
-                
-                # Имитируем команду /start
-                username = user.get('username', '')
-                first_name = user.get('first_name', '')
-                last_name = user.get('last_name', '')
-                
-                # Создаём пользователя если не существует
-                existing_user = get_user(telegram_id)
-                if not existing_user:
-                    create_user(telegram_id, username, first_name, last_name, 'student')
-                    print(f"[DEBUG] Created new user {telegram_id}")
-                    log_user_activity(telegram_id, 'user_created', {'username': username, 'first_name': first_name})
-                
-                # Удаляем старое сообщение с кнопкой
-                try:
-                    token_del = os.environ['TELEGRAM_BOT_TOKEN']
-                    del_url = f'https://api.telegram.org/bot{token_del}/deleteMessage'
-                    del_payload = json.dumps({'chat_id': chat_id, 'message_id': message_id}).encode('utf-8')
-                    del_req = urllib.request.Request(del_url, data=del_payload, headers={'Content-Type': 'application/json'}, method='POST')
-                    with urllib.request.urlopen(del_req, timeout=5) as del_resp:
-                        pass
-                except Exception as e:
-                    print(f"[WARNING] Failed to delete message: {e}")
-                
-                # Отправляем приветственный стикер (как в /start)
-                try:
-                    sticker_file_id = os.environ.get('WELCOME_STICKER_ID', '')
-                    if sticker_file_id:
-                        send_telegram_sticker(chat_id, sticker_file_id)
-                except Exception as e:
-                    print(f"[ERROR] Failed to send welcome sticker: {e}")
-                
-                # Отправляем welcome сообщение с выбором режима обучения (как в /start)
-                send_telegram_message(
-                    chat_id,
-                    'Привет! Я Аня 👋\n\n'
-                    'Я помогу тебе учить английский через живой диалог.\n\n'
-                    'Что я умею:\n'
-                    '✅ Учим слова и фразы через общение\n'
-                    '✅ Подбираю темы под твои цели\n'
-                    '✅ Напоминаю о практике\n'
-                    '✅ Показываю твой прогресс\n\n'
-                    '❓ <b>Выбери режим обучения:</b>',
-                    {
-                        'inline_keyboard': [
-                            [{'text': '📚 Стандартное обучение (общие темы)', 'callback_data': 'learning_mode_standard'}],
-                            [{'text': '🎯 Конкретная тема (фильм/книга)', 'callback_data': 'learning_mode_specific'}],
-                            [{'text': '🚨 Срочная задача (отпуск, собеседование)', 'callback_data': 'learning_mode_urgent'}]
-                        ]
-                    },
-                    parse_mode='HTML'
-                )
-                
-                # Переводим пользователя в режим ожидания выбора режима обучения
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute(f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_learning_mode' WHERE telegram_id = {telegram_id}")
-                cur.close()
-                conn.close()
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'ok': True}),
-                    'isBase64Encoded': False
-                }
             
             if data.startswith('goal_'):
                 goal_type = data.replace('goal_', '')
@@ -3367,15 +3122,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         '• "Нужен для работы программистом"\n'
                         '• "Просто хочу подтянуть разговорный"'
                     )
-                    
-                    # ⚠️ CRITICAL: Устанавливаем режим awaiting_goal в БД
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(
-                        f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_goal' WHERE telegram_id = {telegram_id}"
-                    )
-                    cur.close()
-                    conn.close()
+                    # Оставляем в режиме awaiting_goal
                 else:
                     # Используем готовую цель
                     goal_text = goal_texts.get(goal_type, 'Хочу улучшить английский')
@@ -3559,9 +3306,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             elif data.startswith('learning_mode_'):
                 # Обработка выбора режима обучения (НОВЫЙ ШАГ)
                 mode = data.replace('learning_mode_', '')
-                
-                # Логируем выбор режима обучения
-                log_user_activity(telegram_id, 'learning_mode_selected', {'mode': mode})
                 
                 if mode == 'standard':
                     # СТАНДАРТНОЕ ОБУЧЕНИЕ: сразу к тесту, без ввода цели
@@ -4337,87 +4081,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         voice = message.get('voice')
         sticker = message.get('sticker')
         
-        # Логируем входящее сообщение
-        try:
-            user_data = get_user(telegram_id)
-            log_user_activity(
-                telegram_id, 
-                'message_received',
-                {
-                    'text': text[:200] if text else None,
-                    'has_voice': bool(voice),
-                    'has_sticker': bool(sticker),
-                    'chat_id': chat_id
-                },
-                {
-                    'conversation_mode': user_data.get('conversation_mode') if user_data else None,
-                    'language_level': user_data.get('language_level') if user_data else None,
-                    'learning_mode': user_data.get('learning_mode') if user_data else None
-                }
-            )
-        except Exception as log_error:
-            print(f"[WARNING] Failed to log message: {log_error}")
-        
-        # ⚠️⚠️⚠️ CRITICAL: ПЕРВЫМ ДЕЛОМ проверяем существует ли пользователь
-        # Это должно быть ДО ЛЮБЫХ других проверок (подписки, команд и тд)
-        # Если пользователя НЕТ → отправляем welcome с кнопкой "🚀 Начать обучение"
-        if text != '/start':  # /start сам создаст пользователя
-            conn = get_db_connection()
-            cur = conn.cursor()
-            
-            cur.execute(
-                f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}"
-            )
-            user_exists = cur.fetchone()
-            
-            if not user_exists:
-                print(f"[DEBUG] User {telegram_id} NOT FOUND → showing welcome button")
-                cur.close()
-                conn.close()
-                
-                welcome_message = (
-                    "👋 Привет! Я Аня — твой личный ассистент для изучения английского!\n\n"
-                    "Нажми кнопку ниже, чтобы начать обучение 🚀"
-                )
-                
-                start_keyboard = {
-                    'inline_keyboard': [[
-                        {'text': '🚀 Начать обучение', 'callback_data': 'start_onboarding'}
-                    ]]
-                }
-                
-                send_telegram_message(chat_id, welcome_message, start_keyboard)
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {'Content-Type': 'application/json'},
-                    'body': json.dumps({'ok': True}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.close()
-            conn.close()
-        
-        # ⚠️ CRITICAL: Проверяем состояние онбординга ПЕРЕД проверкой подписки
-        # Если пользователь в процессе онбординга - НЕ проверяем подписку!
-        existing_user_data = get_user(telegram_id)
-        if existing_user_data and existing_user_data.get('conversation_mode') == 'awaiting_learning_mode':
-            # Пользователь в процессе онбординга - напоминаем нажать кнопку
-            send_telegram_message(
-                chat_id,
-                '👆 Выбери режим обучения, нажав на одну из кнопок выше!\n\n'
-                '📚 Стандартное обучение - общие темы\n'
-                '🎯 Конкретная тема - фильм/книга на английском\n'
-                '🚨 Срочная задача - отпуск, собеседование\n\n'
-                'Или напиши /start чтобы начать заново.'
-            )
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json'},
-                'body': json.dumps({'ok': True, 'onboarding_reminder': True}),
-                'isBase64Encoded': False
-            }
-        
         # ⚠️ НОВАЯ ЛОГИКА: Проверяем подписку для базовых функций
         # basic → базовые функции (диалог, упражнения)
         # premium → ТОЛЬКО голосовой режим
@@ -4431,7 +4094,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             conn = get_db_connection()
             cur = conn.cursor()
             
-            # Пользователь УЖЕ существует (проверили выше) — проверяем подписку
+            # Проверяем активную подписку (basic или bundle)
             cur.execute(
                 f"SELECT period FROM {SCHEMA}.subscription_payments "
                 f"WHERE telegram_id = {telegram_id} "
@@ -4791,8 +4454,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
         
         # Обработка выбора режима через Reply Keyboard
-        elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод'] and conversation_mode != 'adaptive_level_test':
-            # ⚠️ CRITICAL: Игнорируем кнопки если идет тест (проверка в условии elif)
+        elif text in ['💬 Диалог', '🎤 Голосовой', '✍️ Предложения', '📝 Контекст', '🎯 Ассоциации', '🇷🇺→🇬🇧 Перевод']:
             mode_map = {
                 '💬 Диалог': 'dialog',
                 '🎤 Голосовой': 'voice',
@@ -5003,23 +4665,14 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             if not existing_user:
                 # Автоматически регистрируем если пользователь начал писать без /start
-                try:
-                    create_user(
-                        telegram_id,
-                        user.get('username', ''),
-                        user.get('first_name', ''),
-                        user.get('last_name', ''),
-                        'student'
-                    )
-                except Exception as e:
-                    # Игнорируем ошибку если user уже есть (race condition)
-                    if 'unique constraint' not in str(e).lower():
-                        raise
-                    # Получаем user из БД после race condition
-                    existing_user = get_user(telegram_id)
-                
-                if not existing_user:
-                    existing_user = {'telegram_id': telegram_id, 'role': 'student', 'conversation_mode': 'dialog'}
+                create_user(
+                    telegram_id,
+                    user.get('username', ''),
+                    user.get('first_name', ''),
+                    user.get('last_name', ''),
+                    'student'
+                )
+                existing_user = {'telegram_id': telegram_id, 'role': 'student', 'conversation_mode': 'dialog'}
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             language_level = existing_user.get('language_level', 'A1')
@@ -5214,16 +4867,8 @@ No markdown, no explanations, just JSON.'''
                         feedback = '✅ Правильно!' if is_correct else f'❌ Правильный ответ: {expected}'
                         send_telegram_message(chat_id, feedback, parse_mode=None)
                         
-                        # ⚠️ КРИТИЧНО: ПЕРЕЧИТЫВАЕМ learning_mode из БД (он мог быть установлен при выборе режима!)
-                        conn_check = get_db_connection()
-                        cur_check = conn_check.cursor()
-                        cur_check.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-                        mode_row = cur_check.fetchone()
-                        cur_check.close()
-                        conn_check.close()
-                        
-                        learning_mode = mode_row[0] if mode_row and mode_row[0] else 'standard'
-                        print(f"[DEBUG test_complete] Re-read learning_mode from DB: {learning_mode}")
+                        # ⚠️ КРИТИЧНО: Проверяем режим обучения - для срочных задач И конкретных целей НЕ спрашиваем интересы!
+                        learning_mode = existing_user.get('learning_mode', 'standard')
                         
                         if learning_mode in ['urgent_task', 'specific_topic']:
                             # СРОЧНАЯ ЗАДАЧА или КОНКРЕТНАЯ ЦЕЛЬ - пропускаем интересы, сразу генерируем план
@@ -5339,11 +4984,8 @@ No markdown, no explanations, just JSON.'''
                     conn = get_db_connection()
                     cur = conn.cursor()
                     test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
-                    # ⚠️ CRITICAL: СОХРАНЯЕМ conversation_mode чтобы тест продолжился!
                     cur.execute(
-                        f"UPDATE {SCHEMA}.users SET "
-                        f"test_phrases = '{test_state_json}'::jsonb, "
-                        f"conversation_mode = 'adaptive_level_test' "
+                        f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
                         f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
@@ -5519,15 +5161,10 @@ No markdown, no explanations, just JSON.'''
                 learning_mode = row[0] if row and row[0] else 'standard'
                 
                 if learning_mode == 'specific_topic':
-                    # РЕЖИМ КОНКРЕТНОЙ ЦЕЛИ - НЕ СПРАШИВАЕМ ИНТЕРЕСЫ, СРАЗУ ГЕНЕРИРУЕМ СЛОВА
-                    response_text += "\n\n📚 Добавляю новые материалы для практики!"
+                    # РЕЖИМ КОНКРЕТНОЙ ЦЕЛИ - НЕ СПРАШИВАЕМ ИНТЕРЕСЫ, СРАЗУ НАЧИНАЕМ ДИАЛОГ
+                    response_text += "\n\n🚀 Отлично! Начинаем практику! Просто напиши мне что-нибудь на английском 👇"
                     
                     send_telegram_message(chat_id, response_text, parse_mode='HTML')
-                    
-                    # ⚠️ CRITICAL: Генерируем слова для learning_goal через webapp-api
-                    cur.execute(f"SELECT learning_goal FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-                    goal_row = cur.fetchone()
-                    learning_goal = goal_row[0] if goal_row and goal_row[0] else 'Улучшить английский'
                     
                     # Обновляем уровень и переводим в режим диалога
                     cur.execute(
@@ -5539,34 +5176,6 @@ No markdown, no explanations, just JSON.'''
                     )
                     cur.close()
                     conn.close()
-                    
-                    # Генерируем слова через webapp-api
-                    try:
-                        webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
-                        words_response = requests.post(
-                            webapp_api_url,
-                            json={
-                                'action': 'generate_unique_words',
-                                'student_id': telegram_id,
-                                'learning_goal': learning_goal,
-                                'language_level': actual_level,
-                                'count': 10
-                            },
-                            timeout=40
-                        )
-                        words_result = words_response.json()
-                        
-                        if words_result.get('success') and words_result.get('words'):
-                            words_list = words_result['words']
-                            words_text = '\n'.join([f"  • <b>{w['english']}</b> — {w['russian']}" for w in words_list[:7]])
-                            
-                            ready_message = f"✅ Готово! Добавлено {len(words_list)} слов:\n\n{words_text}\n\n🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇"
-                            send_telegram_message(chat_id, ready_message, get_reply_keyboard(), parse_mode='HTML')
-                        else:
-                            send_telegram_message(chat_id, '🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇', get_reply_keyboard(), parse_mode='HTML')
-                    except Exception as e:
-                        print(f"[ERROR] Failed to generate words for specific_topic: {e}")
-                        send_telegram_message(chat_id, '🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇', get_reply_keyboard(), parse_mode='HTML')
                     
                     # Отправляем клавиатуру для диалога
                     send_telegram_message(chat_id, '💬 Режим диалога активен!', get_reply_keyboard(), parse_mode=None)
@@ -5631,16 +5240,9 @@ No markdown, no explanations, just JSON.'''
                         conn = get_db_connection()
                         cur = conn.cursor()
                         
-                        # ⚠️ CRITICAL: Проверяем текущий learning_mode - если specific_topic, НЕ перезаписываем!
-                        cur.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
-                        mode_row = cur.fetchone()
-                        current_learning_mode = mode_row[0] if mode_row and mode_row[0] else 'standard'
-                        
                         goal_escaped = result.get('goal', text).replace("'", "''")
                         timeline = result.get('timeline', '')
                         timeline_escaped = timeline.replace("'", "''") if timeline else ''
-                        
-                        print(f"[DEBUG awaiting_goal] Saving goal, current learning_mode={current_learning_mode}")
                         
                         if timeline:
                             details = f"Срок: {timeline}"
@@ -5657,8 +5259,6 @@ No markdown, no explanations, just JSON.'''
                                 f"learning_goal = '{goal_escaped}' "
                                 f"WHERE telegram_id = {telegram_id}"
                             )
-                        
-                        print(f"[DEBUG awaiting_goal] Goal saved, learning_mode preserved as {current_learning_mode}")
                         
                         cur.close()
                         conn.close()
@@ -6484,42 +6084,10 @@ Output: {{"is_correct": false, "has_word": true, "grammar_ok": false, "feedback"
                     print(f"[DEBUG] learning_mode={learning_mode}, learning_goal={learning_goal}")
                     ai_response = call_gemini(text, history, session_words, language_level, preferred_topics, urgent_goals, learning_goal, learning_mode)
                     print(f"[DEBUG] Gemini response: {ai_response[:100]}...")
-                    
-                    # Логируем успешный ответ Gemini
-                    log_user_activity(
-                        telegram_id,
-                        'gemini_response',
-                        {
-                            'user_message': text[:200],
-                            'response_length': len(ai_response),
-                            'session_words_count': len(session_words) if session_words else 0
-                        },
-                        {
-                            'conversation_mode': conversation_mode,
-                            'language_level': language_level,
-                            'learning_mode': learning_mode
-                        }
-                    )
                 except Exception as e:
                     print(f"[ERROR] Gemini API failed: {e}")
                     import traceback
                     traceback.print_exc()
-                    
-                    # Логируем ошибку Gemini
-                    log_user_activity(
-                        telegram_id,
-                        'gemini_error',
-                        {
-                            'user_message': text[:200],
-                            'error_type': type(e).__name__
-                        },
-                        {
-                            'conversation_mode': conversation_mode,
-                            'language_level': language_level
-                        },
-                        error_message=str(e)[:500]
-                    )
-                    
                     ai_response = "Sorry, I'm having technical difficulties right now. Please try again in a moment! 🔧"
                 
                 # Проверяем маркер освоения слова
