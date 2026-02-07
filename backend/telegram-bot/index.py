@@ -226,6 +226,104 @@ def return_db_connection(conn):
     except:
         conn.close()
 
+def generate_adaptive_question(level: str, used_words: List[str]) -> Dict[str, Any]:
+    """Генерирует тестовый вопрос для адаптивного теста через Gemini"""
+    try:
+        api_key = os.environ['GEMINI_API_KEY']
+        proxy_id, proxy_url = get_active_proxy_from_db()
+        if not proxy_url:
+            proxy_url = os.environ.get('PROXY_URL', '')
+        
+        if not proxy_url:
+            raise Exception("No proxy available")
+        
+        # Формируем список использованных слов для исключения дубликатов
+        used_str = ', '.join(used_words) if used_words else 'none'
+        
+        prompt = f'''Generate ONE English learning test item for level {level}.
+
+Level guidelines:
+- A1: basic everyday words (cat, water, family, hello)
+- A2: common everyday vocabulary (travel, weather, hobby, meeting)
+- B1: common phrases and expressions (take care, by the way, it depends on)
+- B2: idioms and sophisticated vocabulary (break the ice, piece of cake, mindset)
+- C1: advanced academic vocabulary (paradigm, ambiguous, inevitable)
+- C2: native-level expressions (beat around the bush, hit the nail on the head)
+
+⚠️ CRITICAL: DO NOT use these already used words: {used_str}
+⚠️ EVERY word MUST be 100% NEW and NOT in the list above!
+
+Return ONLY valid JSON (no markdown):
+{{
+  "english": "word or phrase",
+  "russian": "перевод",
+  "type": "word",
+  "level": "{level}"
+}}
+
+Types: "word" (single word), "phrase" (2-3 words), "expression" (idiom/set phrase)'''
+        
+        gemini_url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}'
+        
+        payload = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'generationConfig': {'temperature': 0.8, 'maxOutputTokens': 500}
+        }
+        
+        proxy_handler = urllib.request.ProxyHandler({
+            'http': f'http://{proxy_url}',
+            'https': f'http://{proxy_url}'
+        })
+        opener = urllib.request.build_opener(proxy_handler)
+        
+        req = urllib.request.Request(
+            gemini_url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with opener.open(req, timeout=30) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            text = result['candidates'][0]['content']['parts'][0]['text']
+            
+            data = safe_json_parse(text, {
+                'english': 'hello',
+                'russian': 'привет',
+                'type': 'word',
+                'level': level
+            })
+            
+            log_proxy_success(proxy_id)
+            
+            print(f"[DEBUG generate_adaptive_question] Generated: {data}")
+            return data
+            
+    except Exception as e:
+        print(f"[ERROR generate_adaptive_question] Failed: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        if proxy_id:
+            log_proxy_failure(proxy_id, str(e))
+        
+        # Fallback на простое слово
+        fallback_words = {
+            'A1': {'english': 'hello', 'russian': 'привет'},
+            'A2': {'english': 'travel', 'russian': 'путешествие'},
+            'B1': {'english': 'experience', 'russian': 'опыт'},
+            'B2': {'english': 'opportunity', 'russian': 'возможность'},
+            'C1': {'english': 'paradigm', 'russian': 'парадигма'},
+            'C2': {'english': 'ambiguous', 'russian': 'неоднозначный'}
+        }
+        
+        word = fallback_words.get(level, fallback_words['A1'])
+        return {
+            'english': word['english'],
+            'russian': word['russian'],
+            'type': 'word',
+            'level': level
+        }
+
 def get_prompt_from_db(code: str, fallback: str = '') -> str:
     """Получает промпт из БД по коду + КЕШ 5 минут"""
     def fetch():
