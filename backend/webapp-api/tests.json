@@ -1,7 +1,7 @@
 {
   "tests": [
     {
-      "name": "Test OPTIONS",
+      "name": "Test OPTIONS request",
       "method": "OPTIONS",
       "path": "/",
       "expectedStatus": 200
