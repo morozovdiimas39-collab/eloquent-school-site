@@ -5115,8 +5115,16 @@ No markdown, no explanations, just JSON.'''
                         feedback = '✅ Правильно!' if is_correct else f'❌ Правильный ответ: {expected}'
                         send_telegram_message(chat_id, feedback, parse_mode=None)
                         
-                        # ⚠️ КРИТИЧНО: Проверяем режим обучения - для срочных задач И конкретных целей НЕ спрашиваем интересы!
-                        learning_mode = existing_user.get('learning_mode', 'standard')
+                        # ⚠️ КРИТИЧНО: ПЕРЕЧИТЫВАЕМ learning_mode из БД (он мог быть установлен при выборе режима!)
+                        conn_check = get_db_connection()
+                        cur_check = conn_check.cursor()
+                        cur_check.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+                        mode_row = cur_check.fetchone()
+                        cur_check.close()
+                        conn_check.close()
+                        
+                        learning_mode = mode_row[0] if mode_row and mode_row[0] else 'standard'
+                        print(f"[DEBUG test_complete] Re-read learning_mode from DB: {learning_mode}")
                         
                         if learning_mode in ['urgent_task', 'specific_topic']:
                             # СРОЧНАЯ ЗАДАЧА или КОНКРЕТНАЯ ЦЕЛЬ - пропускаем интересы, сразу генерируем план
