@@ -3259,7 +3259,15 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         '• "Нужен для работы программистом"\n'
                         '• "Просто хочу подтянуть разговорный"'
                     )
-                    # Оставляем в режиме awaiting_goal
+                    
+                    # ⚠️ CRITICAL: Устанавливаем режим awaiting_goal в БД
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"UPDATE {SCHEMA}.users SET conversation_mode = 'awaiting_goal' WHERE telegram_id = {telegram_id}"
+                    )
+                    cur.close()
+                    conn.close()
                 else:
                     # Используем готовую цель
                     goal_text = goal_texts.get(goal_type, 'Хочу улучшить английский')
