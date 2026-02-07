@@ -21,6 +21,7 @@ _db_pool = None
 import time
 _cache = {}
 _cache_ttl = {}  # Время жизни кеша
+_last_generation = {}  # Rate limiting для auto_generate_new_words
 
 def get_cached(key: str, fetch_fn, ttl: int = 300):
     """Универсальный кеш с TTL (по умолчанию 5 минут)"""
@@ -369,7 +370,23 @@ def get_user(telegram_id: int):
 def auto_generate_new_words(student_id: int, how_many: int = 10) -> Dict[str, Any]:
     """Автоматически генерирует новые слова, фразы и выражения когда старые освоены"""
     try:
+        # ⚡ RATE LIMITING: НЕ генерируем если недавно (<60 сек) уже генерировали
+        global _last_generation
+        now = time.time()
+        last_gen_time = _last_generation.get(student_id, 0)
+        
+        if now - last_gen_time < 60:
+            cooldown = int(60 - (now - last_gen_time))
+            print(f"[DEBUG] Rate limit: last generation was {int(now - last_gen_time)}s ago, cooldown: {cooldown}s")
+            return {
+                'added_count': 0,
+                'new_items': [],
+                'cooldown': cooldown,
+                'message': f'⏸️ Подожди {cooldown} секунд перед новой генерацией!'
+            }
+        
         print(f"[DEBUG auto_generate_new_words] Generating {how_many} new items for student {student_id}")
+        _last_generation[student_id] = now
         
         # Получаем данные пользователя
         conn = get_db_connection()
@@ -690,13 +707,16 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         # ⚡ PERFORMANCE: НЕ блокируем обработку на генерацию слов (10-20 сек)
         # Просто уведомляем пользователя и запускаем генерацию в фоне
         try:
-            send_telegram_message(
-                student_id,
-                f"🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n"
-                f"⏳ Генерирую новые материалы...\n"
-                f"Это займет ~5-10 секунд. Напиши мне что-нибудь или подожди! ⚡",
-                parse_mode=None
-            )
+            # ⚠️ FIX: НЕ показываем "освоил 0 слов" — это выглядит глупо
+            if mastered_count > 0:
+                message = f"🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n"
+            else:
+                message = "📚 Добавляю новые материалы для практики!\n\n"
+            
+            message += "⏳ Генерирую слова и фразы...\n"
+            message += "Это займет ~5-10 секунд. Напиши мне что-нибудь или подожди! ⚡"
+            
+            send_telegram_message(student_id, message, parse_mode=None)
         except Exception as e:
             print(f"[ERROR] Failed to send notification: {e}")
         
@@ -705,6 +725,12 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         def generate_async():
             try:
                 result = auto_generate_new_words(student_id, how_many=10)
+                
+                # Проверяем rate limit
+                if result.get('cooldown'):
+                    print(f"[DEBUG] Generation skipped - rate limit: {result['cooldown']}s")
+                    return
+                
                 if result['added_count'] > 0:
                     # Инициализируем прогресс для новых слов
                     conn = get_db_connection()
