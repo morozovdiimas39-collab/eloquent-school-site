@@ -1,4 +1,4 @@
 psycopg2-binary==2.9.9
 requests==2.31.0
 boto3==1.34.144
-# FIX generate words specific_topic v17
+# FIX preserve learning_mode in awaiting_goal v18

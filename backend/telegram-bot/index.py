@@ -5521,9 +5521,16 @@ No markdown, no explanations, just JSON.'''
                         conn = get_db_connection()
                         cur = conn.cursor()
                         
+                        # ⚠️ CRITICAL: Проверяем текущий learning_mode - если specific_topic, НЕ перезаписываем!
+                        cur.execute(f"SELECT learning_mode FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+                        mode_row = cur.fetchone()
+                        current_learning_mode = mode_row[0] if mode_row and mode_row[0] else 'standard'
+                        
                         goal_escaped = result.get('goal', text).replace("'", "''")
                         timeline = result.get('timeline', '')
                         timeline_escaped = timeline.replace("'", "''") if timeline else ''
+                        
+                        print(f"[DEBUG awaiting_goal] Saving goal, current learning_mode={current_learning_mode}")
                         
                         if timeline:
                             details = f"Срок: {timeline}"
@@ -5540,6 +5547,8 @@ No markdown, no explanations, just JSON.'''
                                 f"learning_goal = '{goal_escaped}' "
                                 f"WHERE telegram_id = {telegram_id}"
                             )
+                        
+                        print(f"[DEBUG awaiting_goal] Goal saved, learning_mode preserved as {current_learning_mode}")
                         
                         cur.close()
                         conn.close()
