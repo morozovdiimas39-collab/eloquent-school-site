@@ -5409,10 +5409,15 @@ No markdown, no explanations, just JSON.'''
                 learning_mode = row[0] if row and row[0] else 'standard'
                 
                 if learning_mode == 'specific_topic':
-                    # РЕЖИМ КОНКРЕТНОЙ ЦЕЛИ - НЕ СПРАШИВАЕМ ИНТЕРЕСЫ, СРАЗУ НАЧИНАЕМ ДИАЛОГ
-                    response_text += "\n\n🚀 Отлично! Начинаем практику! Просто напиши мне что-нибудь на английском 👇"
+                    # РЕЖИМ КОНКРЕТНОЙ ЦЕЛИ - НЕ СПРАШИВАЕМ ИНТЕРЕСЫ, СРАЗУ ГЕНЕРИРУЕМ СЛОВА
+                    response_text += "\n\n📚 Добавляю новые материалы для практики!"
                     
                     send_telegram_message(chat_id, response_text, parse_mode='HTML')
+                    
+                    # ⚠️ CRITICAL: Генерируем слова для learning_goal через webapp-api
+                    cur.execute(f"SELECT learning_goal FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+                    goal_row = cur.fetchone()
+                    learning_goal = goal_row[0] if goal_row and goal_row[0] else 'Улучшить английский'
                     
                     # Обновляем уровень и переводим в режим диалога
                     cur.execute(
@@ -5424,6 +5429,34 @@ No markdown, no explanations, just JSON.'''
                     )
                     cur.close()
                     conn.close()
+                    
+                    # Генерируем слова через webapp-api
+                    try:
+                        webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                        words_response = requests.post(
+                            webapp_api_url,
+                            json={
+                                'action': 'generate_unique_words',
+                                'student_id': telegram_id,
+                                'learning_goal': learning_goal,
+                                'language_level': actual_level,
+                                'count': 10
+                            },
+                            timeout=40
+                        )
+                        words_result = words_response.json()
+                        
+                        if words_result.get('success') and words_result.get('words'):
+                            words_list = words_result['words']
+                            words_text = '\n'.join([f"  • <b>{w['english']}</b> — {w['russian']}" for w in words_list[:7]])
+                            
+                            ready_message = f"✅ Готово! Добавлено {len(words_list)} слов:\n\n{words_text}\n\n🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇"
+                            send_telegram_message(chat_id, ready_message, get_reply_keyboard(), parse_mode='HTML')
+                        else:
+                            send_telegram_message(chat_id, '🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇', get_reply_keyboard(), parse_mode='HTML')
+                    except Exception as e:
+                        print(f"[ERROR] Failed to generate words for specific_topic: {e}")
+                        send_telegram_message(chat_id, '🚀 Начинаем практику! Напиши мне что-нибудь на английском 👇', get_reply_keyboard(), parse_mode='HTML')
                     
                     # Отправляем клавиатуру для диалога
                     send_telegram_message(chat_id, '💬 Режим диалога активен!', get_reply_keyboard(), parse_mode=None)
