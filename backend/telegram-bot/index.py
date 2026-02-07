@@ -2,7 +2,7 @@ import json
 import os
 import psycopg2
 import psycopg2.pool
-# Force redeploy v9 - performance optimization for 100k users
+# Force redeploy v12 - CRITICAL FIX: indentation error in async generate_async()
 import urllib.request
 import urllib.parse
 import random
@@ -701,56 +701,63 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         )
         mastered_count = cur.fetchone()[0]
         
+        # ⚠️ CRITICAL FIX: Проверяем есть ли УЖЕ слова в student_words (может просто не инициализированы)
+        cur.execute(
+            f"SELECT COUNT(*) FROM {SCHEMA}.student_words "
+            f"WHERE student_id = {student_id}"
+        )
+        total_student_words = cur.fetchone()[0]
+        
         cur.close()
         conn.close()
         
-        # ⚡ PERFORMANCE: НЕ блокируем обработку на генерацию слов (10-20 сек)
-        # Просто уведомляем пользователя и запускаем генерацию в фоне
-        try:
-            # ⚠️ FIX: НЕ показываем "освоил 0 слов" — это выглядит глупо
-            if mastered_count > 0:
-                message = f"🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n"
-            else:
-                message = "📚 Добавляю новые материалы для практики!\n\n"
-            
-            message += "⏳ Генерирую слова и фразы...\n"
-            message += "Это займет ~5-10 секунд. Напиши мне что-нибудь или подожди! ⚡"
-            
-            send_telegram_message(student_id, message, parse_mode=None)
-        except Exception as e:
-            print(f"[ERROR] Failed to send notification: {e}")
-        
-        # Запускаем генерацию в фоне через самовызов (НЕ блокируем текущий запрос)
-        import threading
-        def generate_async():
+        # ⚡ PERFORMANCE: Запускаем генерацию ТОЛЬКО если реально нет слов в базе
+        # Если слова есть - значит просто не инициализирован прогресс, возвращаем что есть
+        if total_student_words == 0:
+            # Реально нет слов - генерируем async
             try:
-                result = auto_generate_new_words(student_id, how_many=10)
+                if mastered_count > 0:
+                    message = f"🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n"
+                else:
+                    message = "📚 Добавляю новые материалы для практики!\n\n"
                 
-                # Проверяем rate limit
-                if result.get('cooldown'):
-                    print(f"[DEBUG] Generation skipped - rate limit: {result['cooldown']}s")
-                    return
+                message += "⏳ Генерирую слова и фразы...\n"
+                message += "Это займет ~5-10 секунд. Напиши мне что-нибудь или подожди! ⚡"
                 
-                if result['added_count'] > 0:
-                    # Инициализируем прогресс для новых слов
-                    conn = get_db_connection()
-                    cur = conn.cursor()
-                    cur.execute(
-                        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
-                        f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
-                        f"WHERE sw.student_id = {student_id} "
-                        f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
-                    )
-                    cur.close()
-                    conn.close()
+                send_telegram_message(student_id, message, parse_mode=None)
+            except Exception as e:
+                print(f"[ERROR] Failed to send notification: {e}")
+            
+            # Запускаем генерацию в фоне
+            import threading
+            def generate_async():
+                try:
+                    result = auto_generate_new_words(student_id, how_many=10)
                     
-                    notification = f"✅ Готово! Добавлено {result['added_count']} новых материалов:\n\n"
-                    for item in result['new_items'][:5]:
-                        notification += f"{item}\n"
-                    if len(result['new_items']) > 5:
-                        notification += f"\n...и еще {len(result['new_items']) - 5}!\n"
-                    notification += f"\nПродолжаем! 🚀"
-                    send_telegram_message(student_id, notification, parse_mode=None)
+                    if result.get('cooldown'):
+                        print(f"[DEBUG] Generation skipped - rate limit: {result['cooldown']}s")
+                        return
+                    
+                    if result['added_count'] > 0:
+                        # Инициализируем прогресс для новых слов
+                        conn = get_db_connection()
+                        cur = conn.cursor()
+                        cur.execute(
+                            f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+                            f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+                            f"WHERE sw.student_id = {student_id} "
+                            f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+                        )
+                        cur.close()
+                        conn.close()
+                        
+                        notification = f"✅ Готово! Добавлено {result['added_count']} новых материалов:\n\n"
+                        for item in result['new_items'][:5]:
+                            notification += f"{item}\n"
+                        if len(result['new_items']) > 5:
+                            notification += f"\n...и еще {len(result['new_items']) - 5}!\n"
+                        notification += f"\nПродолжаем! 🚀"
+                        send_telegram_message(student_id, notification, parse_mode=None)
             except Exception as e:
                 print(f"[ERROR] Async generation failed: {e}")
                 try:
@@ -758,11 +765,45 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
                 except:
                     pass
         
-        threading.Thread(target=generate_async, daemon=True).start()
-        print(f"[DEBUG] Started async word generation for student {student_id}")
+            threading.Thread(target=generate_async, daemon=True).start()
+            print(f"[DEBUG] Started async word generation for student {student_id}")
+            
+            # Возвращаем пустой список - генерация идет в фоне
+            return []
         
-        # Возвращаем пустой список - генерация идет в фоне
-        return []
+        # Если слова есть в student_words, но не в word_progress - инициализируем прогресс
+        print(f"[DEBUG] Student has {total_student_words} words but only {active_words_count} active - initializing progress")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+            f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+            f"WHERE sw.student_id = {student_id} "
+            f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+        )
+        
+        # Перезагружаем слова после инициализации
+        cur.execute(
+            f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+            f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+            f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
+            f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
+        )
+        new_words = cur.fetchall()
+        
+        cur.execute(
+            f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
+            f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
+            f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
+            f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
+            f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
+        )
+        review_words = cur.fetchall()
+        
+        cur.close()
+        conn.close()
+        
+        print(f"[DEBUG] After progress init: new={len(new_words)}, review={len(review_words)}")
     
     # ⚠️ CRITICAL: Возвращаем ТОЛЬКО новые и review слова (БЕЗ mastered!)
     all_words = list(new_words) + list(review_words)
