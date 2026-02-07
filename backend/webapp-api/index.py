@@ -13,9 +13,36 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def get_active_proxy_from_db() -> str:
+    """Получает случайный активный прокси из БД"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            f"SELECT host, port, username, password FROM {SCHEMA}.proxies WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1"
+        )
+        row = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        if row:
+            host, port, username, password = row
+            if username and password:
+                return f"{username}:{password}@{host}:{port}"
+            else:
+                return f"{host}:{port}"
+        
+        # Fallback на env если нет прокси в БД
+        return os.environ.get('PROXY_URL', '')
+    except Exception as e:
+        print(f"[ERROR] Failed to get proxy from DB: {e}")
+        return os.environ.get('PROXY_URL', '')
+
 def get_proxies():
-    """Возвращает прокси из env"""
-    proxy_url = os.environ.get('PROXY_URL')
+    """Возвращает прокси из БД или env"""
+    proxy_url = get_active_proxy_from_db()
     if proxy_url:
         return {
             'http': f'http://{proxy_url}',
@@ -2126,6 +2153,203 @@ def delete_blog_post(post_id: int) -> bool:
     conn.close()
     return True
 
+def delete_user(telegram_id: int) -> bool:
+    """Полностью удаляет пользователя и все его данные"""
+    print(f"🗑️ Starting deletion for user {telegram_id}")
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    try:
+        # Удаляем сообщения из conversations
+        try:
+            print(f"🗑️ Step 1: Getting conversations...")
+            cur.execute(f"SELECT id FROM {SCHEMA}.conversations WHERE user_id = {telegram_id}")
+            conversation_ids = [row[0] for row in cur.fetchall()]
+            print(f"🗑️ Found {len(conversation_ids)} conversations")
+            
+            if conversation_ids:
+                ids_str = ','.join(str(cid) for cid in conversation_ids)
+                cur.execute(f"DELETE FROM {SCHEMA}.messages WHERE conversation_id IN ({ids_str})")
+                print(f"🗑️ Deleted messages from {len(conversation_ids)} conversations")
+                cur.execute(f"DELETE FROM {SCHEMA}.conversations WHERE user_id = {telegram_id}")
+                print(f"🗑️ Deleted conversations")
+        except Exception as e:
+            print(f"❌ Error in conversations: {e}")
+            raise
+        
+        # Удаляем все связанные данные
+        try:
+            print(f"🗑️ Step 2: Deleting word_progress...")
+            cur.execute(f"DELETE FROM {SCHEMA}.word_progress WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted word_progress")
+        except Exception as e:
+            print(f"❌ Error in word_progress: {e}")
+            raise
+        
+        try:
+            print(f"🗑️ Step 3: Deleting student_words...")
+            cur.execute(f"DELETE FROM {SCHEMA}.student_words WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted student_words")
+        except Exception as e:
+            print(f"❌ Error in student_words: {e}")
+            raise
+        
+        try:
+            print(f"🗑️ Step 4: Deleting learning_goals...")
+            cur.execute(f"DELETE FROM {SCHEMA}.learning_goals WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted learning_goals")
+        except Exception as e:
+            print(f"❌ Error in learning_goals: {e}")
+            raise
+        
+        try:
+            print(f"🗑️ Step 5: Deleting subscription_payments...")
+            cur.execute(f"DELETE FROM {SCHEMA}.subscription_payments WHERE telegram_id = {telegram_id}")
+            print(f"🗑️ Deleted subscription_payments")
+        except Exception as e:
+            print(f"❌ Error in subscription_payments: {e}")
+            raise
+        
+        try:
+            print(f"🗑️ Step 6: Deleting user_achievements...")
+            cur.execute(f"DELETE FROM {SCHEMA}.user_achievements WHERE student_id = {telegram_id}")
+            print(f"🗑️ Deleted user_achievements")
+        except Exception as e:
+            print(f"❌ Error in user_achievements: {e}")
+            raise
+        
+        try:
+            print(f"🗑️ Step 7: Deleting from users...")
+            cur.execute(f"DELETE FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+            print(f"✅ Deleted user {telegram_id} from users table")
+        except Exception as e:
+            print(f"❌ Error in users: {e}")
+            raise
+        
+        cur.close()
+        conn.close()
+        print(f"✅ User {telegram_id} deleted successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Error deleting user {telegram_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        cur.close()
+        conn.close()
+        raise
+
+def log_user_activity(telegram_id: int, event_type: str, event_data: Dict = None, user_state: Dict = None, error_message: str = None):
+    """Логирует активность пользователя для отладки"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        event_data_json = json.dumps(event_data) if event_data else 'null'
+        user_state_json = json.dumps(user_state) if user_state else 'null'
+        error_escaped = error_message.replace("'", "''") if error_message else 'null'
+        error_value = f"'{error_escaped}'" if error_message else 'null'
+        
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.user_activity_logs "
+            f"(telegram_id, event_type, event_data, user_state, error_message) "
+            f"VALUES ({telegram_id}, '{event_type}', '{event_data_json}'::jsonb, '{user_state_json}'::jsonb, {error_value})"
+        )
+        
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[ERROR] Failed to log user activity: {e}")
+
+def get_user_activity_logs(telegram_id: int, limit: int = 100) -> List[Dict[str, Any]]:
+    """Получает логи активности пользователя"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute(
+        f"SELECT id, telegram_id, event_type, event_data, user_state, error_message, created_at "
+        f"FROM {SCHEMA}.user_activity_logs "
+        f"WHERE telegram_id = {telegram_id} "
+        f"ORDER BY created_at DESC LIMIT {limit}"
+    )
+    
+    logs = []
+    for row in cur.fetchall():
+        logs.append({
+            'id': row[0],
+            'telegram_id': row[1],
+            'event_type': row[2],
+            'event_data': row[3],
+            'user_state': row[4],
+            'error_message': row[5],
+            'created_at': row[6].isoformat() if row[6] else None
+        })
+    
+    cur.close()
+    conn.close()
+    return logs
+
+def reset_user_onboarding(telegram_id: int) -> bool:
+    """Сбрасывает онбординг пользователя - очищает conversation_mode и активирует тестовый период (basic + premium)"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Сбрасываем состояние пользователя + активируем тестовый период на 1 день
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET "
+            f"conversation_mode = NULL, "
+            f"learning_mode = 'standard', "
+            f"learning_goal = NULL, "
+            f"urgent_goals = NULL, "
+            f"subscription_status = 'active', "
+            f"subscription_expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day', "
+            f"trial_used = TRUE "
+            f"WHERE telegram_id = {telegram_id}"
+        )
+        
+        # ⚠️ CRITICAL: Удаляем старые тестовые подписки если есть
+        cur.execute(
+            f"DELETE FROM {SCHEMA}.subscription_payments "
+            f"WHERE telegram_id = {telegram_id} AND payment_method = 'trial'"
+        )
+        
+        # ⚠️ CRITICAL: Добавляем записи в subscription_payments для ОБЕИХ подписок
+        # Это нужно чтобы бот видел активную подписку (проверка в строке 4276 telegram-bot)
+        
+        # 1. Базовая подписка (диалог + упражнения)
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.subscription_payments "
+            f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+            f"VALUES ({telegram_id}, 'basic', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
+        )
+        
+        # 2. Голосовая подписка
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.subscription_payments "
+            f"(telegram_id, period, status, expires_at, payment_method, amount, amount_kop) "
+            f"VALUES ({telegram_id}, 'premium', 'paid', CURRENT_TIMESTAMP + INTERVAL '1 day', 'trial', 0, 0)"
+        )
+        
+        # Логируем событие
+        log_user_activity(
+            telegram_id,
+            'onboarding_reset',
+            {'reset_by': 'admin', 'trial_days': 1},
+            None,
+            None
+        )
+        
+        cur.close()
+        conn.close()
+        
+        print(f"[INFO] Reset onboarding for user {telegram_id} with 1-day trial (basic + premium)")
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to reset onboarding for {telegram_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def call_gemini_demo(user_message: str, history: list) -> str:
     """
     Вызывает Gemini API для демо-чата на лендинге
@@ -2593,6 +2817,27 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
+        elif action == 'get_user_logs':
+            telegram_id = body_data.get('telegram_id')
+            limit = body_data.get('limit', 100)
+            logs = get_user_activity_logs(telegram_id, limit)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'logs': logs}),
+                'isBase64Encoded': False
+            }
+        
+        elif action == 'reset_onboarding':
+            telegram_id = body_data.get('telegram_id')
+            success = reset_user_onboarding(telegram_id)
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': success}),
+                'isBase64Encoded': False
+            }
+        
         elif action == 'get_blog_posts':
             published_only = body_data.get('published_only', False)
             posts = get_all_blog_posts(published_only)
@@ -2667,6 +2912,29 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'body': json.dumps({'success': True}),
                 'isBase64Encoded': False
             }
+        
+        elif action == 'delete_user':
+            try:
+                telegram_id = body_data.get('telegram_id')
+                print(f"🗑️ Handler: Starting delete_user for telegram_id={telegram_id}")
+                delete_user(telegram_id)
+                print(f"✅ Handler: User {telegram_id} deleted successfully")
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True}),
+                    'isBase64Encoded': False
+                }
+            except Exception as e:
+                print(f"❌ Handler: Error deleting user: {e}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    'statusCode': 500,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': False, 'error': str(e)}),
+                    'isBase64Encoded': False
+                }
         
         elif action == 'reset_proxy_stats':
             proxy_id = body_data.get('proxy_id')

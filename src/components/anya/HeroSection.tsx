@@ -36,11 +36,11 @@ export default function HeroSection({ onStartDemo }: HeroSectionProps) {
 
             <div className="flex flex-col sm:flex-row items-start gap-4 pt-4 animate-fade-in-up animation-delay-400">
               <Button
-                onClick={onStartDemo}
+                onClick={() => window.open('https://t.me/gpt_anya_bot', '_blank')}
                 size="lg"
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold text-lg h-14 px-8 shadow-xl hover:shadow-2xl transition-all hover:scale-105"
               >
-                Попробовать демо
+                Попробовать бесплатно
                 <Icon name="MessageSquare" size={20} className="ml-2" />
               </Button>
               <Button
