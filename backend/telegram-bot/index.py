@@ -773,6 +773,16 @@ def create_user(telegram_id: int, username: str, first_name: str, last_name: str
     first_name = first_name.replace("'", "''") if first_name else ''
     last_name = last_name.replace("'", "''") if last_name else ''
     
+    # ⚠️ CRITICAL FIX: Проверяем существует ли пользователь ПЕРЕД созданием
+    cur.execute(f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id = {telegram_id}")
+    existing = cur.fetchone()
+    
+    if existing:
+        print(f"[WARNING] User {telegram_id} already exists, skipping creation")
+        cur.close()
+        conn.close()
+        return
+    
     # Создаем пользователя с активным тестовым периодом (1 день)
     cur.execute(
         f"INSERT INTO {SCHEMA}.users (telegram_id, username, first_name, last_name, role, "
