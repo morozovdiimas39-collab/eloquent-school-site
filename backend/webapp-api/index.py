@@ -13,9 +13,36 @@ def get_db_connection():
     conn.autocommit = True
     return conn
 
+def get_active_proxy_from_db() -> str:
+    """Получает случайный активный прокси из БД"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            f"SELECT host, port, username, password FROM {SCHEMA}.proxies WHERE is_active = TRUE ORDER BY RANDOM() LIMIT 1"
+        )
+        row = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        if row:
+            host, port, username, password = row
+            if username and password:
+                return f"{username}:{password}@{host}:{port}"
+            else:
+                return f"{host}:{port}"
+        
+        # Fallback на env если нет прокси в БД
+        return os.environ.get('PROXY_URL', '')
+    except Exception as e:
+        print(f"[ERROR] Failed to get proxy from DB: {e}")
+        return os.environ.get('PROXY_URL', '')
+
 def get_proxies():
-    """Возвращает прокси из env"""
-    proxy_url = os.environ.get('PROXY_URL')
+    """Возвращает прокси из БД или env"""
+    proxy_url = get_active_proxy_from_db()
     if proxy_url:
         return {
             'http': f'http://{proxy_url}',

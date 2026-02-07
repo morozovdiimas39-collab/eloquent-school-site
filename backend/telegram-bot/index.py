@@ -4904,14 +4904,23 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             
             if not existing_user:
                 # Автоматически регистрируем если пользователь начал писать без /start
-                create_user(
-                    telegram_id,
-                    user.get('username', ''),
-                    user.get('first_name', ''),
-                    user.get('last_name', ''),
-                    'student'
-                )
-                existing_user = {'telegram_id': telegram_id, 'role': 'student', 'conversation_mode': 'dialog'}
+                try:
+                    create_user(
+                        telegram_id,
+                        user.get('username', ''),
+                        user.get('first_name', ''),
+                        user.get('last_name', ''),
+                        'student'
+                    )
+                except Exception as e:
+                    # Игнорируем ошибку если user уже есть (race condition)
+                    if 'unique constraint' not in str(e).lower():
+                        raise
+                    # Получаем user из БД после race condition
+                    existing_user = get_user(telegram_id)
+                
+                if not existing_user:
+                    existing_user = {'telegram_id': telegram_id, 'role': 'student', 'conversation_mode': 'dialog'}
             
             conversation_mode = existing_user.get('conversation_mode', 'dialog')
             language_level = existing_user.get('language_level', 'A1')
