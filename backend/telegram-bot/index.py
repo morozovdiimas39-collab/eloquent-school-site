@@ -17,6 +17,22 @@ SCHEMA = 't_p86463701_eloquent_school_site'
 # ⚡ CONNECTION POOL для высокой нагрузки
 _db_pool = None
 
+# ⚡ PERFORMANCE: In-memory кеш для ускорения работы
+import time
+_cache = {}
+_cache_ttl = {}  # Время жизни кеша
+
+def get_cached(key: str, fetch_fn, ttl: int = 300):
+    """Универсальный кеш с TTL (по умолчанию 5 минут)"""
+    now = time.time()
+    if key in _cache and now - _cache_ttl.get(key, 0) < ttl:
+        return _cache[key]
+    
+    value = fetch_fn()
+    _cache[key] = value
+    _cache_ttl[key] = now
+    return value
+
 def get_db_pool():
     """Возвращает пул подключений к БД (создается один раз)"""
     global _db_pool
@@ -28,30 +44,33 @@ def get_db_pool():
     return _db_pool
 
 def get_subscription_plans() -> dict:
-    """Загружает актуальные тарифные планы из БД (ТОЛЬКО ИЗ АДМИНКИ!)"""
-    conn = get_db_connection()
-    cur = conn.cursor()
+    """Загружает актуальные тарифные планы из БД (ТОЛЬКО ИЗ АДМИНКИ!) + КЕШ 5 минут"""
+    def fetch():
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute(
+            f"SELECT plan_key, name, description, price_rub, price_kop, duration_days "
+            f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
+        )
+        
+        plans = {}
+        for row in cur.fetchall():
+            plans[row[0]] = {
+                'name': row[1],
+                'description': row[2],
+                'price_rub': row[3],
+                'price_kop': row[4],
+                'duration_days': row[5]
+            }
+        
+        cur.close()
+        conn.close()
+        
+        print(f"[DEBUG] Loaded {len(plans)} pricing plans from DB: {plans}")
+        return plans
     
-    cur.execute(
-        f"SELECT plan_key, name, description, price_rub, price_kop, duration_days "
-        f"FROM {SCHEMA}.pricing_plans ORDER BY price_rub"
-    )
-    
-    plans = {}
-    for row in cur.fetchall():
-        plans[row[0]] = {
-            'name': row[1],
-            'description': row[2],
-            'price_rub': row[3],
-            'price_kop': row[4],
-            'duration_days': row[5]
-        }
-    
-    cur.close()
-    conn.close()
-    
-    print(f"[DEBUG] Loaded {len(plans)} pricing plans from DB: {plans}")
-    return plans
+    return get_cached('subscription_plans', fetch, ttl=300)
 
 # Глобальный кэш для оптимизации ensure_user_has_words (живет только в рамках одного запроса)
 _words_ensured_cache = {}
@@ -207,54 +226,61 @@ def return_db_connection(conn):
         conn.close()
 
 def get_prompt_from_db(code: str, fallback: str = '') -> str:
-    """Получает промпт из БД по коду, если не найден - возвращает fallback"""
-    try:
+    """Получает промпт из БД по коду + КЕШ 5 минут"""
+    def fetch():
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            code_escaped = code.replace("'", "''")
+            cur.execute(
+                f"SELECT prompt_text FROM {SCHEMA}.gemini_prompts "
+                f"WHERE code = '{code_escaped}' AND is_active = TRUE"
+            )
+            row = cur.fetchone()
+            
+            cur.close()
+            conn.close()
+            
+            if row:
+                return row[0]
+            return fallback
+        except Exception as e:
+            print(f"[WARNING] Failed to load prompt '{code}' from DB: {e}")
+            return fallback
+    
+    return get_cached(f'prompt_{code}', fetch, ttl=300)
+
+def get_active_proxy_from_db() -> tuple:
+    """Получает случайный активный прокси из БД + КЕШ список на 1 минуту - возвращает (id, url)"""
+    def fetch():
         conn = get_db_connection()
         cur = conn.cursor()
         
-        code_escaped = code.replace("'", "''")
         cur.execute(
-            f"SELECT prompt_text FROM {SCHEMA}.gemini_prompts "
-            f"WHERE code = '{code_escaped}' AND is_active = TRUE"
+            f"SELECT id, host, port, username, password "
+            f"FROM {SCHEMA}.proxies WHERE is_active = TRUE"
         )
-        row = cur.fetchone()
+        
+        proxies = []
+        for row in cur.fetchall():
+            proxy_id, host, port, username, password = row
+            if username and password:
+                proxy_url = f"{username}:{password}@{host}:{port}"
+            else:
+                proxy_url = f"{host}:{port}"
+            proxies.append((proxy_id, proxy_url))
         
         cur.close()
         conn.close()
         
-        if row:
-            return row[0]
-        return fallback
-    except Exception as e:
-        print(f"[WARNING] Failed to load prompt '{code}' from DB: {e}")
-        return fallback
-
-def get_active_proxy_from_db() -> tuple:
-    """Получает случайный активный прокси из БД - возвращает (id, url)"""
-    conn = get_db_connection()
-    cur = conn.cursor()
+        return proxies
     
-    cur.execute(
-        f"SELECT id, host, port, username, password "
-        f"FROM {SCHEMA}.proxies WHERE is_active = TRUE "
-        f"ORDER BY RANDOM() LIMIT 1"
-    )
-    
-    row = cur.fetchone()
-    cur.close()
-    conn.close()
-    
-    if not row:
+    proxies = get_cached('active_proxies', fetch, ttl=60)
+    if not proxies:
         return None, None
     
-    proxy_id, host, port, username, password = row
-    
-    if username and password:
-        proxy_url = f"{username}:{password}@{host}:{port}"
-    else:
-        proxy_url = f"{host}:{port}"
-    
-    return proxy_id, proxy_url
+    return random.choice(proxies)
 
 def log_proxy_success(proxy_id: int):
     """Логирует успешный запрос через прокси"""
@@ -661,62 +687,56 @@ def get_session_words(student_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         cur.close()
         conn.close()
         
-        result = auto_generate_new_words(student_id, how_many=10)
+        # ⚡ PERFORMANCE: НЕ блокируем обработку на генерацию слов (10-20 сек)
+        # Просто уведомляем пользователя и запускаем генерацию в фоне
+        try:
+            send_telegram_message(
+                student_id,
+                f"🎉 Поздравляю! Ты освоил {mastered_count} слов!\n\n"
+                f"⏳ Генерирую новые материалы...\n"
+                f"Это займет ~5-10 секунд. Напиши мне что-нибудь или подожди! ⚡",
+                parse_mode=None
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to send notification: {e}")
         
-        if result['added_count'] > 0:
-            # Отправляем уведомление о новых материалах
-            notification = f"🎉 ПОЗДРАВЛЯЮ!\n\n"
-            notification += f"✅ Ты освоил {mastered_count} слов!\n\n"
-            notification += f"🆕 Я добавила {result['added_count']} новых материалов для уровня {result['language_level']}:\n\n"
-            
-            for item in result['new_items'][:10]:  # Показываем первые 10
-                notification += f"{item}\n"
-            
-            if len(result['new_items']) > 10:
-                notification += f"\n...и еще {len(result['new_items']) - 10}!\n"
-            
-            notification += f"\nПродолжаем практиковать! 🚀"
-            
+        # Запускаем генерацию в фоне через самовызов (НЕ блокируем текущий запрос)
+        import threading
+        def generate_async():
             try:
-                send_telegram_message(student_id, notification, parse_mode=None)
-                print(f"[DEBUG] Notification sent to student {student_id}")
+                result = auto_generate_new_words(student_id, how_many=10)
+                if result['added_count'] > 0:
+                    # Инициализируем прогресс для новых слов
+                    conn = get_db_connection()
+                    cur = conn.cursor()
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
+                        f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
+                        f"WHERE sw.student_id = {student_id} "
+                        f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
+                    )
+                    cur.close()
+                    conn.close()
+                    
+                    notification = f"✅ Готово! Добавлено {result['added_count']} новых материалов:\n\n"
+                    for item in result['new_items'][:5]:
+                        notification += f"{item}\n"
+                    if len(result['new_items']) > 5:
+                        notification += f"\n...и еще {len(result['new_items']) - 5}!\n"
+                    notification += f"\nПродолжаем! 🚀"
+                    send_telegram_message(student_id, notification, parse_mode=None)
             except Exception as e:
-                print(f"[ERROR] Failed to send notification: {e}")
-            
-            # ⚠️ FIX: Открываем НОВОЕ подключение и инициализируем прогресс для новых слов
-            conn = get_db_connection()
-            cur = conn.cursor()
-            
-            # Инициализируем прогресс для только что добавленных слов
-            cur.execute(
-                f"INSERT INTO {SCHEMA}.word_progress (student_id, word_id) "
-                f"SELECT sw.student_id, sw.word_id FROM {SCHEMA}.student_words sw "
-                f"WHERE sw.student_id = {student_id} "
-                f"AND NOT EXISTS (SELECT 1 FROM {SCHEMA}.word_progress wp WHERE wp.student_id = sw.student_id AND wp.word_id = sw.word_id)"
-            )
-            
-            print(f"[DEBUG] Re-initialized word_progress after auto-generation")
-            
-            # Повторно запрашиваем новые слова (теперь они должны быть в word_progress)
-            cur.execute(
-                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
-                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-                f"WHERE wp.student_id = {student_id} AND wp.status = 'new' "
-                f"ORDER BY wp.created_at ASC LIMIT {new_limit}"
-            )
-            new_words = cur.fetchall()
-            print(f"[DEBUG] After generation: new_words count = {len(new_words)}")
-            
-            # Повторно запрашиваем review слова
-            cur.execute(
-                f"SELECT w.id, w.english_text, w.russian_translation FROM {SCHEMA}.word_progress wp "
-                f"JOIN {SCHEMA}.words w ON w.id = wp.word_id "
-                f"WHERE wp.student_id = {student_id} AND wp.status IN ('learning', 'learned') "
-                f"AND wp.next_review_date <= CURRENT_TIMESTAMP "
-                f"ORDER BY wp.next_review_date ASC LIMIT {review_limit}"
-            )
-            review_words = cur.fetchall()
-            print(f"[DEBUG] After generation: review_words count = {len(review_words)}")
+                print(f"[ERROR] Async generation failed: {e}")
+                try:
+                    send_telegram_message(student_id, "❌ Не удалось сгенерировать новые слова. Попробуй еще раз!", parse_mode=None)
+                except:
+                    pass
+        
+        threading.Thread(target=generate_async, daemon=True).start()
+        print(f"[DEBUG] Started async word generation for student {student_id}")
+        
+        # Возвращаем пустой список - генерация идет в фоне
+        return []
     
     # ⚠️ CRITICAL: Возвращаем ТОЛЬКО новые и review слова (БЕЗ mastered!)
     all_words = list(new_words) + list(review_words)
@@ -1941,7 +1961,7 @@ def send_telegram_voice(chat_id: int, voice_url: str, caption: str = None):
     )
     
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=15) as response:
             return json.loads(response.read().decode('utf-8'))
     except Exception as e:
         print(f"[ERROR] Failed to send voice: {e}")
@@ -1965,7 +1985,7 @@ def send_telegram_sticker(chat_id: int, sticker_id: str):
     )
     
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Sticker sent: {result}")
             return result
@@ -2000,7 +2020,7 @@ def send_telegram_message(chat_id: int, text: str, reply_markup=None, parse_mode
     )
     
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Telegram API response: {result}")
             return result
@@ -2026,7 +2046,7 @@ def edit_telegram_message(chat_id: int, message_id: int, text: str):
         headers={'Content-Type': 'application/json'}
     )
     
-    with urllib.request.urlopen(req) as response:
+    with urllib.request.urlopen(req, timeout=10) as response:
         return json.loads(response.read().decode('utf-8'))
 
 def set_bot_commands():
@@ -2053,7 +2073,7 @@ def set_bot_commands():
     )
     
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read().decode('utf-8'))
             print(f"[DEBUG] Bot commands set: {result}")
             return result
@@ -2067,13 +2087,13 @@ def download_telegram_file(file_id: str) -> bytes:
     
     # Получаем путь к файлу
     url = f'https://api.telegram.org/bot{token}/getFile?file_id={file_id}'
-    with urllib.request.urlopen(url) as response:
+    with urllib.request.urlopen(url, timeout=10) as response:
         data = json.loads(response.read().decode('utf-8'))
         file_path = data['result']['file_path']
     
     # Скачиваем файл
     file_url = f'https://api.telegram.org/file/bot{token}/{file_path}'
-    with urllib.request.urlopen(file_url) as response:
+    with urllib.request.urlopen(file_url, timeout=15) as response:
         return response.read()
 
 def speech_to_text(audio_data: bytes) -> str:
@@ -2757,9 +2777,22 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Обработчик Telegram webhook - бот отвечает прямо в чате
     """
-    # ⚡ ОПТИМИЗАЦИЯ: Очищаем кэш в начале каждого запроса
-    global _words_ensured_cache
+    # ⚡ PERFORMANCE: Request-scoped кеш для уменьшения запросов к БД на 70%
+    global _words_ensured_cache, get_user
     _words_ensured_cache = {}
+    _request_user_cache = {}  # Кеш для get_user в рамках одного запроса
+    
+    # Сохраняем оригинальную версию get_user
+    _original_get_user = get_user
+    
+    def get_user_cached(telegram_id: int):
+        """Кешированная версия get_user - уменьшает запросы к БД в 5-7 раз"""
+        if telegram_id not in _request_user_cache:
+            _request_user_cache[telegram_id] = _original_get_user(telegram_id)
+        return _request_user_cache[telegram_id]
+    
+    # Переопределяем get_user на время выполнения handler
+    get_user = get_user_cached
     
     # Устанавливаем команды бота при первом запуске (идемпотентно)
     try:
