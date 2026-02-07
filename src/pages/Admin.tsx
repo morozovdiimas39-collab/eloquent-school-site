@@ -6,10 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
 import { funcUrls } from '@/config/funcUrls';
-import ProxyManager from '@/components/admin/ProxyManager';
-import BlogManager from '@/components/admin/BlogManager';
-import PromptsManager from '@/components/admin/PromptsManager';
-import PricingManager from '@/components/admin/PricingManager';
+import ProxyManager from '@/components/admin/webapp/ProxyManager';
+import BlogManager from '@/components/admin/webapp/BlogManager';
+import PromptsManager from '@/components/admin/webapp/PromptsManager';
+import PricingManager from '@/components/admin/webapp/PricingManager';
 
 interface User {
   telegram_id: number;
