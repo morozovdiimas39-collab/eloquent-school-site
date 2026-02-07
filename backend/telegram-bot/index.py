@@ -5339,8 +5339,11 @@ No markdown, no explanations, just JSON.'''
                     conn = get_db_connection()
                     cur = conn.cursor()
                     test_state_json = json.dumps(test_state, ensure_ascii=False).replace("'", "''")
+                    # ⚠️ CRITICAL: СОХРАНЯЕМ conversation_mode чтобы тест продолжился!
                     cur.execute(
-                        f"UPDATE {SCHEMA}.users SET test_phrases = '{test_state_json}'::jsonb "
+                        f"UPDATE {SCHEMA}.users SET "
+                        f"test_phrases = '{test_state_json}'::jsonb, "
+                        f"conversation_mode = 'adaptive_level_test' "
                         f"WHERE telegram_id = {telegram_id}"
                     )
                     cur.close()
