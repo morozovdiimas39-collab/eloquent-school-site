@@ -2825,7 +2825,7 @@ def generate_plan_async(chat_id: int, user_id: int):
         learning_goal, language_level, preferred_topics = row
         
         # URL самого себя из func2url.json
-        bot_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+        bot_url = 'https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre'
         
         payload = {
             'action': 'generate_plan_async',
@@ -3171,7 +3171,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'isBase64Encoded': False
                 }
             
-            webhook_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+            webhook_url = 'https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre'
             
             # 1. Получаем текущий статус
             get_info_url = f'https://api.telegram.org/bot{bot_token}/getWebhookInfo'
@@ -3945,7 +3945,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     
                     # АСИНХРОННАЯ ГЕНЕРАЦИЯ - запускаем в фоне
                     try:
-                        function_url = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+                        function_url = 'https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre'
                         async_payload = json.dumps({
                             'action': 'generate_plan_async',
                             'user_id': telegram_id,
@@ -5373,7 +5373,7 @@ No markdown, no explanations, just JSON.'''
                     send_telegram_message(chat_id, '⏳ Анализирую твой ответ...', parse_mode=None)
                     
                     try:
-                        webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                        webapp_api_url = 'https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu'
                         response = requests.post(
                             webapp_api_url,
                             json={
@@ -5539,7 +5539,7 @@ No markdown, no explanations, just JSON.'''
                     
                     # Генерируем слова через webapp-api
                     try:
-                        webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                        webapp_api_url = 'https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu'
                         words_response = requests.post(
                             webapp_api_url,
                             json={
@@ -5613,7 +5613,7 @@ No markdown, no explanations, just JSON.'''
                 
                 try:
                     # Вызываем webapp-api для анализа цели через Gemini
-                    webapp_api_url = 'https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4'
+                    webapp_api_url = 'https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu'
                     response = requests.post(
                         webapp_api_url,
                         json={'action': 'analyze_goal', 'goal': text},

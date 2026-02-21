@@ -90,7 +90,7 @@ export default function GoalTest() {
     setIsAnalyzing(true);
 
     try {
-      const response = await fetch('https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4', {
+      const response = await fetch('https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

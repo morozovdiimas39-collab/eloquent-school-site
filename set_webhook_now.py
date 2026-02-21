@@ -4,7 +4,7 @@ import json
 import urllib.request
 
 TOKEN = "8586405236:AAGSeZXHACvWk5u5DNgL95fMzvij-wbVASc"
-WEBHOOK_URL = "https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7"
+WEBHOOK_URL = "https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre"
 
 # Set webhook
 url = f"https://api.telegram.org/bot{TOKEN}/setWebhook"

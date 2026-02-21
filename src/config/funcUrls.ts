@@ -1,5 +1,5 @@
 export const funcUrls = {
-  "practice-scheduler": "https://functions.poehali.dev/8383a432-6a50-4dac-be77-452ec80e326c",
-  "webapp-api": "https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4",
-  "telegram-bot": "https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7"
+  "practice-scheduler": "https://functions.yandexcloud.net/d4e1259j9fjgvjhf6fih",
+  "webapp-api": "https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu",
+  "telegram-bot": "https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre"
 } as const;

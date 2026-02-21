@@ -1,7 +1,7 @@
 import json
 import urllib.request
 
-url = "https://functions.poehali.dev/42c13bf2-f4d5-4710-9170-596c38d438a4"
+url = "https://functions.yandexcloud.net/d4enak1gd3bc2diuqseu"
 data = {
     "action": "auto_assign_basic_words",
     "student_id": 7515380522,

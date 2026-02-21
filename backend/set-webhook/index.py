@@ -15,7 +15,7 @@ def handler(event, context):
         }
     
     # Webhook URL бота
-    webhook_url = "https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7"
+    webhook_url = "https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre"
     
     # КРИТИЧНО: добавляем pre_checkout_query и successful_payment для платежей!
     allowed_updates = ["message", "callback_query", "pre_checkout_query"]

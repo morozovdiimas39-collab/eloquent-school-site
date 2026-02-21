@@ -19,7 +19,7 @@ GET_WEBHOOK_INFO_URL = f'https://api.telegram.org/bot{BOT_TOKEN}/getWebhookInfo'
 SET_WEBHOOK_URL = f'https://api.telegram.org/bot{BOT_TOKEN}/setWebhook'
 
 # Функция URL бота
-WEBHOOK_URL = 'https://functions.poehali.dev/92013b11-9080-40b5-8b24-10317e48a4f7'
+WEBHOOK_URL = 'https://functions.yandexcloud.net/d4eb3ckc7i9h81v7gcre'
 
 print("🔧 Telegram Webhook Cleaner\n")
 print("=" * 50)
